@@ -1,0 +1,35 @@
+{
+  "name": "lokua",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "api": "pnpm --filter api dev",
+    "web": "pnpm --filter web dev",
+    "build:api": "pnpm --filter api build",
+    "start:api": "pnpm --filter api start",
+    "lint:api": "pnpm --filter api lint",
+    "format:api": "pnpm --filter api format",
+    "format:check:api": "pnpm --filter api format:check",
+    "build": "pnpm -r build",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "apps/*/src/**/*.ts": [
+      "prettier --write",
+      "eslint --fix --max-warnings=0"
+    ],
+    "**/*.{js,json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "typescript-eslint": "^8.72.1"
+  }
+}
