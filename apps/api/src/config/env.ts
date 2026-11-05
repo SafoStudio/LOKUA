@@ -11,7 +11,12 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('7d')
+  JWT_REFRESH_TTL: z.string().default('7d'),
+
+  GOOGLE_CLIENT_ID: z.string(),
+  GOOGLE_CLIENT_SECRET: z.string(),
+  GOOGLE_REDIRECT_URI: z.url(),
+  GOOGLE_SUCCESS_REDIRECT: z.url()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
