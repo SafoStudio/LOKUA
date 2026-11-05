@@ -29,3 +29,6 @@ Thumbs.db
 *.temp
 
 note.md
+
+# Local curl output
+cookies.txt

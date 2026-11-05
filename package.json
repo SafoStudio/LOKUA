@@ -8,6 +8,7 @@
     "build:api": "pnpm --filter api build",
     "start:api": "pnpm --filter api start",
     "lint:api": "pnpm --filter api lint",
+    "lint:fix:api": "pnpm --filter api lint:fix",
     "format:api": "pnpm --filter api format",
     "format:check:api": "pnpm --filter api format:check",
     "build": "pnpm -r build",

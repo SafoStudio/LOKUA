@@ -6,6 +6,8 @@ import logger from './common/logger.js';
 import { env } from './config/env.js';
 import { notFound } from './middlewares/not-found.middleware.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import cookieParser from 'cookie-parser';
+import { authRouter } from './modules/auth/auth.routes.js';
 
 const app = express();
 
@@ -26,6 +28,8 @@ app.use(
   })
 );
 app.use(express.json());
+app.use(cookieParser());
+app.use('/auth', authRouter);
 
 app.get('/health', (_req, res) => {
   res.status(200).json({
