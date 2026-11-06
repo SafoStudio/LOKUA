@@ -16,7 +16,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string(),
   GOOGLE_CLIENT_SECRET: z.string(),
   GOOGLE_REDIRECT_URI: z.url(),
-  GOOGLE_SUCCESS_REDIRECT: z.url()
+  GOOGLE_SUCCESS_REDIRECT: z.url(),
+
+  WEBAUTHN_RP_ID: z.string().min(1),
+  WEBAUTHN_RP_NAME: z.string().min(1),
+  WEBAUTHN_ORIGIN: z.url()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -25,5 +29,9 @@ if (!parsedEnv.success) {
   logger.fatal({ errors: z.treeifyError(parsedEnv.error) }, 'Invalid environment variables');
   process.exit(1);
 }
+
 export const env = parsedEnv.data;
-export const isDev = env.NODE_ENV !== 'production';
+
+export const isDev = env.NODE_ENV === 'development';
+export const isProduction = env.NODE_ENV === 'production';
+export const isSecureCookies = isProduction;

@@ -4,24 +4,22 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index
+  Index,
+  ForeignKey
 } from 'typeorm';
-import { User } from '../users/user.entity.js';
 
 @Entity({ name: 'passkey_credentials' })
-export class PasskeyCredential {
+export class PasskeyCredentialEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
   @Index('idx_passkey_credentials_user_id')
   @Column({ type: 'uuid', name: 'user_id' })
+  @ForeignKey('users', {
+    name: 'fk_passkey_credentials_user_id',
+    onDelete: 'CASCADE'
+  })
   userId!: string;
-
-  @ManyToOne(() => User, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
-  user!: User;
 
   @Index('idx_passkey_credentials_credential_id', { unique: true })
   @Column({ type: 'text', name: 'credential_id' })
