@@ -1,7 +1,9 @@
+import type { AuthUser } from '../modules/auth/domain/index.js';
+
 declare global {
   namespace Express {
     interface Request {
-      user?: { id: string; email: string; name: string };
+      user?: AuthUser;
       refreshToken?: string;
     }
   }

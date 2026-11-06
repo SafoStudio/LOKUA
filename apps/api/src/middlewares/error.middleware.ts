@@ -3,7 +3,8 @@ import { ZodError } from 'zod';
 import { AppError } from '../common/errors/app-error.js';
 import logger from '../common/logger.js';
 
-export const errorHandler = (err: Error, _req: Request, res: Response, _next: NextFunction) => {
+export const errorHandler = (err: Error, _req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) return next(err);
   if (err instanceof ZodError) {
     const details = err.issues.map((issue) => ({
       path: issue.path.join('.'),
