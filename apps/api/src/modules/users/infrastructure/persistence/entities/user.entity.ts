@@ -8,7 +8,7 @@ import {
 } from 'typeorm';
 
 @Entity({ name: 'users' })
-export class User {
+export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -19,12 +19,22 @@ export class User {
   @Column({ type: 'varchar', length: 100 })
   name!: string;
 
-  @Column({ type: 'boolean', name: 'email_verified', default: false })
+  @Column({
+    type: 'boolean',
+    name: 'email_verified',
+    default: false
+  })
   emailVerified!: boolean;
 
-  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
+  @CreateDateColumn({
+    type: 'timestamptz',
+    name: 'created_at'
+  })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
+  @UpdateDateColumn({
+    type: 'timestamptz',
+    name: 'updated_at'
+  })
   updatedAt!: Date;
 }
