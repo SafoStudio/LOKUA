@@ -11,10 +11,13 @@
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
-    "typeorm": "typeorm-ts-node-esm -d src/db/data-source.ts",
-    "m:gen": "pnpm typeorm migration:generate",
-    "m:run": "pnpm typeorm migration:run",
-    "m:revert": "pnpm typeorm migration:revert"
+    "typeorm": "typeorm-ts-node-esm",
+    "m:gen": "pnpm typeorm migration:generate -d src/db/data-source.ts",
+    "m:run": "pnpm typeorm migration:run -d src/db/data-source.ts",
+    "m:revert": "pnpm typeorm migration:revert -d src/db/data-source.ts",
+    "m:drop": "pnpm typeorm schema:drop -d src/db/data-source.ts",
+    "m:show": "pnpm typeorm migration:show -d src/db/data-source.ts",
+    "m:run:prod": "typeorm migration:run -d dist/db/data-source.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^14.0.3",
