@@ -15,6 +15,7 @@ try {
 
   app.listen(env.PORT, () => {
     logger.info(`API running at http://localhost:${env.PORT}`);
+    logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
   });
 } catch (err) {
   logger.fatal({ err }, 'Failed to start');

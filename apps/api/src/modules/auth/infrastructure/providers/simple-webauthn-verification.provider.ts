@@ -67,26 +67,28 @@ export class SimpleWebAuthnVerificationProvider implements PasskeyVerificationSe
     response: unknown;
     expectedChallenge: string;
   }): Promise<PasskeyCredentialData | null> {
-    const verification = await verifyRegistrationResponse({
-      response: data.response as RegistrationResponseJSON,
-      expectedChallenge: data.expectedChallenge,
-      expectedOrigin: this.config.origin,
-      expectedRPID: this.config.rpId
-    });
+    try {
+      const verification = await verifyRegistrationResponse({
+        response: data.response as RegistrationResponseJSON,
+        expectedChallenge: data.expectedChallenge,
+        expectedOrigin: this.config.origin,
+        expectedRPID: this.config.rpId
+      });
 
-    if (!verification.verified) {
+      if (!verification.verified || !verification.registrationInfo) return null;
+
+      const credential = verification.registrationInfo.credential;
+
+      return {
+        credentialId: credential.id,
+        publicKey: Buffer.from(credential.publicKey),
+        counter: String(credential.counter),
+        transports: credential.transports ?? null,
+        backedUp: verification.registrationInfo.credentialBackedUp
+      };
+    } catch {
       return null;
     }
-
-    const credential = verification.registrationInfo.credential;
-
-    return {
-      credentialId: credential.id,
-      publicKey: Buffer.from(credential.publicKey),
-      counter: String(credential.counter),
-      transports: credential.transports ?? null,
-      backedUp: verification.registrationInfo.credentialBackedUp
-    };
   }
 
   async generateAuthenticationOptions(): Promise<{
@@ -131,18 +133,22 @@ export class SimpleWebAuthnVerificationProvider implements PasskeyVerificationSe
         : {})
     };
 
-    const verification = await verifyAuthenticationResponse({
-      response: data.response as AuthenticationResponseJSON,
-      expectedChallenge: data.expectedChallenge,
-      expectedOrigin: this.config.origin,
-      expectedRPID: this.config.rpId,
-      credential
-    });
+    try {
+      const verification = await verifyAuthenticationResponse({
+        response: data.response as AuthenticationResponseJSON,
+        expectedChallenge: data.expectedChallenge,
+        expectedOrigin: this.config.origin,
+        expectedRPID: this.config.rpId,
+        credential
+      });
 
-    if (!verification.verified) return null;
+      if (!verification.verified || !verification.authenticationInfo) return null;
 
-    return {
-      newCounter: String(verification.authenticationInfo.newCounter)
-    };
+      return {
+        newCounter: String(verification.authenticationInfo.newCounter)
+      };
+    } catch {
+      return null;
+    }
   }
 }

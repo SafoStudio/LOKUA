@@ -14,10 +14,16 @@ export { PasskeyCredentialEntity } from './persistence/entities/passkey-credenti
 
 export { PasskeyChallengeEntity } from './persistence/entities/passkey-challenge.entity.js';
 
-export { BcryptPasswordHasher } from './security/bcrypt-password-hasher.js';
+export { BcryptPasswordHasher } from './crypto/bcrypt-password-hasher.js';
 
-export { JwtTokenService } from './security/jwt-token.service.js';
+export { JwtTokenService } from './crypto/jwt-token.service.js';
 
 export { GoogleOAuthProviderAdapter } from './providers/google-oauth.provider.js';
 
 export { SimpleWebAuthnVerificationProvider } from './providers/simple-webauthn-verification.provider.js';
+
+export { TypeOrmGoogleLoginTransaction } from './transactions/typeorm-google-login.transaction.js';
+
+export { TypeOrmRegistrationTransaction } from './transactions/typeorm-registration.transaction.js';
+
+export { TypeOrmPasskeySignupTransaction } from './transactions/typeorm-passkey-signup.transaction.js';

@@ -1,11 +1,5 @@
 import type { DataSource } from 'typeorm';
-import type {
-  RegistrationTransaction,
-  GoogleLoginTransaction,
-  PasskeySignupTransaction,
-  UserProvider
-} from './application/index.js';
-
+import type { UserProvider } from './application/index.js';
 import {
   RegisterWithPasswordUseCase,
   LoginWithPasswordUseCase,
@@ -19,7 +13,6 @@ import {
   StartPasskeyLoginUseCase,
   CompletePasskeyLoginUseCase
 } from './application/index.js';
-
 import {
   PasswordCredentialRepositoryAdapter,
   GoogleCredentialRepositoryAdapter,
@@ -32,7 +25,10 @@ import {
   PasswordCredentialEntity,
   GoogleCredentialEntity,
   PasskeyCredentialEntity,
-  PasskeyChallengeEntity
+  PasskeyChallengeEntity,
+  TypeOrmRegistrationTransaction,
+  TypeOrmGoogleLoginTransaction,
+  TypeOrmPasskeySignupTransaction
 } from './infrastructure/index.js';
 
 import { createAuthController } from './presentation/http/auth.controller.js';
@@ -43,18 +39,13 @@ import { env } from '../../config/env.js';
 interface CreateAuthModuleDependencies {
   dataSource: DataSource;
   users: UserProvider;
-  registrationTransaction: RegistrationTransaction;
-  googleLoginTransaction: GoogleLoginTransaction;
-  passkeySignupTransaction: PasskeySignupTransaction;
 }
 
-export function createAuthModule({
-  dataSource,
-  users,
-  registrationTransaction,
-  googleLoginTransaction,
-  passkeySignupTransaction
-}: CreateAuthModuleDependencies) {
+export function createAuthModule({ dataSource, users }: CreateAuthModuleDependencies) {
+  const registrationTransaction = new TypeOrmRegistrationTransaction(dataSource);
+  const googleLoginTransaction = new TypeOrmGoogleLoginTransaction(dataSource);
+  const passkeySignupTransaction = new TypeOrmPasskeySignupTransaction(dataSource);
+
   const passwordCredentials = new PasswordCredentialRepositoryAdapter(
     dataSource.getRepository(PasswordCredentialEntity)
   );

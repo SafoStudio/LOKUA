@@ -1,9 +1,10 @@
 import pino from 'pino';
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const isTest = process.env.NODE_ENV === 'test';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 const logger = pino({
-  level: isDevelopment ? 'debug' : 'info',
+  level: isTest ? 'silent' : isDevelopment ? 'debug' : 'info',
 
   transport: isDevelopment
     ? {

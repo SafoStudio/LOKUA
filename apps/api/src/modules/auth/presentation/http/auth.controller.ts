@@ -193,9 +193,11 @@ export function createAuthController({
 
         setAuthCookies(res, result.accessToken, result.refreshToken);
 
-        res.redirect(env.GOOGLE_SUCCESS_REDIRECT);
-      } finally {
         clearGoogleStateCookie(res);
+        res.redirect(env.GOOGLE_SUCCESS_REDIRECT);
+      } catch (err) {
+        clearGoogleStateCookie(res);
+        throw err;
       }
     }
   };

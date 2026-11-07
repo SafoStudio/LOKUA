@@ -21,6 +21,15 @@ export const errorHandler = (err: Error, _req: Request, res: Response, next: Nex
     });
   }
 
+  if (err instanceof SyntaxError && 'status' in err && err.status === 400) {
+    logger.warn({ err }, 'Malformed JSON request');
+
+    return res.status(400).json({
+      status: 'error',
+      message: 'Malformed JSON payload'
+    });
+  }
+
   const statusCode = err instanceof AppError ? err.statusCode : 500;
   const message =
     err instanceof AppError && err.isOperational ? err.message : 'Internal server error';

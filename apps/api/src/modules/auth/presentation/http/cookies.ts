@@ -1,6 +1,7 @@
 import type { CookieOptions, Response } from 'express';
 import { isSecureCookies } from '../../../../config/env.js';
 
+const API_V1_PATH = '/api/v1';
 const AUTH_PATH = '/api/v1/auth';
 
 export const ACCESS_TOKEN_COOKIE = 'accessToken';
@@ -14,7 +15,7 @@ const commonCookieOptions: CookieOptions = {
 
 export const accessCookieOptions: CookieOptions = {
   ...commonCookieOptions,
-  path: AUTH_PATH
+  path: API_V1_PATH
 };
 
 export const refreshCookieOptions: CookieOptions = {

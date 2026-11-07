@@ -1,12 +1,9 @@
 import type { DataSource } from 'typeorm';
-import type { PasskeySignupTransaction } from '../modules/auth/application/index.js';
-import type { AuthUser } from '../modules/auth/domain/index.js';
-import { UserRepositoryAdapter, UserEntity } from '../modules/users/infrastructure/index.js';
-import {
-  PasskeyCredentialRepositoryAdapter,
-  PasskeyCredentialEntity
-} from '../modules/auth/infrastructure/index.js';
-import { AppError } from '../common/errors/app-error.js';
+import type { PasskeySignupTransaction } from '../../application/index.js';
+import type { AuthUser } from '../../domain/index.js';
+import { UserRepositoryAdapter, UserEntity } from '../../../users/infrastructure/index.js';
+import { PasskeyCredentialRepositoryAdapter, PasskeyCredentialEntity } from '../index.js';
+import { AppError } from '../../../../common/errors/app-error.js';
 
 export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction {
   constructor(private readonly dataSource: DataSource) {}

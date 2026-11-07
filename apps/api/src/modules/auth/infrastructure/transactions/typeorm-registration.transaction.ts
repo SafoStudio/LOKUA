@@ -1,12 +1,9 @@
 import type { DataSource } from 'typeorm';
-import type { AuthUser } from '../modules/auth/domain/index.js';
-import type { RegistrationTransaction } from '../modules/auth/application/index.js';
-import { AppError } from '../common/errors/app-error.js';
-import { UserEntity, UserRepositoryAdapter } from '../modules/users/infrastructure/index.js';
-import {
-  PasswordCredentialEntity,
-  PasswordCredentialRepositoryAdapter
-} from '../modules/auth/infrastructure/index.js';
+import type { AuthUser } from '../../domain/index.js';
+import type { RegistrationTransaction } from '../../application/index.js';
+import { AppError } from '../../../../common/errors/app-error.js';
+import { UserEntity, UserRepositoryAdapter } from '../../../users/infrastructure/index.js';
+import { PasswordCredentialEntity, PasswordCredentialRepositoryAdapter } from '../index.js';
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {

@@ -7,6 +7,7 @@ import logger from './common/logger.js';
 import { env } from './config/env.js';
 import { notFound } from './middlewares/not-found.middleware.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import { createDocsRouter } from './docs/index.js';
 
 interface AppDependencies {
   authRouter: express.Router;
@@ -44,6 +45,8 @@ export function createApp({ authRouter }: AppDependencies) {
       timestamp: new Date().toISOString()
     });
   });
+
+  app.use('/docs', createDocsRouter());
 
   app.use('/api/v1/auth', authRouter);
 
