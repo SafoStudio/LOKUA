@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { TokenService, UserProvider } from '../../application/index.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './cookies.js';
 

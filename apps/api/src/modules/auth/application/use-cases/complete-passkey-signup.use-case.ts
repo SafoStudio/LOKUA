@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
 import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';
 import type { PasskeySignupTransaction } from '../ports/passkey-signup-transaction.js';

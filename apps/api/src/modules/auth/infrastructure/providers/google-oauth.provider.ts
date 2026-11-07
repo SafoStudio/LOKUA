@@ -1,7 +1,7 @@
 import { OAuth2Client } from 'google-auth-library';
 import { env } from '../../../../config/env.js';
 import type { GoogleOAuthProvider, GoogleProfile } from '../../application/index.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 export class GoogleOAuthProviderAdapter implements GoogleOAuthProvider {
   private readonly client: OAuth2Client;

@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from '../../../../config/env.js';
 import type { TokenPayload, TokenService } from '../../application/index.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 const accessSecret = new TextEncoder().encode(env.JWT_ACCESS_SECRET);
 const refreshSecret = new TextEncoder().encode(env.JWT_REFRESH_SECRET);

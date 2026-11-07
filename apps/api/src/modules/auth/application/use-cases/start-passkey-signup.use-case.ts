@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 import type { UserProvider } from '../ports/user.provider.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
 import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';

@@ -1,24 +1,9 @@
 import type { DataSource } from 'typeorm';
 import type { AuthUser } from '../../domain/index.js';
 import type { RegistrationTransaction } from '../../application/index.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError, isUniqueConstraintViolation } from '../../../../common/index.js';
 import { UserEntity, UserRepositoryAdapter } from '../../../users/infrastructure/index.js';
 import { PasswordCredentialEntity, PasswordCredentialRepositoryAdapter } from '../index.js';
-
-function isUniqueConstraintViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  const driverError = 'driverError' in error ? error.driverError : error;
-
-  return (
-    typeof driverError === 'object' &&
-    driverError !== null &&
-    'code' in driverError &&
-    driverError.code === '23505'
-  );
-}
 
 export class TypeOrmRegistrationTransaction implements RegistrationTransaction {
   constructor(private readonly dataSource: DataSource) {}

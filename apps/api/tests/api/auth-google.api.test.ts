@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { env } from '../../src/config/env.js';
-import { AppError } from '../../src/common/errors/app-error.js';
+import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
 
 describe('Google OAuth API', () => {

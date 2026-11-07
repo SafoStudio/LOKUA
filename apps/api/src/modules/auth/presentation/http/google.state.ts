@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { CookieOptions, Request, Response } from 'express';
 import { isSecureCookies } from '../../../../config/env.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 const AUTH_GOOGLE_PATH = '/api/v1/auth/google';
 

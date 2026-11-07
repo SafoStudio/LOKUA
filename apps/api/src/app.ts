@@ -3,10 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { pinoHttp } from 'pino-http';
-import logger from './common/logger.js';
+import { logger } from './common/index.js';
 import { env } from './config/env.js';
-import { notFound } from './middlewares/not-found.middleware.js';
-import { errorHandler } from './middlewares/error.middleware.js';
+import { notFound, errorHandler } from './middlewares/index.js';
 import { createDocsRouter } from './docs/index.js';
 
 interface AppDependencies {

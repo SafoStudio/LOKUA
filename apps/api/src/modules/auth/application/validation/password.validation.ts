@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 const BCRYPT_MAX_PASSWORD_BYTES = 72;
 

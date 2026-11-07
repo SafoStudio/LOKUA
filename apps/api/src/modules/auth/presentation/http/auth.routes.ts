@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { validate } from '../../../../middlewares/validate.middleware.js';
+import { validate } from '../../../../middlewares/index.js';
 import {
   registerSchema,
   loginSchema,

@@ -2,7 +2,7 @@ import type { AuthUser } from '../../domain/index.js';
 import type { UserProvider } from '../ports/user.provider.js';
 import type { PasswordHasher } from '../ports/password-hasher.js';
 import type { RegistrationTransaction } from '../ports/registration-transaction.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 import { validatePasswordLength } from '../validation/password.validation.js';
 
 export interface RegisterWithPasswordInput {

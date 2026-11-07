@@ -8,7 +8,7 @@ import {
   GOOGLE_STATE_COOKIE,
   googleStateCookieOptions
 } from '../../../../src/modules/auth/presentation/http/google.state.js';
-import { AppError } from '../../../../src/common/errors/app-error.js';
+import { AppError } from '../../../../src/common/index.js';
 
 describe('google.state', () => {
   it('creates 64-char hex random state', () => {

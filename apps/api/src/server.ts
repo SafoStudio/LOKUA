@@ -1,4 +1,4 @@
-import logger from './common/logger.js';
+import { logger } from './common/index.js';
 import { env } from './config/env.js';
 import { AppDataSource } from './db/data-source.js';
 import { createModules } from './bootstrap/modules.js';

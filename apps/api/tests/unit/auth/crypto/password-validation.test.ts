@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validatePasswordLength } from '../../../../src/modules/auth/application/validation/password.validation.js';
-import { AppError } from '../../../../src/common/errors/app-error.js';
+import { AppError } from '../../../../src/common/index.js';
 
 describe('validatePasswordLength', () => {
   it('allows passwords within 72 bytes', () => {

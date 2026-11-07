@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 import type { IssueAuthTokensUseCase, AuthResult } from './issue-auth-tokens.use-case.js';
 import type { UserProvider } from '../ports/user.provider.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';

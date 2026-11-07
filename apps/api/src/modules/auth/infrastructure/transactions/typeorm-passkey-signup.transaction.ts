@@ -3,7 +3,7 @@ import type { PasskeySignupTransaction } from '../../application/index.js';
 import type { AuthUser } from '../../domain/index.js';
 import { UserRepositoryAdapter, UserEntity } from '../../../users/infrastructure/index.js';
 import { PasskeyCredentialRepositoryAdapter, PasskeyCredentialEntity } from '../index.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction {
   constructor(private readonly dataSource: DataSource) {}

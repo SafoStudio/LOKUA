@@ -3,7 +3,7 @@ import pino from 'pino';
 const isTest = process.env.NODE_ENV === 'test';
 const isDevelopment = process.env.NODE_ENV === 'development';
 
-const logger = pino({
+export const logger = pino({
   level: isTest ? 'silent' : isDevelopment ? 'debug' : 'info',
 
   transport: isDevelopment
@@ -17,5 +17,3 @@ const logger = pino({
       }
     : undefined
 });
-
-export default logger;

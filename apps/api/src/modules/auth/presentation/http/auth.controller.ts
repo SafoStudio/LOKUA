@@ -14,8 +14,7 @@ import type {
   CompletePasskeyLoginUseCase
 } from '../../application/index.js';
 import { env } from '../../../../config/env.js';
-import { AppError } from '../../../../common/errors/app-error.js';
-import { assertString } from '../../../../common/errors/assert.js';
+import { AppError, assertString } from '../../../../common/index.js';
 import { setAuthCookies, clearAuthCookies } from './cookies.js';
 import {
   createGoogleState,

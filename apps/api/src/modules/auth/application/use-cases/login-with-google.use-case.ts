@@ -3,7 +3,7 @@ import type { UserProvider } from '../ports/user.provider.js';
 import type { GoogleOAuthProvider } from '../ports/google-oauth.provider.js';
 import type { GoogleCredentialRepository } from '../ports/google-credential.repository.js';
 import type { GoogleLoginTransaction } from '../ports/google-login-transaction.js';
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 export class LoginWithGoogleUseCase {
   constructor(

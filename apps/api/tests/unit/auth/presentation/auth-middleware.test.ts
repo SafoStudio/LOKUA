@@ -5,7 +5,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE
 } from '../../../../src/modules/auth/presentation/http/cookies.js';
-import { AppError } from '../../../../src/common/errors/app-error.js';
+import { AppError } from '../../../../src/common/index.js';
 import type { TokenService, UserProvider } from '../../../../src/modules/auth/application/index.js';
 
 describe('auth.middleware', () => {

@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/errors/app-error.js';
+import { AppError } from '../../../../common/index.js';
 
 import type {
   UserProvider,
