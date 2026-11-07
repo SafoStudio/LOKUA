@@ -1,0 +1,30 @@
+User:
+  type: object
+  required:
+    - id
+    - email
+    - name
+    - emailVerified
+  properties:
+    id:
+      type: string
+      format: uuid
+      example: c6204c51-5be6-46b3-96e0-e55d5bb96ef1
+    email:
+      type: string
+      format: email
+      example: user@example.com
+    name:
+      type: string
+      example: John Doe
+    emailVerified:
+      type: boolean
+      example: false
+
+UserResponse:
+  type: object
+  required:
+    - user
+  properties:
+    user:
+      $ref: '#/components/schemas/User'

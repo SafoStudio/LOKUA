@@ -1,0 +1,47 @@
+ErrorResponse:
+  type: object
+  required:
+    - status
+    - message
+  properties:
+    status:
+      type: string
+      example: error
+    message:
+      type: string
+      example: Invalid credentials
+
+ValidationErrorDetail:
+  type: object
+  required:
+    - path
+    - message
+    - code
+  properties:
+    path:
+      type: string
+      example: email
+    message:
+      type: string
+      example: Invalid email address
+    code:
+      type: string
+      example: invalid_string
+
+ValidationErrorResponse:
+  type: object
+  required:
+    - status
+    - message
+    - details
+  properties:
+    status:
+      type: string
+      example: error
+    message:
+      type: string
+      example: Validation failed
+    details:
+      type: array
+      items:
+        $ref: '#/components/schemas/ValidationErrorDetail'

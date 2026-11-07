@@ -1,0 +1,17 @@
+CookieAuth:
+  type: apiKey
+  in: cookie
+  name: accessToken
+  description: 'JWT Access Token is passed in the HttpOnly cookie named accessToken (Path=/api/v1)'
+
+BearerAuth:
+  type: http
+  scheme: bearer
+  bearerFormat: JWT
+  description: 'JWT Access Token can be passed in the Authorization: Bearer <token> header'
+
+RefreshCookieAuth:
+  type: apiKey
+  in: cookie
+  name: refreshToken
+  description: 'JWT Refresh Token is passed in the HttpOnly cookie named refreshToken (Path=/api/v1/auth/refresh)'

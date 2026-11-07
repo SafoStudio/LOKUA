@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info:
+  title: LOKUA API
+  version: 1.0.0
+  description: |
+    LOKUA events platform API.
+
+    ### Authorization
+    All private routes use HttpOnly Cookies:
+    - `accessToken`: valid for the entire API (`Path=/api/v1`).
+    - `refreshToken`: valid strictly for token refresh (`Path=/api/v1/auth/refresh`).
+    - The `Authorization: Bearer <token>` header is also supported.
+
+    To work from a browser, you must send `credentials: 'include'` (Fetch) or `withCredentials: true` (Axios).
+servers:
+  - url: http://localhost:3003
+    description: Local Development Server
+tags:
+  - name: Auth / Password
+    description: Registration and password-based sign-in
+  - name: Auth / Google OAuth
+    description: Sign in with a Google account
+  - name: Auth / Passkey
+    description: WebAuthn Passkeys (signup, registration, login)
+  - name: Auth / Tokens
+    description: Token refresh and session termination
+  - name: Auth / Session
+    description: Current user session data
+paths: {}

@@ -1,0 +1,384 @@
+/api/v1/auth/register:
+  post:
+    tags:
+      - Auth / Password
+    summary: Register with email and password
+    description: Creates a new user and password credentials. Issues HttpOnly cookies (accessToken and refreshToken).
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RegisterRequest'
+    responses:
+      '201':
+        description: User successfully created
+        headers:
+          Set-Cookie:
+            description: Sets accessToken (Path=/api/v1) and refreshToken (Path=/api/v1/auth/refresh)
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '400':
+        description: Validation error or password longer than 72 bytes
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '409':
+        description: Email already registered
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/login:
+  post:
+    tags:
+      - Auth / Password
+    summary: Sign in with email and password
+    description: Verifies the password via bcrypt. Issues auth cookies.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/LoginRequest'
+    responses:
+      '200':
+        description: Successful authentication
+        headers:
+          Set-Cookie:
+            description: Sets accessToken and refreshToken
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '400':
+        description: Request body validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Invalid email or password
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/refresh:
+  post:
+    tags:
+      - Auth / Tokens
+    summary: Refresh the token pair
+    description: Accepts the refreshToken from the HttpOnly cookie and issues a new token pair (accessToken and refreshToken).
+    security:
+      - RefreshCookieAuth: []
+    responses:
+      '200':
+        description: Tokens successfully refreshed
+        headers:
+          Set-Cookie:
+            description: Sets the refreshed accessToken and refreshToken
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '401':
+        description: Refresh token is missing, expired, or invalid
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/logout:
+  post:
+    tags:
+      - Auth / Tokens
+    summary: Sign out
+    description: Clears auth cookies (sets Max-Age=0).
+    responses:
+      '200':
+        description: Successful sign-out
+        headers:
+          Set-Cookie:
+            description: Headers that remove accessToken and refreshToken
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+
+/api/v1/auth/me:
+  get:
+    tags:
+      - Auth / Session
+    summary: Get the current user's profile
+    description: Returns the authenticated user's data from the accessToken cookie or the Bearer header.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Current user data
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '401':
+        description: Not authenticated or access token expired
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/google:
+  get:
+    tags:
+      - Auth / Google OAuth
+    summary: Start Google OAuth authorization
+    description: Generates a one-time cryptographically random state, stores it in the HttpOnly cookie googleOAuthState (Path=/api/v1/auth/google, Max-Age=300s), and performs a 302 Redirect to Google Login.
+    responses:
+      '302':
+        description: Redirect to https://accounts.google.com/o/oauth2/v2/auth
+        headers:
+          Location:
+            schema:
+              type: string
+          Set-Cookie:
+            schema:
+              type: string
+
+/api/v1/auth/google/callback:
+  get:
+    tags:
+      - Auth / Google OAuth
+    summary: Google OAuth callback
+    description: Accepts code and state from Google, validates the googleOAuthState cookie, exchanges the code for a token, creates/finds the user, issues auth cookies, and performs a 302 Redirect to GOOGLE_SUCCESS_REDIRECT.
+    parameters:
+      - name: code
+        in: query
+        required: true
+        description: Google authorization code
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: true
+        description: State parameter for CSRF protection
+        schema:
+          type: string
+    responses:
+      '302':
+        description: Redirect to the frontend URL (env.GOOGLE_SUCCESS_REDIRECT)
+        headers:
+          Location:
+            schema:
+              type: string
+          Set-Cookie:
+            description: Sets auth cookies and removes googleOAuthState
+            schema:
+              type: string
+      '400':
+        description: Invalid state (CSRF check failed) or missing code
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: A user with this email is already registered via password
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/passkey/signup/options:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Signup: Generate options'
+    description: Checks email uniqueness, generates a user UUID and WebAuthn PublicKeyCredentialCreationOptions. The challenge is stored in the DB with type SIGNUP for 5 minutes.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeySignupOptionsRequest'
+    responses:
+      '200':
+        description: Parameters for calling startRegistration() from @simplewebauthn/browser
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyOptionsResponse'
+      '400':
+        description: Field validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '409':
+        description: Email already taken
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/passkey/signup/verify:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Signup: Complete registration'
+    description: Consumes the one-time challenge (DELETE ... RETURNING), verifies the browser response, creates User and PasskeyCredential in a single transaction, and issues auth cookies.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeyVerifyRequest'
+    responses:
+      '201':
+        description: User and Passkey created, cookies set
+        headers:
+          Set-Cookie:
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '400':
+        description: Invalid or expired challenge, or signature verification error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Passkey or account already registered
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/passkey/registration/options:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Registration: Generate options to attach a key'
+    description: Requires authentication. Generates options with excludeCredentials for all keys the user already has, and stores a challenge of type REGISTRATION.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Parameters for registering a new key
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyOptionsResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/passkey/registration/verify:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Registration: Complete attaching the key to the account'
+    description: Consumes the challenge, checks that the challenge belongs to the authenticated user, verifies the key, and stores it in passkey_credentials.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeyVerifyRequest'
+    responses:
+      '201':
+        description: Key successfully attached
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '400':
+        description: Invalid/expired challenge or signature error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Challenge belongs to another user
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: This key is already registered in the system
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/passkey/login/options:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Login: Generate authentication options'
+    description: Generates PublicKeyCredentialRequestOptions (discoverable credentials flow). The challenge is stored in the DB with type AUTHENTICATION for 5 minutes.
+    responses:
+      '200':
+        description: Parameters for calling startAuthentication() from @simplewebauthn/browser
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyOptionsResponse'
+
+/api/v1/auth/passkey/login/verify:
+  post:
+    tags:
+      - Auth / Passkey
+    summary: 'Passkey Login: Verify sign-in'
+    description: Consumes the challenge, finds the key by credential ID, verifies the WebAuthn signature, updates the counter, and issues auth cookies.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PasskeyVerifyRequest'
+    responses:
+      '200':
+        description: Successful Passkey sign-in, cookies set
+        headers:
+          Set-Cookie:
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserResponse'
+      '400':
+        description: Invalid or expired challenge, or incorrect response
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: Unknown key or cryptographic signature verification failed
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

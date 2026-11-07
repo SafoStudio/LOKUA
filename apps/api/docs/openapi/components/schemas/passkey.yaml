@@ -1,0 +1,66 @@
+PasskeySignupOptionsRequest:
+  type: object
+  required:
+    - email
+    - name
+  properties:
+    email:
+      type: string
+      format: email
+      example: user@example.com
+    name:
+      type: string
+      minLength: 1
+      maxLength: 100
+      example: John Doe
+
+PasskeyOptionsResponse:
+  type: object
+  required:
+    - options
+  properties:
+    options:
+      type: object
+      description: WebAuthn PublicKeyCredentialCreationOptions or PublicKeyCredentialRequestOptions
+      properties:
+        challenge:
+          type: string
+          example: 9k_Jz12v4aQx_...
+        rp:
+          type: object
+          properties:
+            name:
+              type: string
+              example: LOKUA
+            id:
+              type: string
+              example: localhost
+      additionalProperties: true
+
+PasskeyVerifyRequest:
+  type: object
+  required:
+    - challenge
+    - response
+  properties:
+    challenge:
+      type: string
+      description: Challenge received at the /options step
+      example: 9k_Jz12v4aQx_...
+    response:
+      type: object
+      required:
+        - id
+      description: Result of navigator.credentials.create() or navigator.credentials.get() (via @simplewebauthn/browser)
+      properties:
+        id:
+          type: string
+          example: Ad_14kL...
+        rawId:
+          type: string
+        response:
+          type: object
+        type:
+          type: string
+          example: public-key
+      additionalProperties: true
