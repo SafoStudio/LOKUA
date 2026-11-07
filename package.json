@@ -6,6 +6,7 @@
     "api": "pnpm --filter api dev",
     "web": "pnpm --filter web dev",
     "build:api": "pnpm --filter api build",
+    "test:api": "pnpm --filter api test",
     "start:api": "pnpm --filter api start",
     "lint:api": "pnpm --filter api lint",
     "lint:fix:api": "pnpm --filter api lint:fix",
