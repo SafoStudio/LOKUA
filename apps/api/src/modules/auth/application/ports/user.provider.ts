@@ -6,4 +6,6 @@ export interface UserProvider {
   findByEmail(email: string): Promise<AuthUser | null>;
 
   create(data: { email: string; name: string; emailVerified?: boolean }): Promise<AuthUser>;
+
+  markEmailVerified(id: string): Promise<void>;
 }
