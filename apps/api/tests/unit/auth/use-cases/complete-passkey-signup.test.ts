@@ -4,7 +4,8 @@ import type {
   PasskeyVerificationService,
   PasskeySignupTransaction,
   PasskeyChallengeRepository,
-  TokenService
+  RefreshSessionRepository,
+  SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
 import { IssueAuthTokensUseCase } from '../../../../src/modules/auth/application/index.js';
 
@@ -25,20 +26,36 @@ describe('CompletePasskeySignupUseCase', () => {
     createUserWithPasskeyCredential: vi.fn()
   };
 
-  const tokenService: TokenService = {
-    signAccessToken: vi.fn().mockResolvedValue('access-token'),
-    signRefreshToken: vi.fn().mockResolvedValue('refresh-token'),
-    verifyAccessToken: vi.fn(),
-    verifyRefreshToken: vi.fn()
+  const refreshSessions: RefreshSessionRepository = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    revokeById: vi.fn(),
+    revokeByTokenHash: vi.fn(),
+    revokeAllByUserId: vi.fn()
   };
 
-  const issueAuthTokens = new IssueAuthTokensUseCase(tokenService);
+  const securityEvents: SecurityEventRepository = {
+    record: vi.fn()
+  };
+
+  const issueAuthTokens = new IssueAuthTokensUseCase(
+      {
+        signAccessToken: vi.fn().mockResolvedValue('access-token'),
+        signRefreshToken: vi.fn().mockResolvedValue('refresh-token'),
+        verifyAccessToken: vi.fn(),
+        verifyRefreshToken: vi.fn()
+      },
+      refreshSessions
+  );
+
+  const context = { ip: '127.0.0.1', userAgent: 'vitest' };
 
   const useCase = new CompletePasskeySignupUseCase(
-    challenges,
-    passkey,
-    signupTransaction,
-    issueAuthTokens
+      challenges,
+      passkey,
+      signupTransaction,
+      issueAuthTokens,
+      securityEvents
   );
 
   const mockChallenge = {
@@ -73,10 +90,13 @@ describe('CompletePasskeySignupUseCase', () => {
 
     vi.mocked(signupTransaction.createUserWithPasskeyCredential).mockResolvedValueOnce(createdUser);
 
-    const result = await useCase.execute({
-      challenge: 'ch-val-123',
-      response: { id: 'cred-bob-1' }
-    });
+    const result = await useCase.execute(
+        {
+          challenge: 'ch-val-123',
+          response: { id: 'cred-bob-1' }
+        },
+        context
+    );
 
     expect(result.user).toEqual(createdUser);
     expect(result.accessToken).toBe('access-token');
@@ -98,16 +118,27 @@ describe('CompletePasskeySignupUseCase', () => {
       name: 'Bob',
       credential: mockCredentialData
     });
+
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'pre-generated-uuid',
+          eventType: 'REGISTER_SUCCESS',
+          metadata: { method: 'passkey' }
+        })
+    );
   });
 
   it('throws AppError 400 when challenge is invalid or expired', async () => {
     vi.mocked(challenges.consume).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        challenge: 'non-existing-ch',
-        response: { id: 'cred' }
-      })
+        useCase.execute(
+            {
+              challenge: 'non-existing-ch',
+              response: { id: 'cred' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Invalid or expired Passkey challenge'
@@ -124,10 +155,13 @@ describe('CompletePasskeySignupUseCase', () => {
     });
 
     await expect(
-      useCase.execute({
-        challenge: 'ch-val-123',
-        response: { id: 'cred' }
-      })
+        useCase.execute(
+            {
+              challenge: 'ch-val-123',
+              response: { id: 'cred' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Invalid Passkey signup challenge'
@@ -139,10 +173,13 @@ describe('CompletePasskeySignupUseCase', () => {
     vi.mocked(passkey.verifyRegistration).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        challenge: 'ch-val-123',
-        response: { id: 'bad-response' }
-      })
+        useCase.execute(
+            {
+              challenge: 'ch-val-123',
+              response: { id: 'bad-response' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Passkey verification failed'

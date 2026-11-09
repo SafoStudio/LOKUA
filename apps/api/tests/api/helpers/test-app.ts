@@ -16,6 +16,13 @@ import type {
   CompletePasskeyRegistrationUseCase,
   StartPasskeyLoginUseCase,
   CompletePasskeyLoginUseCase,
+  SendVerificationEmailUseCase,
+  VerifyEmailUseCase,
+  RequestPasswordResetUseCase,
+  ResetPasswordUseCase,
+  ChangePasswordUseCase,
+  LogoutUseCase,
+  LogoutAllUseCase,
   TokenService,
   UserProvider
 } from '../../../src/modules/auth/application/index.js';
@@ -70,6 +77,34 @@ export function createMockDependencies() {
     execute: vi.fn()
   } as unknown as CompletePasskeyLoginUseCase;
 
+  const sendVerificationEmail = {
+    execute: vi.fn()
+  } as unknown as SendVerificationEmailUseCase;
+
+  const verifyEmail = {
+    execute: vi.fn()
+  } as unknown as VerifyEmailUseCase;
+
+  const requestPasswordReset = {
+    execute: vi.fn()
+  } as unknown as RequestPasswordResetUseCase;
+
+  const resetPassword = {
+    execute: vi.fn()
+  } as unknown as ResetPasswordUseCase;
+
+  const changePassword = {
+    execute: vi.fn()
+  } as unknown as ChangePasswordUseCase;
+
+  const logout = {
+    execute: vi.fn()
+  } as unknown as LogoutUseCase;
+
+  const logoutAll = {
+    execute: vi.fn()
+  } as unknown as LogoutAllUseCase;
+
   const tokenService = {
     signAccessToken: vi.fn(),
     signRefreshToken: vi.fn(),
@@ -80,7 +115,8 @@ export function createMockDependencies() {
   const users = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   } as unknown as UserProvider;
 
   return {
@@ -96,6 +132,13 @@ export function createMockDependencies() {
     completePasskeyRegistration,
     startPasskeyLogin,
     completePasskeyLogin,
+    sendVerificationEmail,
+    verifyEmail,
+    requestPasswordReset,
+    resetPassword,
+    changePassword,
+    logout,
+    logoutAll,
     tokenService,
     users
   };
@@ -114,7 +157,14 @@ export function createTestApp(mocks = createMockDependencies()) {
     startPasskeyRegistration: mocks.startPasskeyRegistration,
     completePasskeyRegistration: mocks.completePasskeyRegistration,
     startPasskeyLogin: mocks.startPasskeyLogin,
-    completePasskeyLogin: mocks.completePasskeyLogin
+    completePasskeyLogin: mocks.completePasskeyLogin,
+    sendVerificationEmail: mocks.sendVerificationEmail,
+    verifyEmail: mocks.verifyEmail,
+    requestPasswordReset: mocks.requestPasswordReset,
+    resetPassword: mocks.resetPassword,
+    changePassword: mocks.changePassword,
+    logout: mocks.logout,
+    logoutAll: mocks.logoutAll
   });
 
   const middleware = createAuthMiddleware({

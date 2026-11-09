@@ -28,7 +28,10 @@ describe('Auth Tokens & /me API', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ user: mockUser });
-      expect(mocks.refresh.execute).toHaveBeenCalledWith('valid-refresh-token');
+      expect(mocks.refresh.execute).toHaveBeenCalledWith(
+          'valid-refresh-token',
+          expect.objectContaining({ ip: expect.any(String) })
+      );
 
       const cookies = getSetCookies(res);
       expect(cookies.some((c) => c.startsWith('accessToken='))).toBe(true);
@@ -57,6 +60,24 @@ describe('Auth Tokens & /me API', () => {
       const res = await request(app)
           .post('/api/v1/auth/refresh')
           .set('Cookie', ['refreshToken=bad-refresh-token']);
+
+      expect(res.status).toBe(401);
+      expect(res.body).toEqual({
+        status: 'error',
+        message: 'Invalid refresh token'
+      });
+    });
+
+    it('returns 401 when refresh token is reused (reuse detection)', async () => {
+      const { app, mocks } = createTestApp();
+
+      vi.mocked(mocks.refresh.execute).mockRejectedValueOnce(
+          new AppError('Invalid refresh token', 401)
+      );
+
+      const res = await request(app)
+          .post('/api/v1/auth/refresh')
+          .set('Cookie', ['refreshToken=rotated-old-token']);
 
       expect(res.status).toBe(401);
       expect(res.body).toEqual({

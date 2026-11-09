@@ -7,6 +7,8 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test'
     },
-    include: ['tests/**/*.test.ts']
+    include: ['tests/**/*.test.ts'],
+    fileParallelism: false,
+    globalSetup: ['tests/integration/helpers/global-setup.ts']
   }
 });

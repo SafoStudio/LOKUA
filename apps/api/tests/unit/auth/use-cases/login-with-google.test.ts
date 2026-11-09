@@ -4,14 +4,16 @@ import type { UserProvider } from '../../../../src/modules/auth/index.js';
 import type {
   GoogleOAuthProvider,
   GoogleCredentialRepository,
-  GoogleLoginTransaction
+  GoogleLoginTransaction,
+  SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
 
 describe('LoginWithGoogleUseCase', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const google: GoogleOAuthProvider = {
@@ -28,7 +30,19 @@ describe('LoginWithGoogleUseCase', () => {
     createUserWithGoogleCredential: vi.fn()
   };
 
-  const useCase = new LoginWithGoogleUseCase(users, google, credentials, googleLoginTransaction);
+  const securityEvents: SecurityEventRepository = {
+    record: vi.fn()
+  };
+
+  const context = { ip: '127.0.0.1', userAgent: 'vitest' };
+
+  const useCase = new LoginWithGoogleUseCase(
+      users,
+      google,
+      credentials,
+      googleLoginTransaction,
+      securityEvents
+  );
 
   it('logs in existing Google user found by sub', async () => {
     const existingUser = {
@@ -52,11 +66,17 @@ describe('LoginWithGoogleUseCase', () => {
 
     vi.mocked(users.findById).mockResolvedValueOnce(existingUser);
 
-    const result = await useCase.execute('google-code-123');
+    const result = await useCase.execute('google-code-123', context);
 
     expect(result).toEqual(existingUser);
     expect(credentials.findByGoogleSub).toHaveBeenCalledWith('google-sub-123');
     expect(users.findById).toHaveBeenCalledWith('user-google-1');
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-google-1',
+          eventType: 'LOGIN_SUCCESS'
+        })
+    );
   });
 
   it('creates new user and Google credential when user does not exist', async () => {
@@ -79,7 +99,7 @@ describe('LoginWithGoogleUseCase', () => {
 
     vi.mocked(googleLoginTransaction.createUserWithGoogleCredential).mockResolvedValueOnce(newUser);
 
-    const result = await useCase.execute('valid-code');
+    const result = await useCase.execute('valid-code', context);
 
     expect(result).toEqual(newUser);
     expect(googleLoginTransaction.createUserWithGoogleCredential).toHaveBeenCalledWith({
@@ -87,6 +107,12 @@ describe('LoginWithGoogleUseCase', () => {
       name: 'New User',
       googleSub: 'new-google-sub'
     });
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'new-user-id',
+          eventType: 'LOGIN_SUCCESS'
+        })
+    );
   });
 
   it('throws AppError 400 when Google email is not verified', async () => {
@@ -97,10 +123,17 @@ describe('LoginWithGoogleUseCase', () => {
       name: 'Unverified'
     });
 
-    await expect(useCase.execute('code')).rejects.toMatchObject({
+    await expect(useCase.execute('code', context)).rejects.toMatchObject({
       statusCode: 400,
       message: 'Google email is not verified'
     });
+
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: null,
+          eventType: 'LOGIN_FAILURE'
+        })
+    );
   });
 
   it('throws AppError 409 and prevents automatic account linking when email is already registered', async () => {
@@ -119,7 +152,7 @@ describe('LoginWithGoogleUseCase', () => {
       emailVerified: true
     });
 
-    await expect(useCase.execute('code')).rejects.toMatchObject({
+    await expect(useCase.execute('code', context)).rejects.toMatchObject({
       statusCode: 409,
       message: 'Email already registered. Log in with password and link Google in settings.'
     });

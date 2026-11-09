@@ -26,7 +26,6 @@ describe('Database & Transactions Integration Tests', () => {
 
     try {
       await dataSource.initialize();
-      await dataSource.runMigrations();
       dbAvailable = true;
     } catch {
       dbAvailable = false;

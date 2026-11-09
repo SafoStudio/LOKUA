@@ -19,7 +19,8 @@ describe('auth.middleware', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const middleware = createAuthMiddleware({ tokenService, users });

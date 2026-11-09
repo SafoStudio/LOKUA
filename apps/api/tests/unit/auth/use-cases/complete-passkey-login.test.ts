@@ -4,7 +4,8 @@ import type {
   PasskeyChallengeRepository,
   PasskeyCredentialRepository,
   PasskeyVerificationService,
-  TokenService
+  RefreshSessionRepository,
+  SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
 import {
   IssueAuthTokensUseCase,
@@ -15,7 +16,8 @@ describe('CompletePasskeyLoginUseCase', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const challenges: PasskeyChallengeRepository = {
@@ -38,21 +40,37 @@ describe('CompletePasskeyLoginUseCase', () => {
     verifyAuthentication: vi.fn()
   };
 
-  const tokenService: TokenService = {
-    signAccessToken: vi.fn().mockResolvedValue('access-token'),
-    signRefreshToken: vi.fn().mockResolvedValue('refresh-token'),
-    verifyAccessToken: vi.fn(),
-    verifyRefreshToken: vi.fn()
+  const refreshSessions: RefreshSessionRepository = {
+    create: vi.fn(),
+    findById: vi.fn(),
+    revokeById: vi.fn(),
+    revokeByTokenHash: vi.fn(),
+    revokeAllByUserId: vi.fn()
   };
 
-  const issueTokens = new IssueAuthTokensUseCase(tokenService);
+  const securityEvents: SecurityEventRepository = {
+    record: vi.fn()
+  };
+
+  const issueTokens = new IssueAuthTokensUseCase(
+      {
+        signAccessToken: vi.fn().mockResolvedValue('access-token'),
+        signRefreshToken: vi.fn().mockResolvedValue('refresh-token'),
+        verifyAccessToken: vi.fn(),
+        verifyRefreshToken: vi.fn()
+      },
+      refreshSessions
+  );
+
+  const context = { ip: '127.0.0.1', userAgent: 'vitest' };
 
   const useCase = new CompletePasskeyLoginUseCase(
-    users,
-    challenges,
-    credentials,
-    passkey,
-    issueTokens
+      users,
+      challenges,
+      credentials,
+      passkey,
+      issueTokens,
+      securityEvents
   );
 
   const mockUser = {
@@ -90,10 +108,13 @@ describe('CompletePasskeyLoginUseCase', () => {
     vi.mocked(users.findById).mockResolvedValueOnce(mockUser);
     vi.mocked(credentials.updateCounter).mockResolvedValueOnce();
 
-    const result = await useCase.execute({
-      challenge: 'auth-ch-val',
-      response: { id: 'cred-charlie-id' }
-    });
+    const result = await useCase.execute(
+        {
+          challenge: 'auth-ch-val',
+          response: { id: 'cred-charlie-id' }
+        },
+        context
+    );
 
     expect(result.user).toEqual(mockUser);
     expect(result.accessToken).toBe('access-token');
@@ -105,14 +126,23 @@ describe('CompletePasskeyLoginUseCase', () => {
     });
 
     expect(credentials.updateCounter).toHaveBeenCalledWith('cred-charlie-id', '11');
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-passkey-1',
+          eventType: 'PASSKEY_LOGIN_SUCCESS'
+        })
+    );
   });
 
   it('throws AppError 400 when response is missing id', async () => {
     await expect(
-      useCase.execute({
-        challenge: 'auth-ch-val',
-        response: {}
-      })
+        useCase.execute(
+            {
+              challenge: 'auth-ch-val',
+              response: {}
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Invalid Passkey response'
@@ -125,10 +155,13 @@ describe('CompletePasskeyLoginUseCase', () => {
     vi.mocked(challenges.consume).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        challenge: 'expired-ch',
-        response: { id: 'cred-charlie-id' }
-      })
+        useCase.execute(
+            {
+              challenge: 'expired-ch',
+              response: { id: 'cred-charlie-id' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Invalid or expired Passkey challenge'
@@ -142,16 +175,26 @@ describe('CompletePasskeyLoginUseCase', () => {
     vi.mocked(credentials.findByCredentialId).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        challenge: 'auth-ch-val',
-        response: { id: 'unknown-cred' }
-      })
+        useCase.execute(
+            {
+              challenge: 'auth-ch-val',
+              response: { id: 'unknown-cred' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 401,
       message: 'Invalid Passkey credentials'
     });
 
     expect(passkey.verifyAuthentication).not.toHaveBeenCalled();
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: null,
+          eventType: 'PASSKEY_LOGIN_FAILURE',
+          metadata: { reason: 'unknown_credential' }
+        })
+    );
   });
 
   it('throws AppError 401 when passkey signature verification fails', async () => {
@@ -160,15 +203,25 @@ describe('CompletePasskeyLoginUseCase', () => {
     vi.mocked(passkey.verifyAuthentication).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        challenge: 'auth-ch-val',
-        response: { id: 'cred-charlie-id' }
-      })
+        useCase.execute(
+            {
+              challenge: 'auth-ch-val',
+              response: { id: 'cred-charlie-id' }
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 401,
       message: 'Passkey authentication failed'
     });
 
     expect(credentials.updateCounter).not.toHaveBeenCalled();
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-passkey-1',
+          eventType: 'PASSKEY_LOGIN_FAILURE',
+          metadata: { reason: 'verification_failed' }
+        })
+    );
   });
 });

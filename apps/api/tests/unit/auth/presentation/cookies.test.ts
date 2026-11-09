@@ -19,14 +19,14 @@ describe('cookies', () => {
 
     expect(res.cookie).toHaveBeenCalledTimes(2);
     expect(res.cookie).toHaveBeenCalledWith(
-      ACCESS_TOKEN_COOKIE,
-      'access-token-xyz',
-      accessCookieOptions
+        ACCESS_TOKEN_COOKIE,
+        'access-token-xyz',
+        accessCookieOptions
     );
     expect(res.cookie).toHaveBeenCalledWith(
-      REFRESH_TOKEN_COOKIE,
-      'refresh-token-xyz',
-      refreshCookieOptions
+        REFRESH_TOKEN_COOKIE,
+        'refresh-token-xyz',
+        refreshCookieOptions
     );
 
     expect(accessCookieOptions.httpOnly).toBe(true);
@@ -35,7 +35,7 @@ describe('cookies', () => {
 
     expect(refreshCookieOptions.httpOnly).toBe(true);
     expect(refreshCookieOptions.sameSite).toBe('lax');
-    expect(refreshCookieOptions.path).toBe('/api/v1/auth/refresh');
+    expect(refreshCookieOptions.path).toBe('/api/v1/auth');
   });
 
   it('clears access and refresh cookies with expected paths', () => {

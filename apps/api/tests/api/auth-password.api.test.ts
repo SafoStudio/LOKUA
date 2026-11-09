@@ -45,7 +45,7 @@ describe('Auth Password API', () => {
 
       expect(refreshCookie).toBeDefined();
       expect(refreshCookie).toContain('HttpOnly');
-      expect(refreshCookie).toContain('Path=/api/v1/auth/refresh');
+      expect(refreshCookie).toContain('Path=/api/v1/auth');
       expect(refreshCookie).toContain('SameSite=Lax');
     });
 

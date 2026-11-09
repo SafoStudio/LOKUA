@@ -1,13 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { RegisterWithPasswordUseCase } from '../../../../src/modules/auth/application/index.js';
 import type { UserProvider } from '../../../../src/modules/auth/index.js';
-import type { PasswordHasher, RegistrationTransaction } from '../../../../src/modules/auth/application/index.js';
+import type {
+  PasswordHasher,
+  RegistrationTransaction,
+  SecurityEventRepository,
+  SendVerificationEmailUseCase
+} from '../../../../src/modules/auth/application/index.js';
 
 describe('RegisterWithPasswordUseCase', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const passwordHasher: PasswordHasher = {
@@ -19,7 +25,23 @@ describe('RegisterWithPasswordUseCase', () => {
     createUserWithPasswordCredential: vi.fn()
   };
 
-  const useCase = new RegisterWithPasswordUseCase(users, passwordHasher, registrationTransaction);
+  const sendVerificationEmail = {
+    execute: vi.fn()
+  } as unknown as SendVerificationEmailUseCase;
+
+  const securityEvents: SecurityEventRepository = {
+    record: vi.fn()
+  };
+
+  const context = { ip: '127.0.0.1', userAgent: 'vitest' };
+
+  const useCase = new RegisterWithPasswordUseCase(
+      users,
+      passwordHasher,
+      registrationTransaction,
+      sendVerificationEmail,
+      securityEvents
+  );
 
   it('registers user successfully with normalized email and trimmed name', async () => {
     vi.mocked(users.findByEmail).mockResolvedValueOnce(null);
@@ -30,12 +52,16 @@ describe('RegisterWithPasswordUseCase', () => {
       name: 'John Doe',
       emailVerified: false
     });
+    vi.mocked(sendVerificationEmail.execute).mockResolvedValueOnce();
 
-    const result = await useCase.execute({
-      email: '  John@Example.COM  ',
-      name: '  John Doe  ',
-      password: 'StrongPassword123'
-    });
+    const result = await useCase.execute(
+        {
+          email: '  John@Example.COM  ',
+          name: '  John Doe  ',
+          password: 'StrongPassword123'
+        },
+        context
+    );
 
     expect(result).toEqual({
       id: 'user-1',
@@ -51,6 +77,14 @@ describe('RegisterWithPasswordUseCase', () => {
       name: 'John Doe',
       passwordHash: 'hashed-password'
     });
+    expect(sendVerificationEmail.execute).toHaveBeenCalledWith('user-1');
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          eventType: 'REGISTER_SUCCESS',
+          metadata: { method: 'password' }
+        })
+    );
   });
 
   it('throws AppError 409 when email already exists', async () => {
@@ -62,11 +96,14 @@ describe('RegisterWithPasswordUseCase', () => {
     });
 
     await expect(
-      useCase.execute({
-        email: 'john@example.com',
-        name: 'John',
-        password: 'StrongPassword123'
-      })
+        useCase.execute(
+            {
+              email: 'john@example.com',
+              name: 'John',
+              password: 'StrongPassword123'
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 409,
       message: 'Email already registered'
@@ -80,11 +117,14 @@ describe('RegisterWithPasswordUseCase', () => {
     vi.mocked(users.findByEmail).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        email: 'john@example.com',
-        name: 'John',
-        password: 'a'.repeat(73)
-      })
+        useCase.execute(
+            {
+              email: 'john@example.com',
+              name: 'John',
+              password: 'a'.repeat(73)
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Password must not exceed 72 bytes'

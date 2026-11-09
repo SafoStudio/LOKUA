@@ -15,8 +15,11 @@ describe('JwtTokenService', () => {
     expect(decoded.userId).toBe(payload.userId);
   });
 
-  it('signs and verifies refresh token with valid userId payload', async () => {
-    const payload = { userId: '22222222-2222-2222-2222-222222222222' };
+  it('signs and verifies refresh token with valid userId and jti payload', async () => {
+    const payload = {
+      userId: '22222222-2222-2222-2222-222222222222',
+      jti: '44444444-4444-4444-4444-444444444444'
+    };
     const token = await tokenService.signRefreshToken(payload);
 
     expect(typeof token).toBe('string');
@@ -24,6 +27,7 @@ describe('JwtTokenService', () => {
 
     const decoded = await tokenService.verifyRefreshToken(token);
     expect(decoded.userId).toBe(payload.userId);
+    expect(decoded.jti).toBe(payload.jti);
   });
 
   it('fails verification when access token is verified with refresh secret or vice versa', async () => {

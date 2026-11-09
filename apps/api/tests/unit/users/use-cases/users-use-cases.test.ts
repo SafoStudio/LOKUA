@@ -20,7 +20,8 @@ describe('Users Use Cases', () => {
   const mockRepo: UserRepository = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   it('CreateUserUseCase delegates creation to repository', async () => {

@@ -5,9 +5,13 @@ import {
   PasswordCredentialEntity,
   GoogleCredentialEntity,
   PasskeyCredentialEntity,
-  PasskeyChallengeEntity
+  PasskeyChallengeEntity,
+  EmailVerificationTokenEntity,
+  PasswordResetTokenEntity,
+  RefreshSessionEntity,
+  SecurityEventEntity
 } from '../../../src/modules/auth/infrastructure/index.js';
-import { InitialSchema1793960996786 } from '../../../src/db/migrations/1793960996786-InitialSchema.js';
+import { InitialSchema1794056977895 } from '../../../src/db/migrations/1794056977895-InitialSchema.js';
 
 export const TEST_DATABASE_URL =
     process.env.TEST_DATABASE_URL ?? 'postgres://lokua:lokua@localhost:5433/lokua_test';
@@ -32,9 +36,13 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
       PasswordCredentialEntity,
       GoogleCredentialEntity,
       PasskeyCredentialEntity,
-      PasskeyChallengeEntity
+      PasskeyChallengeEntity,
+      EmailVerificationTokenEntity,
+      PasswordResetTokenEntity,
+      RefreshSessionEntity,
+      SecurityEventEntity
     ],
-    migrations: [InitialSchema1793960996786]
+    migrations: [InitialSchema1794056977895]
   });
 }
 
@@ -50,6 +58,16 @@ export async function isDatabaseReachable(dataSource: DataSource): Promise<boole
 
 export async function clearAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query(`
-    TRUNCATE TABLE "passkey_challenges", "passkey_credentials", "password_credentials", "google_credentials", "users" CASCADE;
+    TRUNCATE TABLE
+      "security_events",
+      "refresh_sessions",
+      "password_reset_tokens",
+      "email_verification_tokens",
+      "passkey_challenges",
+      "passkey_credentials",
+      "password_credentials",
+      "google_credentials",
+      "users"
+    CASCADE;
   `);
 }

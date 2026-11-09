@@ -12,7 +12,8 @@ describe('StartPasskeyRegistrationUseCase', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const credentials: PasskeyCredentialRepository = {

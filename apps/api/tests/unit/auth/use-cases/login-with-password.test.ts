@@ -1,13 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoginWithPasswordUseCase } from '../../../../src/modules/auth/application/index.js';
 import type { UserProvider } from '../../../../src/modules/auth/index.js';
-import type { PasswordHasher, PasswordCredentialRepository} from '../../../../src/modules/auth/application/index.js';
+import type {
+  PasswordHasher,
+  PasswordCredentialRepository,
+  SecurityEventRepository
+} from '../../../../src/modules/auth/application/index.js';
 
 describe('LoginWithPasswordUseCase', () => {
   const users: UserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    markEmailVerified: vi.fn()
   };
 
   const passwordHasher: PasswordHasher = {
@@ -17,10 +22,22 @@ describe('LoginWithPasswordUseCase', () => {
 
   const credentials: PasswordCredentialRepository = {
     findByUserId: vi.fn(),
-    create: vi.fn()
+    create: vi.fn(),
+    updatePasswordHash: vi.fn()
   };
 
-  const useCase = new LoginWithPasswordUseCase(users, passwordHasher, credentials);
+  const securityEvents: SecurityEventRepository = {
+    record: vi.fn()
+  };
+
+  const context = { ip: '127.0.0.1', userAgent: 'vitest' };
+
+  const useCase = new LoginWithPasswordUseCase(
+      users,
+      passwordHasher,
+      credentials,
+      securityEvents
+  );
 
   it('authenticates user successfully with valid credentials and normalized email', async () => {
     const user = {
@@ -37,28 +54,49 @@ describe('LoginWithPasswordUseCase', () => {
     });
     vi.mocked(passwordHasher.compare).mockResolvedValueOnce(true);
 
-    const result = await useCase.execute({
-      email: '  USER@example.COM  ',
-      password: 'ValidPassword123'
-    });
+    const result = await useCase.execute(
+        {
+          email: '  USER@example.COM  ',
+          password: 'ValidPassword123'
+        },
+        context
+    );
 
     expect(result).toEqual(user);
     expect(users.findByEmail).toHaveBeenCalledWith('user@example.com');
     expect(passwordHasher.compare).toHaveBeenCalledWith('ValidPassword123', 'stored-hash');
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          eventType: 'LOGIN_SUCCESS',
+          ip: '127.0.0.1',
+          userAgent: 'vitest'
+        })
+    );
   });
 
   it('throws AppError 401 when user is not found', async () => {
     vi.mocked(users.findByEmail).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        email: 'unknown@example.com',
-        password: 'Password123'
-      })
+        useCase.execute(
+            {
+              email: 'unknown@example.com',
+              password: 'Password123'
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 401,
       message: 'Invalid credentials'
     });
+
+    expect(securityEvents.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: null,
+          eventType: 'LOGIN_FAILURE'
+        })
+    );
   });
 
   it('throws AppError 401 when user has no password credentials (e.g. Google-only account)', async () => {
@@ -71,10 +109,13 @@ describe('LoginWithPasswordUseCase', () => {
     vi.mocked(credentials.findByUserId).mockResolvedValueOnce(null);
 
     await expect(
-      useCase.execute({
-        email: 'google@example.com',
-        password: 'Password123'
-      })
+        useCase.execute(
+            {
+              email: 'google@example.com',
+              password: 'Password123'
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 401,
       message: 'Invalid credentials'
@@ -95,10 +136,13 @@ describe('LoginWithPasswordUseCase', () => {
     vi.mocked(passwordHasher.compare).mockResolvedValueOnce(false);
 
     await expect(
-      useCase.execute({
-        email: 'user@example.com',
-        password: 'WrongPassword'
-      })
+        useCase.execute(
+            {
+              email: 'user@example.com',
+              password: 'WrongPassword'
+            },
+            context
+        )
     ).rejects.toMatchObject({
       statusCode: 401,
       message: 'Invalid credentials'
