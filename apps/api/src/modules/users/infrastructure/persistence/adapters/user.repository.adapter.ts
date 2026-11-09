@@ -40,6 +40,10 @@ export class UserRepositoryAdapter implements UserRepository {
     return this.toDomain(saved);
   }
 
+  async markEmailVerified(id: string): Promise<void> {
+    await this.repository.update({ id }, { emailVerified: true });
+  }
+
   private toDomain(entity: UserEntity): User {
     return {
       id: entity.id,

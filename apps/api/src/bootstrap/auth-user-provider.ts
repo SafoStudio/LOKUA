@@ -30,6 +30,10 @@ export function createAuthUserProvider(users: UsersModule): UserProvider {
     async create(data) {
       const user = await users.createUser(data);
       return toAuthUser(user);
+    },
+
+    async markEmailVerified(id) {
+      await users.markEmailVerified(id);
     }
   };
 }

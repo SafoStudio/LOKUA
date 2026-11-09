@@ -11,4 +11,6 @@ export interface UserRepository {
     name: string;
     emailVerified?: boolean;
   }): Promise<User>;
+
+  markEmailVerified(id: string): Promise<void>;
 }

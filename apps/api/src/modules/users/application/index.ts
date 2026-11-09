@@ -6,4 +6,6 @@ export { FindUserByIdUseCase } from './use-cases/find-user-by-id.use-case.js';
 
 export { FindUserByEmailUseCase } from './use-cases/find-user-by-email.use-case.js';
 
+export { MarkEmailVerifiedUseCase } from './use-cases/mark-email-verified.use-case.js';
+
 export type { UserRepository } from './ports/user.repository.js';
