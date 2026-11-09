@@ -26,6 +26,7 @@ export type { GoogleLoginTransaction } from './ports/google-login-transaction.js
 export type { PasskeySignupTransaction } from './ports/passkey-signup-transaction.js';
 
 export type { PasskeyChallengeRepository } from './ports/passkey-challenge.repository.js';
+export type { EmailVerificationTokenRepository } from './ports/email-verification-token.repository.js';
 
 export type {
   PasskeyVerificationService,
@@ -48,5 +49,26 @@ export type {
 } from './ports/passkey-credential.repository.js';
 
 export type { PasswordHasher } from './ports/password-hasher.js';
-export type { TokenPayload, TokenService } from './ports/token.service.js';
 export type { GoogleProfile, GoogleOAuthProvider } from './ports/google-oauth.provider.js';
+
+export type { EmailService } from './ports/email.service.js';
+
+export { SendVerificationEmailUseCase } from './use-cases/send-verification-email.use-case.js';
+export { VerifyEmailUseCase } from './use-cases/verify-email.use-case.js';
+
+export type { PasswordResetTokenRepository } from './ports/password-reset-token.repository.js';
+
+export { RequestPasswordResetUseCase } from './use-cases/request-password-reset.use-case.js';
+export { ResetPasswordUseCase } from './use-cases/reset-password.use-case.js';
+
+export { ChangePasswordUseCase } from './use-cases/change-password.use-case.js';
+export type { ChangePasswordInput } from './use-cases/change-password.use-case.js';
+
+export type { TokenPayload, RefreshTokenPayload, TokenService } from './ports/token.service.js';
+export type { RefreshSessionRepository } from './ports/refresh-session.repository.js';
+
+export { LogoutUseCase } from './use-cases/logout.use-case.js';
+export { LogoutAllUseCase } from './use-cases/logout-all.use-case.js';
+
+export type { SecurityContext } from './security-context.js';
+export type { SecurityEventRepository } from './ports/security-event.repository.js';
