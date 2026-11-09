@@ -27,3 +27,21 @@ export { TypeOrmGoogleLoginTransaction } from './transactions/typeorm-google-log
 export { TypeOrmRegistrationTransaction } from './transactions/typeorm-registration.transaction.js';
 
 export { TypeOrmPasskeySignupTransaction } from './transactions/typeorm-passkey-signup.transaction.js';
+
+export { EmailVerificationTokenEntity } from './persistence/entities/email-verification-token.entity.js';
+
+export { EmailVerificationTokenRepositoryAdapter } from './persistence/adapters/email-verification-token.repository.adapter.js';
+
+export { BrevoEmailService } from './providers/brevo-email.service.js';
+
+export { PasswordResetTokenEntity } from './persistence/entities/password-reset-token.entity.js';
+
+export { PasswordResetTokenRepositoryAdapter } from './persistence/adapters/password-reset-token.repository.adapter.js';
+
+export { RefreshSessionEntity } from './persistence/entities/refresh-session.entity.js';
+
+export { RefreshSessionRepositoryAdapter } from './persistence/adapters/refresh-session.repository.adapter.js';
+
+export { SecurityEventEntity } from './persistence/entities/security-event.entity.js';
+
+export { SecurityEventRepositoryAdapter } from './persistence/adapters/security-event.repository.adapter.js';

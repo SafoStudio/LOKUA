@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { env } from '../../../../config/env.js';
-import type { TokenPayload, TokenService } from '../../application/index.js';
+import type { TokenPayload, RefreshTokenPayload, TokenService } from '../../application/index.js';
 import { AppError } from '../../../../common/index.js';
 
 const accessSecret = new TextEncoder().encode(env.JWT_ACCESS_SECRET);
@@ -15,10 +15,11 @@ export class JwtTokenService implements TokenService {
       .sign(accessSecret);
   }
 
-  async signRefreshToken(payload: TokenPayload): Promise<string> {
-    return new SignJWT({ ...payload })
+  async signRefreshToken(payload: RefreshTokenPayload): Promise<string> {
+    return new SignJWT({ userId: payload.userId })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
+      .setJti(payload.jti)
       .setExpirationTime(env.JWT_REFRESH_TTL)
       .sign(refreshSecret);
   }
@@ -35,15 +36,15 @@ export class JwtTokenService implements TokenService {
     return { userId: payload.userId };
   }
 
-  async verifyRefreshToken(token: string): Promise<TokenPayload> {
+  async verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
     const { payload } = await jwtVerify(token, refreshSecret, {
       algorithms: ['HS256']
     });
 
-    if (typeof payload.userId !== 'string') {
+    if (typeof payload.userId !== 'string' || typeof payload.jti !== 'string') {
       throw new AppError('Invalid refresh token payload');
     }
 
-    return { userId: payload.userId };
+    return { userId: payload.userId, jti: payload.jti };
   }
 }

@@ -25,4 +25,8 @@ export class PasswordCredentialRepositoryAdapter implements PasswordCredentialRe
     const entity = this.repository.create(data);
     await this.repository.save(entity);
   }
+
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await this.repository.update({ userId }, { passwordHash });
+  }
 }
