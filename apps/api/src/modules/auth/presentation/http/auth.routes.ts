@@ -7,7 +7,11 @@ import {
   passkeySignupOptionsSchema,
   passkeySignupVerifySchema,
   passkeyRegistrationVerifySchema,
-  passkeyLoginVerifySchema
+  passkeyLoginVerifySchema,
+  verifyEmailSchema,
+  requestPasswordResetSchema,
+  resetPasswordSchema,
+  changePasswordSchema
 } from './auth.schema.js';
 import type { AuthController } from './auth.controller.js';
 
@@ -27,11 +31,32 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
 
   router.post('/logout', controller.logout);
 
+  router.post('/logout-all', middleware.requireAuth, controller.logoutAll);
+
   router.get('/me', middleware.requireAuth, controller.me);
 
   router.get('/google', controller.googleStart);
 
   router.get('/google/callback', controller.googleCallback);
+
+  router.get('/verify-email', validate({ query: verifyEmailSchema }), controller.verifyEmail);
+
+  router.post('/verify-email/resend', middleware.requireAuth, controller.resendVerificationEmail);
+
+  router.post(
+    '/password-reset/request',
+    validate({ body: requestPasswordResetSchema }),
+    controller.requestPasswordReset
+  );
+
+  router.post('/password-reset', validate({ body: resetPasswordSchema }), controller.resetPassword);
+
+  router.post(
+    '/change-password',
+    middleware.requireAuth,
+    validate({ body: changePasswordSchema }),
+    controller.changePassword
+  );
 
   router.post(
     '/passkey/signup/options',

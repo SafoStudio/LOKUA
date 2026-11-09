@@ -20,7 +20,7 @@ export const accessCookieOptions: CookieOptions = {
 
 export const refreshCookieOptions: CookieOptions = {
   ...commonCookieOptions,
-  path: `${AUTH_PATH}/refresh`
+  path: AUTH_PATH
 };
 
 export function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
