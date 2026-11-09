@@ -5,6 +5,7 @@ import { logger } from '../common/index.js';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().positive().default(3003),
+  APP_URL: z.url(),
   CLIENT_URL: z.url(),
   DATABASE_URL: z.url(),
 
@@ -20,7 +21,11 @@ const envSchema = z.object({
 
   WEBAUTHN_RP_ID: z.string().min(1),
   WEBAUTHN_RP_NAME: z.string().min(1),
-  WEBAUTHN_ORIGIN: z.url()
+  WEBAUTHN_ORIGIN: z.url(),
+
+  BREVO_SMTP_USER: z.string().min(1),
+  BREVO_SMTP_KEY: z.string().min(1),
+  BREVO_SENDER_EMAIL: z.email()
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
