@@ -8,7 +8,7 @@ info:
     ### Authorization
     All private routes use HttpOnly Cookies:
     - `accessToken`: valid for the entire API (`Path=/api/v1`).
-    - `refreshToken`: valid strictly for token refresh (`Path=/api/v1/auth/refresh`).
+    - `refreshToken`: valid for all authentication routes (`Path=/api/v1/auth`).
     - The `Authorization: Bearer <token>` header is also supported.
 
     To work from a browser, you must send `credentials: 'include'` (Fetch) or `withCredentials: true` (Axios).
@@ -26,4 +26,8 @@ tags:
     description: Token refresh and session termination
   - name: Auth / Session
     description: Current user session data
+  - name: Auth / Email Verification
+    description: Email address verification after signup
+  - name: Auth / Password Reset
+    description: Password recovery via email link
 paths: {}

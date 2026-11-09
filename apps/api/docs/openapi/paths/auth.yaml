@@ -3,7 +3,11 @@
     tags:
       - Auth / Password
     summary: Register with email and password
-    description: Creates a new user and password credentials. Issues HttpOnly cookies (accessToken and refreshToken).
+    description: |
+      Creates a new user and password credentials, then sends a verification email
+      (best-effort: SMTP failures do not fail registration). Issues HttpOnly cookies
+      (accessToken and refreshToken). The user's `emailVerified` is `false` until the
+      email is confirmed via `GET /api/v1/auth/verify-email`.
     requestBody:
       required: true
       content:
@@ -15,7 +19,7 @@
         description: User successfully created
         headers:
           Set-Cookie:
-            description: Sets accessToken (Path=/api/v1) and refreshToken (Path=/api/v1/auth/refresh)
+            description: Sets accessToken (Path=/api/v1) and refreshToken (Path=/api/v1/auth)
             schema:
               type: string
         content:
@@ -77,7 +81,11 @@
     tags:
       - Auth / Tokens
     summary: Refresh the token pair
-    description: Accepts the refreshToken from the HttpOnly cookie and issues a new token pair (accessToken and refreshToken).
+    description: |
+      Accepts the refreshToken cookie, verifies the JWT signature and the session record,
+      and rotates the token pair: the previous refresh session is revoked and a new one is created.
+      If a rotated (already revoked) token is presented again, reuse is detected and all
+      refresh sessions of the user are revoked.
     security:
       - RefreshCookieAuth: []
     responses:
@@ -93,7 +101,7 @@
             schema:
               $ref: '#/components/schemas/UserResponse'
       '401':
-        description: Refresh token is missing, expired, or invalid
+        description: Refresh token is missing, expired, revoked, or reused (in which case all sessions are revoked)
         content:
           application/json:
             schema:
@@ -104,7 +112,7 @@
     tags:
       - Auth / Tokens
     summary: Sign out
-    description: Clears auth cookies (sets Max-Age=0).
+    description: Revokes the refresh session (if present) by matching the refresh cookie against the stored token hash, then clears auth cookies.
     responses:
       '200':
         description: Successful sign-out
@@ -117,6 +125,34 @@
           application/json:
             schema:
               $ref: '#/components/schemas/MessageResponse'
+
+/api/v1/auth/logout-all:
+  post:
+    tags:
+      - Auth / Tokens
+    summary: Sign out from all devices
+    description: Revokes all active refresh sessions for the authenticated user and clears the auth cookies.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: All sessions revoked
+        headers:
+          Set-Cookie:
+            description: Removes accessToken and refreshToken
+            schema:
+              type: string
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 /api/v1/auth/me:
   get:
@@ -136,6 +172,153 @@
               $ref: '#/components/schemas/UserResponse'
       '401':
         description: Not authenticated or access token expired
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/verify-email:
+  get:
+    tags:
+      - Auth / Email Verification
+    summary: Verify email by token
+    description: Consumes the one-time verification token from the query string, marks the user's email as verified, and records a security event. The token is valid for 24 hours and can be used only once.
+    parameters:
+      - name: token
+        in: query
+        required: true
+        description: Verification token from the email link
+        schema:
+          type: string
+          minLength: 1
+    responses:
+      '200':
+        description: Email verified successfully
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '400':
+        description: Missing, invalid, or expired verification token
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/verify-email/resend:
+  post:
+    tags:
+      - Auth / Email Verification
+    summary: Resend verification email
+    description: Sends a new verification email to the authenticated user. If the email is already verified, the request succeeds without sending anything (email enumeration protection).
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Verification email sent (or silently skipped if already verified)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/password-reset/request:
+  post:
+    tags:
+      - Auth / Password Reset
+    summary: Request a password reset link
+    description: |
+      Sends a password reset email if the account exists and has a password credential.
+      Always returns 200 with the same message regardless of whether the email exists,
+      the user has no password (e.g. Google/Passkey-only account), or SMTP delivery fails.
+      This prevents email enumeration.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestPasswordResetRequest'
+    responses:
+      '200':
+        description: Always returned, even if the email is unknown
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '400':
+        description: Request body validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+
+/api/v1/auth/password-reset:
+  post:
+    tags:
+      - Auth / Password Reset
+    summary: Reset password with token
+    description: |
+      Consumes the one-time reset token (valid for 1 hour), sets a new password, revokes all active
+      refresh sessions, and records a security event. The user is not logged in automatically.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResetPasswordRequest'
+    responses:
+      '200':
+        description: Password reset successfully
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '400':
+        description: Missing/invalid/expired token, or validation error on the new password
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/auth/change-password:
+  post:
+    tags:
+      - Auth / Password
+    summary: Change password for the authenticated user
+    description: |
+      Requires the current password. On success, the password is updated and all active refresh
+      sessions are revoked. The current access token remains valid until it expires. The new
+      password must differ from the current one.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ChangePasswordRequest'
+    responses:
+      '200':
+        description: Password changed successfully
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageResponse'
+      '400':
+        description: Password is not set for this account, new password equals current, or validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: Authentication required or current password is incorrect
         content:
           application/json:
             schema:
