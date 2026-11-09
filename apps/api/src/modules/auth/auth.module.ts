@@ -11,7 +11,14 @@ import {
   StartPasskeyRegistrationUseCase,
   CompletePasskeyRegistrationUseCase,
   StartPasskeyLoginUseCase,
-  CompletePasskeyLoginUseCase
+  CompletePasskeyLoginUseCase,
+  SendVerificationEmailUseCase,
+  VerifyEmailUseCase,
+  RequestPasswordResetUseCase,
+  ResetPasswordUseCase,
+  ChangePasswordUseCase,
+  LogoutUseCase,
+  LogoutAllUseCase
 } from './application/index.js';
 import {
   PasswordCredentialRepositoryAdapter,
@@ -28,7 +35,16 @@ import {
   PasskeyChallengeEntity,
   TypeOrmRegistrationTransaction,
   TypeOrmGoogleLoginTransaction,
-  TypeOrmPasskeySignupTransaction
+  TypeOrmPasskeySignupTransaction,
+  EmailVerificationTokenEntity,
+  EmailVerificationTokenRepositoryAdapter,
+  BrevoEmailService,
+  PasswordResetTokenEntity,
+  PasswordResetTokenRepositoryAdapter,
+  RefreshSessionEntity,
+  RefreshSessionRepositoryAdapter,
+  SecurityEventEntity,
+  SecurityEventRepositoryAdapter
 } from './infrastructure/index.js';
 
 import { createAuthController } from './presentation/http/auth.controller.js';
@@ -42,10 +58,6 @@ interface CreateAuthModuleDependencies {
 }
 
 export function createAuthModule({ dataSource, users }: CreateAuthModuleDependencies) {
-  const registrationTransaction = new TypeOrmRegistrationTransaction(dataSource);
-  const googleLoginTransaction = new TypeOrmGoogleLoginTransaction(dataSource);
-  const passkeySignupTransaction = new TypeOrmPasskeySignupTransaction(dataSource);
-
   const passwordCredentials = new PasswordCredentialRepositoryAdapter(
     dataSource.getRepository(PasswordCredentialEntity)
   );
@@ -62,8 +74,29 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
     dataSource.getRepository(PasskeyChallengeEntity)
   );
 
+  const emailVerificationTokens = new EmailVerificationTokenRepositoryAdapter(
+    dataSource.getRepository(EmailVerificationTokenEntity)
+  );
+
+  const passwordResetTokens = new PasswordResetTokenRepositoryAdapter(
+    dataSource.getRepository(PasswordResetTokenEntity)
+  );
+
+  const refreshSessions = new RefreshSessionRepositoryAdapter(
+    dataSource.getRepository(RefreshSessionEntity)
+  );
+
+  const securityEvents = new SecurityEventRepositoryAdapter(
+    dataSource.getRepository(SecurityEventEntity)
+  );
+
+  const registrationTransaction = new TypeOrmRegistrationTransaction(dataSource);
+  const googleLoginTransaction = new TypeOrmGoogleLoginTransaction(dataSource);
+  const passkeySignupTransaction = new TypeOrmPasskeySignupTransaction(dataSource);
+
   const passwordHasher = new BcryptPasswordHasher();
   const tokenService = new JwtTokenService();
+  const emailService = new BrevoEmailService();
 
   const googleOAuth = new GoogleOAuthProviderAdapter();
   const passkeyProvider = new SimpleWebAuthnVerificationProvider({
@@ -72,20 +105,66 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
     origin: env.WEBAUTHN_ORIGIN
   });
 
-  const issueTokens = new IssueAuthTokensUseCase(tokenService);
+  const issueTokens = new IssueAuthTokensUseCase(tokenService, refreshSessions);
 
-  const register = new RegisterWithPasswordUseCase(users, passwordHasher, registrationTransaction);
+  const sendVerificationEmail = new SendVerificationEmailUseCase(
+    users,
+    emailVerificationTokens,
+    emailService
+  );
 
-  const login = new LoginWithPasswordUseCase(users, passwordHasher, passwordCredentials);
+  const verifyEmail = new VerifyEmailUseCase(emailVerificationTokens, users, securityEvents);
+
+  const register = new RegisterWithPasswordUseCase(
+    users,
+    passwordHasher,
+    registrationTransaction,
+    sendVerificationEmail,
+    securityEvents
+  );
+
+  const login = new LoginWithPasswordUseCase(
+    users,
+    passwordHasher,
+    passwordCredentials,
+    securityEvents
+  );
 
   const loginGoogle = new LoginWithGoogleUseCase(
     users,
     googleOAuth,
     googleCredentials,
-    googleLoginTransaction
+    googleLoginTransaction,
+    securityEvents
   );
 
-  const refresh = new RefreshTokensUseCase(users, tokenService);
+  const refresh = new RefreshTokensUseCase(users, tokenService, refreshSessions, securityEvents);
+
+  const requestPasswordReset = new RequestPasswordResetUseCase(
+    users,
+    passwordCredentials,
+    passwordResetTokens,
+    emailService,
+    securityEvents
+  );
+
+  const resetPassword = new ResetPasswordUseCase(
+    passwordResetTokens,
+    passwordCredentials,
+    passwordHasher,
+    refreshSessions,
+    securityEvents
+  );
+
+  const changePassword = new ChangePasswordUseCase(
+    passwordCredentials,
+    passwordHasher,
+    refreshSessions,
+    securityEvents
+  );
+
+  const logout = new LogoutUseCase(refreshSessions, securityEvents);
+  const logoutAll = new LogoutAllUseCase(refreshSessions, securityEvents);
 
   const startPasskeySignup = new StartPasskeySignupUseCase(
     users,
@@ -97,7 +176,8 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
     passkeyChallenges,
     passkeyProvider,
     passkeySignupTransaction,
-    issueTokens
+    issueTokens,
+    securityEvents
   );
 
   const startPasskeyRegistration = new StartPasskeyRegistrationUseCase(
@@ -120,7 +200,8 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
     passkeyChallenges,
     passkeyCredentials,
     passkeyProvider,
-    issueTokens
+    issueTokens,
+    securityEvents
   );
 
   const controller = createAuthController({
@@ -130,6 +211,13 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
     refresh,
     issueTokens,
     googleOAuth,
+    sendVerificationEmail,
+    verifyEmail,
+    requestPasswordReset,
+    resetPassword,
+    changePassword,
+    logout,
+    logoutAll,
     startPasskeySignup,
     completePasskeySignup,
     startPasskeyRegistration,
