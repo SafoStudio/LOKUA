@@ -1,14 +1,18 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import { env, isDev } from '../config/env.js';
+import { env, isDev, isProduction } from '../config/env.js';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: env.DATABASE_URL,
 
+  ssl: isProduction ? { rejectUnauthorized: true } : false,
+  connectTimeoutMS: 10_000,
+  extra: isProduction ? { max: 10 } : undefined,
+
   synchronize: false,
 
-  logging: env.NODE_ENV === 'development',
+  logging: isDev,
 
   entities: [isDev ? 'src/**/*.entity.ts' : 'dist/**/*.entity.js'],
 

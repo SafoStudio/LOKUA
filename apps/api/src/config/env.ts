@@ -8,6 +8,7 @@ const envSchema = z.object({
   APP_URL: z.url(),
   CLIENT_URL: z.url(),
   DATABASE_URL: z.url(),
+  DATABASE_URL_DIRECT: z.url().optional(),
 
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
@@ -25,7 +26,23 @@ const envSchema = z.object({
 
   BREVO_SMTP_USER: z.string().min(1),
   BREVO_SMTP_KEY: z.string().min(1),
-  BREVO_SENDER_EMAIL: z.email()
+  BREVO_SENDER_EMAIL: z.email(),
+
+  STORAGE_ENDPOINT: z.url(),
+  STORAGE_REGION: z.string().min(1),
+  STORAGE_BUCKET: z.string().min(1),
+  STORAGE_ACCESS_KEY_ID: z.string().min(1),
+  STORAGE_SECRET_ACCESS_KEY: z.string().min(1),
+  STORAGE_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  STORAGE_SIGNED_URL_TTL: z.coerce.number().int().positive().max(604800).default(900),
+  STORAGE_MAX_UPLOAD_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(10 * 1024 * 1024)
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
