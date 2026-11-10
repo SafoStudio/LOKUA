@@ -1,6 +1,7 @@
 import type { DataSource } from 'typeorm';
 import { createUsersModule } from '../modules/users/index.js';
 import { createAuthModule } from '../modules/auth/index.js';
+import { createStorageModule } from '../modules/storage/index.js';
 import { createAuthUserProvider } from './auth-user-provider.js';
 
 export function createModules(dataSource: DataSource) {
@@ -11,8 +12,11 @@ export function createModules(dataSource: DataSource) {
     users: createAuthUserProvider(usersModule)
   });
 
+  const storageModule = createStorageModule();
+
   return {
     users: usersModule,
-    auth: authModule
+    auth: authModule,
+    storage: storageModule
   };
 }
