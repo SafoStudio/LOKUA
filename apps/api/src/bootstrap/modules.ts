@@ -14,7 +14,8 @@ export function createModules(dataSource: DataSource) {
 
   const authModule = createAuthModule({
     dataSource,
-    users: usersModule.authUsers
+    users: usersModule.authUsers,
+    access: usersModule.access
   });
 
   const storageModule = createStorageModule();
@@ -26,7 +27,10 @@ export function createModules(dataSource: DataSource) {
     users: usersModule.users
   });
 
-  const eventsModule = createEventsModule({ dataSource });
+  const eventsModule = createEventsModule({
+    dataSource,
+    access: usersModule.access
+  });
   const moderationModule = createModerationModule({ dataSource });
   const notificationsModule = createNotificationsModule({ dataSource });
 

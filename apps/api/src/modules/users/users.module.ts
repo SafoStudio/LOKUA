@@ -1,5 +1,6 @@
 import type { DataSource } from 'typeorm';
 import type { UserProvider, AuthUserProvider } from './application/index.js';
+import { AccessService } from './application/index.js';
 import {
   UserEntity,
   UserRepositoryAdapter,
@@ -16,10 +17,12 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
 
   const users: UserProvider = new UserProviderAdapter(repository);
   const authUsers: AuthUserProvider = new AuthUserProviderAdapter(repository);
+  const access = new AccessService();
 
   return {
     users,
-    authUsers
+    authUsers,
+    access
   };
 }
 

@@ -1,5 +1,5 @@
 import type { DataSource } from 'typeorm';
-import type { AuthUserProvider } from '../users/index.js';
+import type { AuthUserProvider, AccessService } from '../users/index.js';
 import {
   RegisterWithPasswordUseCase,
   LoginWithPasswordUseCase,
@@ -55,9 +55,10 @@ import { env } from '../../config/env.js';
 interface CreateAuthModuleDependencies {
   dataSource: DataSource;
   users: AuthUserProvider;
+  access: AccessService;
 }
 
-export function createAuthModule({ dataSource, users }: CreateAuthModuleDependencies) {
+export function createAuthModule({ dataSource, users, access }: CreateAuthModuleDependencies) {
   const passwordCredentials = new PasswordCredentialRepositoryAdapter(
     dataSource.getRepository(PasswordCredentialEntity)
   );
@@ -228,12 +229,13 @@ export function createAuthModule({ dataSource, users }: CreateAuthModuleDependen
 
   const middleware = createAuthMiddleware({
     tokenService,
-    users
+    users,
+    access
   });
 
   const router = createAuthRouter(controller, middleware);
 
-  return { router };
+  return { router, access };
 }
 
 export type AuthModule = ReturnType<typeof createAuthModule>;
