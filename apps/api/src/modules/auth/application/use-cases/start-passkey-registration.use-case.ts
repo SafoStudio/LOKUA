@@ -1,17 +1,14 @@
 import { AppError } from '../../../../common/index.js';
-
-import type {
-  UserProvider,
-  PasskeyChallengeRepository,
-  PasskeyCredentialRepository,
-  PasskeyVerificationService
-} from '../index.js';
+import type { AuthUserProvider } from '../../../users/index.js';
+import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
+import type { PasskeyCredentialRepository } from '../ports/passkey-credential.repository.js';
+import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 export class StartPasskeyRegistrationUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly credentials: PasskeyCredentialRepository,
     private readonly challenges: PasskeyChallengeRepository,
     private readonly passkey: PasskeyVerificationService

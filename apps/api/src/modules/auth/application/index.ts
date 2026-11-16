@@ -20,7 +20,6 @@ export { CompletePasskeyRegistrationUseCase } from './use-cases/complete-passkey
 export { StartPasskeyLoginUseCase } from './use-cases/start-passkey-login.use-case.js';
 export { CompletePasskeyLoginUseCase } from './use-cases/complete-passkey-login.use-case.js';
 
-export type { UserProvider } from './ports/user.provider.js';
 export type { RegistrationTransaction } from './ports/registration-transaction.js';
 export type { GoogleLoginTransaction } from './ports/google-login-transaction.js';
 export type { PasskeySignupTransaction } from './ports/passkey-signup-transaction.js';

@@ -1,5 +1,5 @@
 import type { DataSource } from 'typeorm';
-import type { UserProvider } from './application/index.js';
+import type { AuthUserProvider } from '../users/index.js';
 import {
   RegisterWithPasswordUseCase,
   LoginWithPasswordUseCase,
@@ -54,7 +54,7 @@ import { env } from '../../config/env.js';
 
 interface CreateAuthModuleDependencies {
   dataSource: DataSource;
-  users: UserProvider;
+  users: AuthUserProvider;
 }
 
 export function createAuthModule({ dataSource, users }: CreateAuthModuleDependencies) {

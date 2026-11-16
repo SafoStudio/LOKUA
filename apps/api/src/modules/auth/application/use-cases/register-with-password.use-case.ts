@@ -1,5 +1,5 @@
 import type { AuthUser } from '../../domain/index.js';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasswordHasher } from '../ports/password-hasher.js';
 import type { RegistrationTransaction } from '../ports/registration-transaction.js';
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
@@ -16,7 +16,7 @@ export interface RegisterWithPasswordInput {
 
 export class RegisterWithPasswordUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly passwordHasher: PasswordHasher,
     private readonly registrationTransaction: RegistrationTransaction,
     private readonly sendVerificationEmail: SendVerificationEmailUseCase,

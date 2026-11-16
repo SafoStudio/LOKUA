@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { EmailVerificationTokenRepository } from '../ports/email-verification-token.repository.js';
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
 import type { SecurityContext } from '../security-context.js';
@@ -8,7 +8,7 @@ import { AppError } from '../../../../common/index.js';
 export class VerifyEmailUseCase {
   constructor(
     private readonly tokens: EmailVerificationTokenRepository,
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly securityEvents: SecurityEventRepository
   ) {}
 

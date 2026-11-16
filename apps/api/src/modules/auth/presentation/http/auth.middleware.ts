@@ -1,12 +1,13 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import type { TokenService, UserProvider } from '../../application/index.js';
+import type { TokenService } from '../../application/index.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
 
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './cookies.js';
 
 interface AuthMiddlewareDependencies {
   tokenService: TokenService;
-  users: UserProvider;
+  users: AuthUserProvider;
 }
 
 export function createAuthMiddleware({ tokenService, users }: AuthMiddlewareDependencies) {

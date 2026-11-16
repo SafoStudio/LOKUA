@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { EmailVerificationTokenRepository } from '../ports/email-verification-token.repository.js';
 import type { EmailService } from '../ports/email.service.js';
 import { AppError } from '../../../../common/index.js';
@@ -8,7 +8,7 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 export class SendVerificationEmailUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly tokens: EmailVerificationTokenRepository,
     private readonly emailService: EmailService
   ) {}

@@ -1,5 +1,5 @@
 import type { AuthUser } from '../../domain/index.js';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { GoogleOAuthProvider } from '../ports/google-oauth.provider.js';
 import type { GoogleCredentialRepository } from '../ports/google-credential.repository.js';
 import type { GoogleLoginTransaction } from '../ports/google-login-transaction.js';
@@ -9,7 +9,7 @@ import { AppError } from '../../../../common/index.js';
 
 export class LoginWithGoogleUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly google: GoogleOAuthProvider,
     private readonly credentials: GoogleCredentialRepository,
     private readonly googleLoginTransaction: GoogleLoginTransaction,

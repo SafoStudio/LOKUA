@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { TokenService } from '../ports/token.service.js';
 import type { RefreshSessionRepository } from '../ports/refresh-session.repository.js';
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
@@ -12,7 +12,7 @@ import type { AuthResult } from './issue-auth-tokens.use-case.js';
 
 export class RefreshTokensUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly tokens: TokenService,
     private readonly refreshSessions: RefreshSessionRepository,
     private readonly securityEvents: SecurityEventRepository

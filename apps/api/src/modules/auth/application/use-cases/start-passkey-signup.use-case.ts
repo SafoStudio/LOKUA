@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../../../../common/index.js';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
 import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';
 
@@ -17,7 +17,7 @@ export interface StartPasskeySignupResult {
 
 export class StartPasskeySignupUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly challenges: PasskeyChallengeRepository,
     private readonly passkey: PasskeyVerificationService
   ) {}

@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasswordCredentialRepository } from '../ports/password-credential.repository.js';
 import type { PasswordResetTokenRepository } from '../ports/password-reset-token.repository.js';
 import type { EmailService } from '../ports/email.service.js';
@@ -11,7 +11,7 @@ const TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export class RequestPasswordResetUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly passwordCredentials: PasswordCredentialRepository,
     private readonly tokens: PasswordResetTokenRepository,
     private readonly emailService: EmailService,
