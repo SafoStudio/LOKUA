@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4-alpine
     container_name: lokua-db
     restart: unless-stopped
     environment:
@@ -18,7 +18,7 @@ services:
       retries: 10
 
   db-test:
-    image: postgres:16-alpine
+    image: postgis/postgis:16-3.4-alpine
     container_name: lokua-db-test
     restart: unless-stopped
     environment:
@@ -58,8 +58,8 @@ services:
       MINIO_ROOT_USER: lokua
       MINIO_ROOT_PASSWORD: lokua_secret
     ports:
-      - '9000:9000' # S3 API
-      - '9001:9001' # Web Console
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - lokua_minio_data:/data
     command: server /data --console-address ":9001"
