@@ -1,4 +1,4 @@
-import type { AuthUser } from '../../domain/index.js';
+import type { AuthUser } from '../../../users/index.js';
 import type { AuthUserProvider } from '../../../users/index.js';
 import type { GoogleOAuthProvider } from '../ports/google-oauth.provider.js';
 import type { GoogleCredentialRepository } from '../ports/google-credential.repository.js';

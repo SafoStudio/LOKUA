@@ -1,0 +1,2 @@
+export type UserStatus =
+  'ACTIVE' | 'BLOCKED_TEMPORARY' | 'BLOCKED_PERMANENT' | 'PENDING_DELETION' | 'DELETED';

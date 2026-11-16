@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from 'node:crypto';
-import type { AuthUser } from '../../domain/index.js';
+import type { AuthUser } from '../../../users/index.js';
 import type { TokenService } from '../ports/token.service.js';
 import type { RefreshSessionRepository } from '../ports/refresh-session.repository.js';
 import { env } from '../../../../config/env.js';

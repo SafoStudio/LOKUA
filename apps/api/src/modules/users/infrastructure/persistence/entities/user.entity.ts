@@ -7,6 +7,7 @@ import {
   Unique,
   UpdateDateColumn
 } from 'typeorm';
+import type { UserRole, UserStatus } from '../../../domain/index.js';
 
 @Entity('users')
 @Unique('uq_users_email', ['email'])
@@ -27,10 +28,10 @@ export class UserEntity {
   birthDate!: Date | null;
 
   @Column({ type: 'varchar', length: 20, default: 'USER' })
-  role!: 'USER' | 'MODERATOR' | 'ADMIN';
+  role!: UserRole;
 
   @Column({ type: 'varchar', length: 30, default: 'ACTIVE' })
-  status!: 'ACTIVE' | 'BLOCKED_TEMPORARY' | 'BLOCKED_PERMANENT' | 'PENDING_DELETION' | 'DELETED';
+  status!: UserStatus;
 
   @Index('idx_users_city_id')
   @Column({ type: 'uuid', name: 'city_id', nullable: true })

@@ -14,11 +14,19 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
     return user ? this.toAuthUser(user) : null;
   }
 
-  async create(data: { email: string; name: string; emailVerified?: boolean }): Promise<AuthUser> {
+  async create(data: {
+    email: string;
+    name: string;
+    emailVerified?: boolean;
+    role?: AuthUser['role'];
+    status?: AuthUser['status'];
+  }): Promise<AuthUser> {
     const user = await this.repository.create({
       email: data.email,
       name: data.name,
-      emailVerified: data.emailVerified ?? false
+      emailVerified: data.emailVerified ?? false,
+      role: data.role,
+      status: data.status
     });
     return this.toAuthUser(user);
   }
@@ -32,7 +40,11 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
       id: user.id,
       email: user.email,
       name: user.name,
-      emailVerified: user.emailVerified
+      emailVerified: user.emailVerified,
+      role: user.role,
+      status: user.status,
+      onboardingCompleted: user.onboardingCompleted,
+      birthDate: user.birthDate
     };
   }
 }

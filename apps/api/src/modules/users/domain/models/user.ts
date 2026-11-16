@@ -1,7 +1,5 @@
-export type UserRole = 'USER' | 'MODERATOR' | 'ADMIN';
-
-export type UserStatus =
-  'ACTIVE' | 'BLOCKED_TEMPORARY' | 'BLOCKED_PERMANENT' | 'PENDING_DELETION' | 'DELETED';
+import type { UserRole } from '../types/user-role.js';
+import type { UserStatus } from '../types/user-status.js';
 
 export interface User {
   id: string;

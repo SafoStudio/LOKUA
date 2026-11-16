@@ -1,4 +1,4 @@
-import type { AuthUser } from '../../domain/index.js';
+import type { AuthUser } from '../../../users/index.js';
 import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasswordHasher } from '../ports/password-hasher.js';
 import type { PasswordCredentialRepository } from '../ports/password-credential.repository.js';
