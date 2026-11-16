@@ -10,9 +10,10 @@ import { createDocsRouter } from './docs/index.js';
 
 interface AppDependencies {
   authRouter: express.Router;
+  geolocationRouter?: express.Router;
 }
 
-export function createApp({ authRouter }: AppDependencies) {
+export function createApp({ authRouter, geolocationRouter }: AppDependencies) {
   const app = express();
 
   app.use(
@@ -48,6 +49,10 @@ export function createApp({ authRouter }: AppDependencies) {
   app.use('/docs', createDocsRouter());
 
   app.use('/api/v1/auth', authRouter);
+
+  if (geolocationRouter) {
+    app.use('/api/v1/geo', geolocationRouter);
+  }
 
   app.use(notFound);
   app.use(errorHandler);

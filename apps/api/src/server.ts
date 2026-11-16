@@ -10,7 +10,8 @@ try {
 
   const modules = createModules(AppDataSource);
   const app = createApp({
-    authRouter: modules.auth.router
+    authRouter: modules.auth.router,
+    geolocationRouter: modules.geolocation.router
   });
 
   const server = app.listen(env.PORT, () => {
