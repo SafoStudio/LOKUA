@@ -235,7 +235,11 @@ export function createAuthModule({ dataSource, users, access }: CreateAuthModule
 
   const router = createAuthRouter(controller, middleware);
 
-  return { router, access };
+  return {
+    router,
+    access,
+    requireAuth: middleware.requireAuth
+  };
 }
 
 export type AuthModule = ReturnType<typeof createAuthModule>;

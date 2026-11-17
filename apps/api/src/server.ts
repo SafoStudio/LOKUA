@@ -11,6 +11,7 @@ try {
   const modules = createModules(AppDataSource);
   const app = createApp({
     authRouter: modules.auth.router,
+    onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router
   });
 
