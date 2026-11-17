@@ -1,6 +1,6 @@
 import { AppError } from '../../../../common/index.js';
 import type { IssueAuthTokensUseCase, AuthResult } from './issue-auth-tokens.use-case.js';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
 import type { PasskeyCredentialRepository } from '../ports/passkey-credential.repository.js';
 import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';
@@ -23,7 +23,7 @@ function getCredentialId(response: unknown): string {
 
 export class CompletePasskeyLoginUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly challenges: PasskeyChallengeRepository,
     private readonly credentials: PasskeyCredentialRepository,
     private readonly passkey: PasskeyVerificationService,

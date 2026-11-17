@@ -1,5 +1,5 @@
-import type { AuthUser } from '../../domain/index.js';
-import type { UserProvider } from '../ports/user.provider.js';
+import type { AuthUser } from '../../../users/index.js';
+import type { AuthUserProvider } from '../../../users/index.js';
 import type { PasswordHasher } from '../ports/password-hasher.js';
 import type { PasswordCredentialRepository } from '../ports/password-credential.repository.js';
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
@@ -14,7 +14,7 @@ export interface LoginWithPasswordInput {
 
 export class LoginWithPasswordUseCase {
   constructor(
-    private readonly users: UserProvider,
+    private readonly users: AuthUserProvider,
     private readonly passwordHasher: PasswordHasher,
     private readonly credentials: PasswordCredentialRepository,
     private readonly securityEvents: SecurityEventRepository

@@ -1,9 +1,10 @@
 import type { DataSource } from 'typeorm';
-import type { AuthUser } from '../../domain/index.js';
+import type { AuthUser } from '../../../users/index.js';
 import type { GoogleLoginTransaction } from '../../application/index.js';
 import { UserEntity, UserRepositoryAdapter } from '../../../users/infrastructure/index.js';
 import { GoogleCredentialEntity, GoogleCredentialRepositoryAdapter } from '../index.js';
 import { AppError, isUniqueConstraintViolation } from '../../../../common/index.js';
+import { toAuthUser } from './to-auth-user.mapper.js';
 
 export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
   constructor(private readonly dataSource: DataSource) {}
@@ -16,7 +17,6 @@ export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const userRepository = new UserRepositoryAdapter(manager.getRepository(UserEntity));
-
         const credentialRepository = new GoogleCredentialRepositoryAdapter(
           manager.getRepository(GoogleCredentialEntity)
         );
@@ -32,18 +32,12 @@ export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
           googleSub: data.googleSub
         });
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          emailVerified: user.emailVerified
-        };
+        return toAuthUser(user);
       });
     } catch (error) {
       if (isUniqueConstraintViolation(error)) {
         throw new AppError('Google account or email is already registered', 409);
       }
-
       throw error;
     }
   }

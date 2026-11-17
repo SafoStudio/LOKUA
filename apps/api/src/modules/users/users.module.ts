@@ -1,26 +1,28 @@
 import type { DataSource } from 'typeorm';
-import { UserEntity, UserRepositoryAdapter } from './infrastructure/index.js';
+import type { UserProvider, AuthUserProvider } from './application/index.js';
+import { AccessService } from './application/index.js';
 import {
-  CreateUserUseCase,
-  FindUserByIdUseCase,
-  FindUserByEmailUseCase,
-  MarkEmailVerifiedUseCase
-} from './application/index.js';
-import type { CreateUserInput } from './application/index.js';
+  UserEntity,
+  UserRepositoryAdapter,
+  UserProviderAdapter,
+  AuthUserProviderAdapter
+} from './infrastructure/index.js';
 
-export function createUsersModule(dataSource: DataSource) {
-  const userRepository = new UserRepositoryAdapter(dataSource.getRepository(UserEntity));
+interface CreateUsersModuleDependencies {
+  dataSource: DataSource;
+}
 
-  const createUser = new CreateUserUseCase(userRepository);
-  const findUserById = new FindUserByIdUseCase(userRepository);
-  const findUserByEmail = new FindUserByEmailUseCase(userRepository);
-  const markEmailVerified = new MarkEmailVerifiedUseCase(userRepository);
+export function createUsersModule({ dataSource }: CreateUsersModuleDependencies) {
+  const repository = new UserRepositoryAdapter(dataSource.getRepository(UserEntity));
+
+  const users: UserProvider = new UserProviderAdapter(repository);
+  const authUsers: AuthUserProvider = new AuthUserProviderAdapter(repository);
+  const access = new AccessService();
 
   return {
-    createUser: (input: CreateUserInput) => createUser.execute(input),
-    findById: (id: string) => findUserById.execute(id),
-    findByEmail: (email: string) => findUserByEmail.execute(email),
-    markEmailVerified: (id: string) => markEmailVerified.execute(id)
+    users,
+    authUsers,
+    access
   };
 }
 

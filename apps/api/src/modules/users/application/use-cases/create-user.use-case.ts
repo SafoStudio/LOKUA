@@ -1,16 +1,11 @@
 import type { User } from '../../domain/index.js';
 import type { UserRepository } from '../ports/user.repository.js';
-
-export interface CreateUserInput {
-  email: string;
-  name: string;
-  emailVerified?: boolean;
-}
+import type { CreateUserData } from '../types/create-user-data.js';
 
 export class CreateUserUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
-  execute(input: CreateUserInput): Promise<User> {
-    return this.userRepository.create(input);
+  async execute(data: CreateUserData): Promise<User> {
+    return this.userRepository.create(data);
   }
 }

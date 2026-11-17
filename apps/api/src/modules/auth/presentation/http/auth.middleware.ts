@@ -1,42 +1,42 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import type { TokenService, UserProvider } from '../../application/index.js';
+import type { TokenService } from '../../application/index.js';
+import type { AuthUserProvider, AccessService } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
 
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './cookies.js';
 
 interface AuthMiddlewareDependencies {
   tokenService: TokenService;
-  users: UserProvider;
+  users: AuthUserProvider;
+  access: AccessService;
 }
 
-export function createAuthMiddleware({ tokenService, users }: AuthMiddlewareDependencies) {
+export function createAuthMiddleware({ tokenService, users, access }: AuthMiddlewareDependencies) {
   const requireAuth: RequestHandler = async (req: Request, _res: Response, next: NextFunction) => {
+    const authorization = req.headers.authorization;
+
+    const token = authorization?.startsWith('Bearer ')
+      ? authorization.slice(7)
+      : req.cookies?.[ACCESS_TOKEN_COOKIE];
+
+    if (!token) return next(new AppError('Authentication required', 401));
+
+    let payload: Awaited<ReturnType<typeof tokenService.verifyAccessToken>>;
+
     try {
-      const authorization = req.headers.authorization;
-
-      const token = authorization?.startsWith('Bearer ')
-        ? authorization.slice(7)
-        : req.cookies?.[ACCESS_TOKEN_COOKIE];
-
-      if (!token) throw new AppError('Authentication required', 401);
-
-      let payload;
-
-      try {
-        payload = await tokenService.verifyAccessToken(token);
-      } catch {
-        throw new AppError('Invalid or expired access token', 401);
-      }
-
-      const user = await users.findById(payload.userId);
-      if (!user) throw new AppError('User not found', 401);
-
-      req.user = user;
-
-      next();
-    } catch (error) {
-      next(error);
+      payload = await tokenService.verifyAccessToken(token);
+    } catch {
+      return next(new AppError('Invalid or expired access token', 401));
     }
+
+    const user = await users.findById(payload.userId);
+    if (!user) return next(new AppError('User not found', 401));
+
+    if (access.isBlocked(user)) return next(new AppError('Account is blocked', 403));
+
+    req.user = user;
+
+    next();
   };
 
   const requireRefreshToken: RequestHandler = (

@@ -1,4 +1,4 @@
-import type { AuthUser } from '../../domain/index.js';
+import type { AuthUser } from '../../../users/index.js';
 
 export interface GoogleLoginTransaction {
   createUserWithGoogleCredential(data: {

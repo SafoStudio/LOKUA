@@ -14,6 +14,8 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
     "typeorm": "typeorm-ts-node-esm",
     "m:gen": "pnpm typeorm migration:generate -d src/db/data-source.ts",
     "m:run": "pnpm typeorm migration:run -d src/db/data-source.ts",
