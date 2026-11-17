@@ -5,7 +5,7 @@ import {
   FindUserByEmailUseCase
 } from '../../../../src/modules/users/application/index.js';
 import type { UserRepository } from '../../../../src/modules/users/application/index.js';
-import type { User } from '../../../../src/modules/users/domain/index.js';
+import type { User } from '../../../../src/modules/users/index.js';
 
 describe('Users Use Cases', () => {
   const mockUser: User = {
@@ -13,6 +13,18 @@ describe('Users Use Cases', () => {
     email: 'user@example.com',
     name: 'Test User',
     emailVerified: false,
+    birthDate: null,
+    role: 'USER',
+    status: 'ACTIVE',
+    cityId: null,
+    bio: null,
+    languages: null,
+    socialLinks: null,
+    onboardingCompleted: false,
+    termsAcceptedAt: null,
+    blockedUntil: null,
+    deletionRequestedAt: null,
+    notificationSettings: null,
     createdAt: new Date(),
     updatedAt: new Date()
   };

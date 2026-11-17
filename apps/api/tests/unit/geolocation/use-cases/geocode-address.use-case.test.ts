@@ -30,7 +30,9 @@ describe('GeocodeAddressUseCase', () => {
       deleteExpired: vi.fn()
     };
 
-    const useCase = new GeocodeAddressUseCase(mockProvider, mockCacheRepo);
+    const useCase = new GeocodeAddressUseCase(mockProvider, mockCacheRepo, {
+      cacheTtlSeconds: 86400
+    });
 
     const result = await useCase.execute({
       address: 'вул. Хрещатик, 22',
@@ -67,7 +69,9 @@ describe('GeocodeAddressUseCase', () => {
       deleteExpired: vi.fn()
     };
 
-    const useCase = new GeocodeAddressUseCase(mockProvider, mockCacheRepo);
+    const useCase = new GeocodeAddressUseCase(mockProvider, mockCacheRepo, {
+      cacheTtlSeconds: 86400
+    });
 
     const result = await useCase.execute({
       address: 'вул. Спаська, 5',

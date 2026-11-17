@@ -1,18 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { RefreshTokensUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   TokenService,
   RefreshSessionRepository,
   SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 const hashOf = (value: string): string =>
     createHash('sha256').update(value).digest('hex');
 
 describe('RefreshTokensUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -43,12 +44,12 @@ describe('RefreshTokensUseCase', () => {
   const useCase = new RefreshTokensUseCase(users, tokens, refreshSessions, securityEvents);
 
   it('refreshes tokens and returns user with new pair of tokens', async () => {
-    const user = {
+    const user = createMockAuthUser({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       emailVerified: true
-    };
+    });
 
     vi.mocked(tokens.verifyRefreshToken).mockResolvedValueOnce({
       userId: 'user-1',

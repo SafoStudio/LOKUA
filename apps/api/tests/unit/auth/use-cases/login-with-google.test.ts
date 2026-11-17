@@ -1,15 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoginWithGoogleUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   GoogleOAuthProvider,
   GoogleCredentialRepository,
   GoogleLoginTransaction,
   SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('LoginWithGoogleUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -45,12 +46,12 @@ describe('LoginWithGoogleUseCase', () => {
   );
 
   it('logs in existing Google user found by sub', async () => {
-    const existingUser = {
+    const existingUser = createMockAuthUser({
       id: 'user-google-1',
       email: 'alex@gmail.com',
       name: 'Alex',
       emailVerified: true
-    };
+    });
 
     vi.mocked(google.exchangeCode).mockResolvedValueOnce({
       sub: 'google-sub-123',
@@ -90,12 +91,12 @@ describe('LoginWithGoogleUseCase', () => {
     vi.mocked(credentials.findByGoogleSub).mockResolvedValueOnce(null);
     vi.mocked(users.findByEmail).mockResolvedValueOnce(null);
 
-    const newUser = {
+    const newUser = createMockAuthUser({
       id: 'new-user-id',
       email: 'newuser@gmail.com',
       name: 'New User',
       emailVerified: true
-    };
+    });
 
     vi.mocked(googleLoginTransaction.createUserWithGoogleCredential).mockResolvedValueOnce(newUser);
 
@@ -145,12 +146,12 @@ describe('LoginWithGoogleUseCase', () => {
     });
 
     vi.mocked(credentials.findByGoogleSub).mockResolvedValueOnce(null);
-    vi.mocked(users.findByEmail).mockResolvedValueOnce({
+    vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
       id: 'pwd-user-id',
       email: 'registered@example.com',
       name: 'Registered User',
       emailVerified: true
-    });
+    }));
 
     await expect(useCase.execute('code', context)).rejects.toMatchObject({
       statusCode: 409,

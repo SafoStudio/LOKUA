@@ -4,6 +4,7 @@ import { createTestApp } from './helpers/test-app.js';
 import { env } from '../../src/config/env.js';
 import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Google OAuth API', () => {
   describe('GET /api/v1/auth/google', () => {
@@ -38,12 +39,12 @@ describe('Google OAuth API', () => {
       const stateValue = 'a'.repeat(64);
       const code = 'valid-google-code-123';
 
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'usr-google-1',
         email: 'googleuser@gmail.com',
         name: 'Google User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.loginGoogle.execute).mockResolvedValueOnce(mockUser);
       vi.mocked(mocks.issueTokens.execute).mockResolvedValueOnce({

@@ -1,15 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { RegisterWithPasswordUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   PasswordHasher,
   RegistrationTransaction,
   SecurityEventRepository,
   SendVerificationEmailUseCase
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('RegisterWithPasswordUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -46,12 +47,12 @@ describe('RegisterWithPasswordUseCase', () => {
   it('registers user successfully with normalized email and trimmed name', async () => {
     vi.mocked(users.findByEmail).mockResolvedValueOnce(null);
     vi.mocked(passwordHasher.hash).mockResolvedValueOnce('hashed-password');
-    vi.mocked(registrationTransaction.createUserWithPasswordCredential).mockResolvedValueOnce({
+    vi.mocked(registrationTransaction.createUserWithPasswordCredential).mockResolvedValueOnce(createMockAuthUser({
       id: 'user-1',
       email: 'john@example.com',
       name: 'John Doe',
       emailVerified: false
-    });
+    }));
     vi.mocked(sendVerificationEmail.execute).mockResolvedValueOnce();
 
     const result = await useCase.execute(
@@ -63,12 +64,12 @@ describe('RegisterWithPasswordUseCase', () => {
         context
     );
 
-    expect(result).toEqual({
+    expect(result).toEqual(createMockAuthUser({
       id: 'user-1',
       email: 'john@example.com',
       name: 'John Doe',
       emailVerified: false
-    });
+    }));
 
     expect(users.findByEmail).toHaveBeenCalledWith('john@example.com');
     expect(passwordHasher.hash).toHaveBeenCalledWith('StrongPassword123');
@@ -88,12 +89,12 @@ describe('RegisterWithPasswordUseCase', () => {
   });
 
   it('throws AppError 409 when email already exists', async () => {
-    vi.mocked(users.findByEmail).mockResolvedValueOnce({
+    vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
       id: 'existing-id',
       email: 'john@example.com',
       name: 'Existing John',
       emailVerified: true
-    });
+    }));
 
     await expect(
         useCase.execute(

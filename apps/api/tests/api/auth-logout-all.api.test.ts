@@ -2,14 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Logout All API', () => {
-    const mockUser = {
+    const mockUser = createMockAuthUser({
         id: 'user-1',
         email: 'user@example.com',
         name: 'User',
         emailVerified: true
-    };
+    });
 
     it('returns 200, revokes all sessions and clears cookies', async () => {
         const { app, mocks } = createTestApp();

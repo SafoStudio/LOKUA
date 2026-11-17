@@ -3,18 +3,19 @@ import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Password API', () => {
   describe('POST /api/v1/auth/register', () => {
     it('returns 201 with user and sets auth cookies on successful registration', async () => {
       const { app, mocks } = createTestApp();
 
-      const mockUser = {
+      const mockUser = createMockAuthUser ({
         id: 'usr-123',
         email: 'test@example.com',
         name: 'Test User',
         emailVerified: false
-      };
+      });
 
       vi.mocked(mocks.register.execute).mockResolvedValueOnce(mockUser);
       vi.mocked(mocks.issueTokens.execute).mockResolvedValueOnce({
@@ -90,12 +91,12 @@ describe('Auth Password API', () => {
     it('returns 200 with user and sets auth cookies on successful login', async () => {
       const { app, mocks } = createTestApp();
 
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'usr-456',
         email: 'login@example.com',
         name: 'Login User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.login.execute).mockResolvedValueOnce(mockUser);
       vi.mocked(mocks.issueTokens.execute).mockResolvedValueOnce({

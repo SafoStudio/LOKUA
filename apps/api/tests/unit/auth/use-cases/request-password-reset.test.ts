@@ -2,15 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { RequestPasswordResetUseCase } from '../../../../src/modules/auth/application/index.js';
 import type {
-    UserProvider,
     PasswordCredentialRepository,
     PasswordResetTokenRepository,
     EmailService,
     SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('RequestPasswordResetUseCase', () => {
-    const users: UserProvider = {
+    const users: AuthUserProvider = {
         findById: vi.fn(),
         findByEmail: vi.fn(),
         create: vi.fn(),
@@ -52,12 +53,12 @@ describe('RequestPasswordResetUseCase', () => {
     });
 
     it('creates token, sends email and records event when user with password exists', async () => {
-        vi.mocked(users.findByEmail).mockResolvedValueOnce({
+        vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
             id: 'user-1',
             email: 'user@example.com',
             name: 'User',
             emailVerified: true
-        });
+        }));
         vi.mocked(passwordCredentials.findByUserId).mockResolvedValueOnce({
             userId: 'user-1',
             passwordHash: 'stored-hash'
@@ -102,12 +103,12 @@ describe('RequestPasswordResetUseCase', () => {
     });
 
     it('silently returns when user has no password credential', async () => {
-        vi.mocked(users.findByEmail).mockResolvedValueOnce({
+        vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
             id: 'google-user',
             email: 'google@example.com',
             name: 'Google User',
             emailVerified: true
-        });
+        }));
         vi.mocked(passwordCredentials.findByUserId).mockResolvedValueOnce(null);
 
         await expect(useCase.execute('google@example.com', context)).resolves.toBeUndefined();
@@ -118,12 +119,12 @@ describe('RequestPasswordResetUseCase', () => {
     });
 
     it('records event even when SMTP delivery fails', async () => {
-        vi.mocked(users.findByEmail).mockResolvedValueOnce({
+        vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
             id: 'user-1',
             email: 'user@example.com',
             name: 'User',
             emailVerified: true
-        });
+        }));
         vi.mocked(passwordCredentials.findByUserId).mockResolvedValueOnce({
             userId: 'user-1',
             passwordHash: 'stored-hash'

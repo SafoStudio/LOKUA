@@ -16,13 +16,14 @@ describe('SearchLocationsInBBoxUseCase', () => {
         id: 'loc-1',
         name: 'Opera House',
         address: 'вул. Володимирська, 50',
-        city: 'Київ',
-        district: 'Шевченківський',
+        cityId: 'city-kyiv',
+        districtId: 'district-shevchenkivskyi',
         countryCode: 'UA',
         exactCoordinates: { latitude: 50.4468, longitude: 30.5126 },
         publicCoordinates: { latitude: 50.45, longitude: 30.51 },
         provider: 'manual',
         providerPlaceId: null,
+        createdBy: null,
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -30,21 +31,24 @@ describe('SearchLocationsInBBoxUseCase', () => {
     search: vi.fn()
   };
 
-  const useCase = new SearchLocationsInBBoxUseCase(mockLocationRepo);
+  const useCase = new SearchLocationsInBBoxUseCase(mockLocationRepo, {
+    maxBBoxSpanDegrees: 5,
+    defaultLimit: 20,
+    maxLimit: 100
+  });
 
   it('should search within valid bounding box', async () => {
     const results = await useCase.execute({
       minLat: 50.4,
       minLng: 30.4,
       maxLat: 50.5,
-      maxLng: 30.6,
-      precision: 'EXACT'
+      maxLng: 30.6
     });
 
     expect(results).toHaveLength(1);
     expect(results[0].name).toBe('Opera House');
-    expect(results[0].isExact).toBe(true);
-    expect(results[0].address).toBe('вул. Володимирська, 50');
+    expect(results[0].isExact).toBe(false);
+    expect(results[0].address).toBeUndefined();
   });
 
   it('should reject invalid boundaries where min >= max', async () => {

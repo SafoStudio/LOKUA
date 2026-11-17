@@ -24,8 +24,9 @@ import type {
   LogoutUseCase,
   LogoutAllUseCase,
   TokenService,
-  UserProvider
 } from '../../../src/modules/auth/application/index.js';
+import type { AuthUserProvider, AccessService } from '../../../src/modules/users/index.js';
+
 
 export function createMockDependencies() {
   const register = {
@@ -117,7 +118,11 @@ export function createMockDependencies() {
     findByEmail: vi.fn(),
     create: vi.fn(),
     markEmailVerified: vi.fn()
-  } as unknown as UserProvider;
+  } as unknown as AuthUserProvider;
+
+  const access = {
+    isBlocked: vi.fn().mockReturnValue(false)
+  } as unknown as AccessService;
 
   return {
     register,
@@ -140,7 +145,8 @@ export function createMockDependencies() {
     logout,
     logoutAll,
     tokenService,
-    users
+    users,
+    access,
   };
 }
 
@@ -169,7 +175,8 @@ export function createTestApp(mocks = createMockDependencies()) {
 
   const middleware = createAuthMiddleware({
     tokenService: mocks.tokenService,
-    users: mocks.users
+    users: mocks.users,
+    access: mocks.access
   });
 
   const authRouter = createAuthRouter(controller, middleware);

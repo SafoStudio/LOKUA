@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Passkey API Endpoints', () => {
   describe('Passkey Signup Flow', () => {
@@ -50,12 +51,12 @@ describe('Passkey API Endpoints', () => {
     it('POST /api/v1/auth/passkey/signup/verify returns 201 with user and auth cookies', async () => {
       const { app, mocks } = createTestApp();
 
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'usr-passkey-1',
         email: 'dave@example.com',
         name: 'Dave',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.completePasskeySignup.execute).mockResolvedValueOnce({
         user: mockUser,
@@ -106,12 +107,12 @@ describe('Passkey API Endpoints', () => {
   });
 
   describe('Passkey Registration Flow (adding credential to existing account)', () => {
-    const authUser = {
+    const authUser = createMockAuthUser({
       id: 'existing-usr-88',
       email: 'member@example.com',
       name: 'Member',
       emailVerified: true
-    };
+    });
 
     it('POST /api/v1/auth/passkey/registration/options returns 200 with options for authenticated user', async () => {
       const { app, mocks } = createTestApp();
@@ -211,12 +212,12 @@ describe('Passkey API Endpoints', () => {
     it('POST /api/v1/auth/passkey/login/verify returns 200 with user and auth cookies', async () => {
       const { app, mocks } = createTestApp();
 
-      const loggedInUser = {
+      const loggedInUser = createMockAuthUser({
         id: 'usr-pk-login',
         email: 'pkuser@example.com',
         name: 'PK User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.completePasskeyLogin.execute).mockResolvedValueOnce({
         user: loggedInUser,

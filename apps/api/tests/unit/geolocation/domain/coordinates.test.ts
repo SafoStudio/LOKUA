@@ -3,7 +3,7 @@ import {
   isValidCoordinates,
   obfuscateCoordinates,
   toLocationView
-} from '../../../../src/modules/geolocation/index.js';
+} from '../../../../src/modules/geolocation/domain/index.js';
 import type { Location } from '../../../../src/modules/geolocation/index.js';
 
 describe('Geolocation Domain - Coordinates & Views', () => {
@@ -35,13 +35,14 @@ describe('Geolocation Domain - Coordinates & Views', () => {
       id: 'loc-1',
       name: 'Art Club',
       address: 'вулиця Саксаганського, 101, кв. 5',
-      city: 'Київ',
-      district: 'Голосіївський',
+      cityId: 'city-kyiv',
+      districtId: 'district-holosiyivskyi',
       countryCode: 'UA',
       exactCoordinates: { latitude: 50.4356, longitude: 30.5012 },
       publicCoordinates: { latitude: 50.44, longitude: 30.5 },
       provider: 'nominatim',
       providerPlaceId: '12345',
+      createdBy: null,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -55,6 +56,6 @@ describe('Geolocation Domain - Coordinates & Views', () => {
     expect(publicView.isExact).toBe(false);
     expect(publicView.address).toBeUndefined();
     expect(publicView.coordinates).toEqual(mockLocation.publicCoordinates);
-    expect(publicView.district).toBe('Голосіївський');
+    expect(publicView.districtId).toBe('district-holosiyivskyi');
   });
 });

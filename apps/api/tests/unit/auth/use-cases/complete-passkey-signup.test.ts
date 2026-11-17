@@ -8,6 +8,7 @@ import type {
   SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
 import { IssueAuthTokensUseCase } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('CompletePasskeySignupUseCase', () => {
   const challenges: PasskeyChallengeRepository = {
@@ -81,12 +82,12 @@ describe('CompletePasskeySignupUseCase', () => {
     vi.mocked(challenges.consume).mockResolvedValueOnce(mockChallenge);
     vi.mocked(passkey.verifyRegistration).mockResolvedValueOnce(mockCredentialData);
 
-    const createdUser = {
+    const createdUser = createMockAuthUser({
       id: 'pre-generated-uuid',
       email: 'bob@example.com',
       name: 'Bob',
       emailVerified: true
-    };
+    });
 
     vi.mocked(signupTransaction.createUserWithPasskeyCredential).mockResolvedValueOnce(createdUser);
 

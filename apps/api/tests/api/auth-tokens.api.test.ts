@@ -3,18 +3,19 @@ import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Tokens & /me API', () => {
   describe('POST /api/v1/auth/refresh', () => {
     it('returns 200 with user and refreshed cookies when valid refreshToken cookie is sent', async () => {
       const { app, mocks } = createTestApp();
 
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'usr-1',
         email: 'user@example.com',
         name: 'User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.refresh.execute).mockResolvedValueOnce({
         user: mockUser,
@@ -88,12 +89,12 @@ describe('Auth Tokens & /me API', () => {
   });
 
   describe('GET /api/v1/auth/me', () => {
-    const mockUser = {
+    const mockUser = createMockAuthUser({
       id: 'usr-me-1',
       email: 'me@example.com',
       name: 'Me User',
       emailVerified: true
-    };
+    });
 
     it('returns 200 with user when authenticated via accessToken cookie', async () => {
       const { app, mocks } = createTestApp();

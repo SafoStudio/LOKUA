@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   PasskeyChallengeRepository,
   PasskeyCredentialRepository,
@@ -11,9 +11,10 @@ import {
   IssueAuthTokensUseCase,
   CompletePasskeyLoginUseCase
 } from '../../../../src/modules/auth/application/index.js';
+import { createMockAuthUser } from '../../../fixtures/users.fixture.js'
 
 describe('CompletePasskeyLoginUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -73,12 +74,12 @@ describe('CompletePasskeyLoginUseCase', () => {
       securityEvents
   );
 
-  const mockUser = {
+  const mockUser = createMockAuthUser({
     id: 'user-passkey-1',
     email: 'charlie@example.com',
     name: 'Charlie',
     emailVerified: true
-  };
+  });
 
   const mockChallenge = {
     id: 'ch-id-1',
