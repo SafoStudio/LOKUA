@@ -8,3 +8,4 @@ export type { CreateUserData } from './application/index.js';
 export type { UserProvider, AuthUserProvider } from './application/index.js';
 export { AccessService } from './application/index.js';
 export type { AgeRestriction } from './application/index.js';
+export type { UserOnboardingProvider } from './application/index.js';
