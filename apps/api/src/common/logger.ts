@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import pino from 'pino';
 
 const isTest = process.env.NODE_ENV === 'test';
 const isDevelopment = process.env.NODE_ENV === 'development';
 
 export const logger = pino({
-  level: isTest ? 'silent' : isDevelopment ? 'debug' : 'info',
+  level: isTest ? 'silent' : (process.env.LOG_LEVEL ?? 'info'),
 
   transport: isDevelopment
     ? {
