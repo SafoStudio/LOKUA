@@ -1,0 +1,9 @@
+OnboardingDateOfBirthRequest:
+  type: object
+  required:
+    - birthDate
+  properties:
+    birthDate:
+      type: string
+      format: date
+      example: '1995-05-15'

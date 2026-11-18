@@ -1,0 +1,80 @@
+OnboardingStateResponse:
+  type: object
+  required:
+    - data
+  properties:
+    data:
+      type: object
+      required:
+        - id
+        - currentStep
+        - completedSteps
+        - completedAt
+        - data
+      properties:
+        id:
+          type: string
+          format: uuid
+        currentStep:
+          type: string
+          enum:
+            - DATE_OF_BIRTH
+            - PROFILE
+            - CITY
+            - INTERESTS
+            - OPTIONAL
+            - COMPLETED
+        completedSteps:
+          type: array
+          items:
+            type: string
+            enum:
+              - DATE_OF_BIRTH
+              - PROFILE
+              - CITY
+              - INTERESTS
+              - OPTIONAL
+              - COMPLETED
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        data:
+          type: object
+          properties:
+            dateOfBirth:
+              type: string
+              format: date
+              nullable: true
+              example: '1995-05-15'
+            name:
+              type: string
+              nullable: true
+            mainPhotoUrl:
+              type: string
+              format: uri
+              nullable: true
+            cityId:
+              type: string
+              format: uuid
+              nullable: true
+            interestIds:
+              type: array
+              nullable: true
+              items:
+                type: string
+                format: uuid
+            bio:
+              type: string
+              nullable: true
+            languages:
+              type: array
+              nullable: true
+              items:
+                type: string
+            socialLinks:
+              type: object
+              nullable: true
+              additionalProperties:
+                type: string
+                format: uri
