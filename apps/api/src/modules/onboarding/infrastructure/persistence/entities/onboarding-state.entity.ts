@@ -10,6 +10,7 @@ import {
   Unique
 } from 'typeorm';
 import type { OnboardingStep } from '../../../domain/index.js';
+import { dateTransformer } from '../../../../../common/index.js';
 
 @Entity({ name: 'onboarding_states' })
 @Unique('uq_onboarding_states_user_id', ['userId'])
@@ -38,7 +39,7 @@ export class OnboardingStateEntity {
   })
   completedSteps!: OnboardingStep[];
 
-  @Column({ type: 'date', name: 'date_of_birth', nullable: true })
+  @Column({ type: 'date', name: 'date_of_birth', nullable: true, transformer: dateTransformer })
   dateOfBirth!: Date | null;
 
   @Column({ type: 'varchar', length: 100, nullable: true })

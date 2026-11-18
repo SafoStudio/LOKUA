@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke-onboarding.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",

@@ -16,7 +16,8 @@ export function createModules(dataSource: DataSource) {
   const authModule = createAuthModule({
     dataSource,
     users: usersModule.authUsers,
-    access: usersModule.access
+    access: usersModule.access,
+    profiles: usersModule.profiles
   });
 
   const storageModule = createStorageModule();

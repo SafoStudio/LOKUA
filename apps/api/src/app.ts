@@ -14,16 +14,44 @@ interface AppDependencies {
   geolocationRouter?: express.Router;
 }
 
+const API_PREFIX = '/api/v1';
+
 export function createApp({ authRouter, onboardingRouter, geolocationRouter }: AppDependencies) {
   const app = express();
 
   app.use(
     pinoHttp({
       logger,
+
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie'],
+        paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]'],
         censor: '[REDACTED]'
-      }
+      },
+
+      serializers: {
+        req: (req) => ({
+          id: req.id,
+          method: req.method,
+          url: (req.url ?? '').split('?')[0],
+          remoteAddress: req.remoteAddress
+        }),
+
+        res: (res) => ({
+          statusCode: res.statusCode
+        })
+      },
+
+      customLogLevel: (_req, res, err) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+
+        return env.LOG_HTTP ? 'info' : 'silent';
+      },
+
+      customSuccessMessage: (req, res) =>
+        `${req.method} ${req.url?.split('?')[0]} ${res.statusCode}`,
+
+      customErrorMessage: (req, res) => `${req.method} ${req.url?.split('?')[0]} ${res.statusCode}`
     })
   );
 
@@ -49,14 +77,14 @@ export function createApp({ authRouter, onboardingRouter, geolocationRouter }: A
 
   app.use('/docs', createDocsRouter());
 
-  app.use('/api/v1/auth', authRouter);
+  app.use(`${API_PREFIX}/auth`, authRouter);
 
   if (onboardingRouter) {
-    app.use('/api/v1/onboarding', onboardingRouter);
+    app.use(`${API_PREFIX}/onboarding`, onboardingRouter);
   }
 
   if (geolocationRouter) {
-    app.use('/api/v1/geo', geolocationRouter);
+    app.use(`${API_PREFIX}/geo`, geolocationRouter);
   }
 
   app.use(notFound);
