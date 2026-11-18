@@ -20,6 +20,7 @@ import type {
   LogoutUseCase,
   LogoutAllUseCase
 } from '../../application/index.js';
+import type { UserProfile } from '../../../users/index.js';
 import { env } from '../../../../config/env.js';
 import { AppError, assertString } from '../../../../common/index.js';
 import { setAuthCookies, clearAuthCookies, REFRESH_TOKEN_COOKIE } from './cookies.js';
@@ -30,6 +31,11 @@ import {
   clearGoogleStateCookie,
   verifyGoogleState
 } from './google.state.js';
+import { toUserProfileView } from './user-profile.view.js';
+
+export interface GetMyProfileUseCase {
+  execute(userId: string): Promise<UserProfile>;
+}
 
 interface AuthControllerDependencies {
   register: RegisterWithPasswordUseCase;
@@ -51,6 +57,7 @@ interface AuthControllerDependencies {
   changePassword: ChangePasswordUseCase;
   logout: LogoutUseCase;
   logoutAll: LogoutAllUseCase;
+  getMyProfile: GetMyProfileUseCase;
 }
 
 export function createAuthController({
@@ -72,7 +79,8 @@ export function createAuthController({
   resetPassword,
   changePassword,
   logout,
-  logoutAll
+  logoutAll,
+  getMyProfile
 }: AuthControllerDependencies) {
   return {
     async registerWithPassword(req: Request, res: Response): Promise<void> {
@@ -171,10 +179,12 @@ export function createAuthController({
       res.status(200).json({ message: 'Logged out from all devices' });
     },
 
-    me(req: Request, res: Response): void {
+    async me(req: Request, res: Response): Promise<void> {
       if (!req.user) throw new AppError('Authentication required', 401);
 
-      res.status(200).json({ user: req.user });
+      const profile = await getMyProfile.execute(req.user.id);
+
+      res.status(200).json({ user: toUserProfileView(profile) });
     },
 
     async verifyEmail(req: Request, res: Response): Promise<void> {

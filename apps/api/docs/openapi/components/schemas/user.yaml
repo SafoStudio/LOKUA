@@ -5,26 +5,29 @@ User:
     - email
     - name
     - emailVerified
+    - role
+    - status
+    - onboardingCompleted
   properties:
     id:
       type: string
       format: uuid
-      example: c6204c51-5be6-46b3-96e0-e55d5bb96ef1
     email:
       type: string
       format: email
-      example: user@example.com
     name:
       type: string
-      example: John Doe
     emailVerified:
       type: boolean
-      example: false
-
-UserResponse:
-  type: object
-  required:
-    - user
-  properties:
-    user:
-      $ref: '#/components/schemas/User'
+    role:
+      type: string
+      enum: [USER, MODERATOR, ADMIN]
+    status:
+      type: string
+      enum: [ACTIVE, BLOCKED_TEMPORARY, BLOCKED_PERMANENT, PENDING_DELETION, DELETED]
+    onboardingCompleted:
+      type: boolean
+    birthDate:
+      type: string
+      format: date
+      nullable: true

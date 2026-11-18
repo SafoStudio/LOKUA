@@ -1,5 +1,5 @@
 import type { DataSource } from 'typeorm';
-import type { AuthUserProvider, AccessService } from '../users/index.js';
+import type { AuthUserProvider, AccessService, UserProfileProvider } from '../users/index.js';
 import {
   RegisterWithPasswordUseCase,
   LoginWithPasswordUseCase,
@@ -18,7 +18,8 @@ import {
   ResetPasswordUseCase,
   ChangePasswordUseCase,
   LogoutUseCase,
-  LogoutAllUseCase
+  LogoutAllUseCase,
+  GetAuthUserProfileUseCase
 } from './application/index.js';
 import {
   PasswordCredentialRepositoryAdapter,
@@ -56,9 +57,15 @@ interface CreateAuthModuleDependencies {
   dataSource: DataSource;
   users: AuthUserProvider;
   access: AccessService;
+  profiles: UserProfileProvider;
 }
 
-export function createAuthModule({ dataSource, users, access }: CreateAuthModuleDependencies) {
+export function createAuthModule({
+  dataSource,
+  users,
+  access,
+  profiles
+}: CreateAuthModuleDependencies) {
   const passwordCredentials = new PasswordCredentialRepositoryAdapter(
     dataSource.getRepository(PasswordCredentialEntity)
   );
@@ -205,6 +212,8 @@ export function createAuthModule({ dataSource, users, access }: CreateAuthModule
     securityEvents
   );
 
+  const getAuthUserProfile = new GetAuthUserProfileUseCase(profiles);
+
   const controller = createAuthController({
     register,
     login,
@@ -224,7 +233,8 @@ export function createAuthModule({ dataSource, users, access }: CreateAuthModule
     startPasskeyRegistration,
     completePasskeyRegistration,
     startPasskeyLogin,
-    completePasskeyLogin
+    completePasskeyLogin,
+    getMyProfile: getAuthUserProfile
   });
 
   const middleware = createAuthMiddleware({
