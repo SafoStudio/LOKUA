@@ -1,0 +1,8 @@
+type: object
+required: [location, distanceMeters]
+properties:
+  location:
+    $ref: './PublicLocationView.yaml'
+  distanceMeters:
+    type: integer
+    example: 250

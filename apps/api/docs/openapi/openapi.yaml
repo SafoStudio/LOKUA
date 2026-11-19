@@ -1,4 +1,5 @@
 openapi: 3.1.0
+
 info:
   title: LOKUA API
   version: 1.0.0
@@ -18,28 +19,40 @@ info:
     - Onboarding success: `{ "data": ... }`
     - Geolocation success: `{ "data": ... }`
     - Errors: `{ "status": "error", "message": "..." }` (plus `details` for validation errors)
+
 servers:
   - url: http://localhost:3003
     description: Local Development Server
+
 tags:
   - name: Auth / Password
     description: Registration and password-based sign-in
+
   - name: Auth / Google OAuth
     description: Sign in with a Google account
+
   - name: Auth / Passkey
     description: WebAuthn Passkeys (signup, registration, login)
+
   - name: Auth / Tokens
     description: Token refresh and session termination
+
   - name: Auth / Session
     description: Current user session data
+
   - name: Auth / Email Verification
     description: Email address verification after signup
+
   - name: Auth / Password Reset
     description: Password recovery via email link
+
   - name: Onboarding
     description: Multi-step onboarding flow (date of birth -> profile -> city -> interests -> optional -> complete)
+
   - name: Geolocation
     description: Locations, nearby/bbox search, geocoding (public)
+
   - name: Health
     description: Service liveness
+
 paths: {}

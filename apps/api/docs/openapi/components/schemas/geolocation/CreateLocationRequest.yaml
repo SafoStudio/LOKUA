@@ -1,0 +1,33 @@
+type: object
+required: [name, address, cityId, exactCoordinates]
+properties:
+  name:
+    type: string
+    minLength: 2
+    maxLength: 255
+  address:
+    type: string
+    minLength: 3
+  cityId:
+    type: string
+    format: uuid
+  districtId:
+    type: string
+    format: uuid
+    nullable: true
+  countryCode:
+    type: string
+    minLength: 2
+    maxLength: 2
+    default: UA
+  exactCoordinates:
+    $ref: './Coordinates.yaml'
+  publicCoordinates:
+    $ref: './Coordinates.yaml'
+  provider:
+    type: string
+    maxLength: 50
+  providerPlaceId:
+    type: string
+    maxLength: 255
+    nullable: true

@@ -1,0 +1,48 @@
+type: object
+required:
+  - id
+  - name
+  - address
+  - cityId
+  - countryCode
+  - exactCoordinates
+  - publicCoordinates
+  - provider
+  - createdAt
+  - updatedAt
+properties:
+  id:
+    type: string
+    format: uuid
+  name:
+    type: string
+  address:
+    type: string
+  cityId:
+    type: string
+    format: uuid
+  districtId:
+    type: string
+    format: uuid
+    nullable: true
+  countryCode:
+    type: string
+  exactCoordinates:
+    $ref: './Coordinates.yaml'
+  publicCoordinates:
+    $ref: './Coordinates.yaml'
+  provider:
+    type: string
+  providerPlaceId:
+    type: string
+    nullable: true
+  createdBy:
+    type: string
+    format: uuid
+    nullable: true
+  createdAt:
+    type: string
+    format: date-time
+  updatedAt:
+    type: string
+    format: date-time

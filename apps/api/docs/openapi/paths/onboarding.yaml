@@ -17,6 +17,20 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: DATE_OF_BIRTH
+                completedSteps: []
+                completedAt: null
+                dateOfBirth: null
+                name: null
+                mainPhotoUrl: null
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
       '401':
         description: Authentication required
         content:
@@ -39,7 +53,8 @@
       Sets the user's date of birth. Requires age >= 14 (BR-AGE-01).
       The date of birth is immutable for the user once set (BR-AGE-02):
       repeated calls after a successful set return 409.
-      On success, `currentStep` advances to `PROFILE`.
+      The response reports `currentStep: DATE_OF_BIRTH`.
+      The next step is `PROFILE`.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -56,6 +71,20 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: DATE_OF_BIRTH
+                completedSteps: []
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: null
+                mainPhotoUrl: null
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
       '400':
         description: Validation error
         content:
@@ -95,7 +124,8 @@
     description: |
       Sets the user's display name and main profile photo URL.
       Requires `DATE_OF_BIRTH` to be completed.
-      On success, `currentStep` advances to `CITY`.
+      The response reports `currentStep: PROFILE`.
+      The next step is `CITY`.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -112,6 +142,21 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: PROFILE
+                completedSteps:
+                  - DATE_OF_BIRTH
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
       '400':
         description: Validation error
         content:
@@ -145,7 +190,8 @@
     description: |
       Sets the user's city. The city must exist in the `cities` dictionary and be active.
       Requires `PROFILE` to be completed.
-      On success, `currentStep` advances to `INTERESTS`.
+      The response reports `currentStep: CITY`.
+      The next step is `INTERESTS`.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -162,6 +208,22 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: CITY
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
       '400':
         description: Validation error
         content:
@@ -202,7 +264,8 @@
       Sets the user's interests. Requires at least 3 interests (BR-ACC-01),
       maximum 20. All interest IDs must exist in the `interests` dictionary
       and be active. Requires `CITY` to be completed.
-      On success, `currentStep` advances to `OPTIONAL`.
+      The response reports `currentStep: INTERESTS`.
+      The next step is `OPTIONAL`.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -219,6 +282,26 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: INTERESTS
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: null
+                languages: null
+                socialLinks: null
       '400':
         description: Validation error
         content:
@@ -259,8 +342,8 @@
       Sets optional profile fields (bio, languages, social links).
       At least one field must be provided.
       Requires `INTERESTS` to be completed.
-      On success, `currentStep` advances to `COMPLETED`, but the onboarding
-      is not finalized until `POST /complete` is called.
+      The response reports `currentStep: OPTIONAL`.
+      The onboarding is not finalized until `POST /complete` is called.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -277,6 +360,30 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: OPTIONAL
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                  - INTERESTS
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: I enjoy discovering new places and meeting people.
+                languages:
+                  - en
+                  - uk
+                socialLinks:
+                  instagram: https://instagram.com/johndoe
       '400':
         description: Validation error, or no optional fields provided
         content:
@@ -322,6 +429,31 @@
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: COMPLETED
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                  - INTERESTS
+                  - OPTIONAL
+                completedAt: '2026-11-19T12:00:00.000Z'
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: I enjoy discovering new places and meeting people.
+                languages:
+                  - en
+                  - uk
+                socialLinks:
+                  instagram: https://instagram.com/johndoe
       '400':
         description: Onboarding not started
         content:

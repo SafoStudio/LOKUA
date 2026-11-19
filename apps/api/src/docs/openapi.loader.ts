@@ -21,6 +21,7 @@ function findDocsDir(): string {
   if (typeof import.meta.dirname === 'string') {
     bases.add(import.meta.dirname);
   }
+
   bases.add(process.cwd());
 
   const tried: string[] = [];
@@ -28,12 +29,16 @@ function findDocsDir(): string {
   for (const base of bases) {
     for (const relative of DOCS_DIR_CANDIDATES) {
       const candidate = path.resolve(base, relative);
+
       tried.push(candidate);
-      if (fs.existsSync(candidate)) return candidate;
+
+      if (fs.existsSync(path.join(candidate, 'openapi.yaml'))) {
+        return candidate;
+      }
     }
   }
 
-  throw new Error(`[openapi] Docs directory not found. Tried:\n  ${tried.join('\n  ')}`);
+  throw new Error(`[openapi] OpenAPI document not found. Tried:\n  ${tried.join('\n  ')}`);
 }
 
 export function loadOpenApiDocument(): OpenApiSpec {

@@ -1,0 +1,8 @@
+type: object
+required:
+  - cityId
+properties:
+  cityId:
+    type: string
+    format: uuid
+    example: 'c6204c51-5be6-46b3-96e0-e55d5bb96ef1'

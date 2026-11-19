@@ -1,0 +1,15 @@
+type: object
+required:
+  - path
+  - message
+  - code
+properties:
+  path:
+    type: string
+    example: email
+  message:
+    type: string
+    example: Invalid email address
+  code:
+    type: string
+    example: invalid_string

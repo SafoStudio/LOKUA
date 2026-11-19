@@ -1,0 +1,15 @@
+type: object
+required:
+  - name
+  - mainPhotoUrl
+properties:
+  name:
+    type: string
+    minLength: 1
+    maxLength: 100
+    example: 'John Doe'
+  mainPhotoUrl:
+    type: string
+    format: uri
+    maxLength: 2048
+    example: 'https://cdn.example.com/photos/abc.jpg'

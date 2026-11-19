@@ -1,0 +1,21 @@
+type: object
+required:
+  - options
+properties:
+  options:
+    type: object
+    description: WebAuthn PublicKeyCredentialCreationOptions or PublicKeyCredentialRequestOptions
+    properties:
+      challenge:
+        type: string
+        example: 9k_Jz12v4aQx_...
+      rp:
+        type: object
+        properties:
+          name:
+            type: string
+            example: LOKUA
+          id:
+            type: string
+            example: localhost
+    additionalProperties: true
