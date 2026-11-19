@@ -12,6 +12,12 @@ info:
     - The `Authorization: Bearer <token>` header is also supported.
 
     To work from a browser, you must send `credentials: 'include'` (Fetch) or `withCredentials: true` (Axios).
+
+    ### Response shape
+    - Auth success: `{ "user": ... }`
+    - Onboarding success: `{ "data": ... }`
+    - Geolocation success: `{ "data": ... }`
+    - Errors: `{ "status": "error", "message": "..." }` (plus `details` for validation errors)
 servers:
   - url: http://localhost:3003
     description: Local Development Server
@@ -30,4 +36,10 @@ tags:
     description: Email address verification after signup
   - name: Auth / Password Reset
     description: Password recovery via email link
+  - name: Onboarding
+    description: Multi-step onboarding flow (date of birth -> profile -> city -> interests -> optional -> complete)
+  - name: Geolocation
+    description: Locations, nearby/bbox search, geocoding (public)
+  - name: Health
+    description: Service liveness
 paths: {}

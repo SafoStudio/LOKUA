@@ -1,0 +1,226 @@
+/api/v1/geo/locations:
+  post:
+    tags: [Geolocation]
+    summary: Create a location
+    description: |
+      Creates a location with exact and (optionally) public coordinates.
+      Currently public (no auth). Access control (visibility/auth) is planned as a separate task.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreateLocationRequest'
+    responses:
+      '201':
+        description: Location created
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+
+/api/v1/geo/locations/nearby:
+  get:
+    tags: [Geolocation]
+    summary: Search locations nearby
+    parameters:
+      - name: latitude
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -90
+          maximum: 90
+      - name: longitude
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -180
+          maximum: 180
+      - name: radiusMeters
+        in: query
+        required: false
+        schema:
+          type: number
+          maximum: 100000
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+    responses:
+      '200':
+        description: Locations found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NearbyLocationListResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+
+/api/v1/geo/locations/bbox:
+  get:
+    tags: [Geolocation]
+    summary: Search locations in a bounding box
+    parameters:
+      - name: minLat
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -90
+          maximum: 90
+      - name: minLng
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -180
+          maximum: 180
+      - name: maxLat
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -90
+          maximum: 90
+      - name: maxLng
+        in: query
+        required: true
+        schema:
+          type: number
+          minimum: -180
+          maximum: 180
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+    responses:
+      '200':
+        description: Locations found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationListResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+
+/api/v1/geo/locations/{id}:
+  get:
+    tags: [Geolocation]
+    summary: Get location by id
+    description: |
+      Returns the location. When precision=PUBLIC (default), only public coordinates
+      are returned and address is omitted. When precision=EXACT, exact coordinates
+      and the address are returned.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: precision
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [EXACT, PUBLIC]
+          default: PUBLIC
+    responses:
+      '200':
+        description: Location found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '404':
+        description: Location not found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/geo/geocode:
+  post:
+    tags: [Geolocation]
+    summary: Geocode an address
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GeocodeAddressRequest'
+    responses:
+      '200':
+        description: Geocoding result
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeocodeResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '404':
+        description: Address could not be geocoded
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/geo/reverse-geocode:
+  post:
+    tags: [Geolocation]
+    summary: Reverse geocode coordinates
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReverseGeocodeRequest'
+    responses:
+      '200':
+        description: Reverse geocoding result
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeocodeResponse'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '404':
+        description: Coordinates could not be reverse-geocoded
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

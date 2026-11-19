@@ -43,16 +43,14 @@ function toView(state: OnboardingState) {
     currentStep: state.currentStep,
     completedSteps: state.completedSteps,
     completedAt: state.completedAt,
-    data: {
-      dateOfBirth: state.dateOfBirth ? state.dateOfBirth.toISOString().slice(0, 10) : null,
-      name: state.name,
-      mainPhotoUrl: state.mainPhotoUrl,
-      cityId: state.cityId,
-      interestIds: state.interestIds,
-      bio: state.bio,
-      languages: state.languages,
-      socialLinks: state.socialLinks
-    }
+    dateOfBirth: state.dateOfBirth ? state.dateOfBirth.toISOString().slice(0, 10) : null,
+    name: state.name,
+    mainPhotoUrl: state.mainPhotoUrl,
+    cityId: state.cityId,
+    interestIds: state.interestIds,
+    bio: state.bio,
+    languages: state.languages,
+    socialLinks: state.socialLinks
   };
 }
 

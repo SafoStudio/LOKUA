@@ -67,6 +67,8 @@ export function createApp({ authRouter, onboardingRouter, geolocationRouter }: A
   app.use(express.json());
   app.use(cookieParser());
 
+  app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
   app.get('/health', (_req, res) => {
     res.status(200).json({
       status: 'ok',
@@ -75,6 +77,8 @@ export function createApp({ authRouter, onboardingRouter, geolocationRouter }: A
     });
   });
 
+  app.get('/openapi.json', (_req, res) => res.redirect('/docs/openapi.json'));
+  app.get('/openapi.yaml', (_req, res) => res.redirect('/docs/openapi.yaml'));
   app.use('/docs', createDocsRouter());
 
   app.use(`${API_PREFIX}/auth`, authRouter);

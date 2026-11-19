@@ -1,0 +1,231 @@
+Coordinates:
+  type: object
+  required: [latitude, longitude]
+  properties:
+    latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+      example: 50.4501
+    longitude:
+      type: number
+      minimum: -180
+      maximum: 180
+      example: 30.5234
+
+CreateLocationRequest:
+  type: object
+  required: [name, address, cityId, exactCoordinates]
+  properties:
+    name:
+      type: string
+      minLength: 2
+      maxLength: 255
+    address:
+      type: string
+      minLength: 3
+    cityId:
+      type: string
+      format: uuid
+    districtId:
+      type: string
+      format: uuid
+      nullable: true
+    countryCode:
+      type: string
+      minLength: 2
+      maxLength: 2
+      default: UA
+    exactCoordinates:
+      $ref: '#/components/schemas/Coordinates'
+    publicCoordinates:
+      $ref: '#/components/schemas/Coordinates'
+    provider:
+      type: string
+      maxLength: 50
+    providerPlaceId:
+      type: string
+      maxLength: 255
+      nullable: true
+
+PublicLocationView:
+  type: object
+  required: [id, name, cityId, countryCode, coordinates, isExact]
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    address:
+      type: string
+      description: Present only when precision=EXACT
+    cityId:
+      type: string
+      format: uuid
+    districtId:
+      type: string
+      format: uuid
+      nullable: true
+    countryCode:
+      type: string
+    coordinates:
+      $ref: '#/components/schemas/Coordinates'
+    isExact:
+      type: boolean
+
+Location:
+  type: object
+  required:
+    - id
+    - name
+    - address
+    - cityId
+    - countryCode
+    - exactCoordinates
+    - publicCoordinates
+    - provider
+    - createdAt
+    - updatedAt
+  properties:
+    id:
+      type: string
+      format: uuid
+    name:
+      type: string
+    address:
+      type: string
+    cityId:
+      type: string
+      format: uuid
+    districtId:
+      type: string
+      format: uuid
+      nullable: true
+    countryCode:
+      type: string
+    exactCoordinates:
+      $ref: '#/components/schemas/Coordinates'
+    publicCoordinates:
+      $ref: '#/components/schemas/Coordinates'
+    provider:
+      type: string
+    providerPlaceId:
+      type: string
+      nullable: true
+    createdBy:
+      type: string
+      format: uuid
+      nullable: true
+    createdAt:
+      type: string
+      format: date-time
+    updatedAt:
+      type: string
+      format: date-time
+
+LocationResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      anyOf:
+        - $ref: '#/components/schemas/PublicLocationView'
+        - $ref: '#/components/schemas/Location'
+
+LocationListResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/components/schemas/PublicLocationView'
+
+NearbyLocationItem:
+  type: object
+  required: [location, distanceMeters]
+  properties:
+    location:
+      $ref: '#/components/schemas/PublicLocationView'
+    distanceMeters:
+      type: integer
+      example: 250
+
+NearbyLocationListResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      type: array
+      items:
+        $ref: '#/components/schemas/NearbyLocationItem'
+
+GeocodeAddressRequest:
+  type: object
+  required: [address]
+  properties:
+    address:
+      type: string
+      minLength: 3
+      maxLength: 500
+    city:
+      type: string
+      maxLength: 100
+
+ReverseGeocodeRequest:
+  type: object
+  required: [latitude, longitude]
+  properties:
+    latitude:
+      type: number
+      minimum: -90
+      maximum: 90
+      example: 50.4501
+    longitude:
+      type: number
+      minimum: -180
+      maximum: 180
+      example: 30.5234
+
+GeocodeResult:
+  type: object
+  required:
+    - formattedAddress
+    - city
+    - countryCode
+    - coordinates
+    - provider
+  properties:
+    formattedAddress:
+      type: string
+      example: Khreshchatyk St, 1, Kyiv, Ukraine
+    city:
+      type: string
+      example: Kyiv
+    district:
+      type: string
+      nullable: true
+      example: Shevchenkivskyi
+    countryCode:
+      type: string
+      example: UA
+    coordinates:
+      $ref: '#/components/schemas/Coordinates'
+    provider:
+      type: string
+      example: nominatim
+    providerPlaceId:
+      type: string
+      nullable: true
+    rawPayload:
+      type: object
+      nullable: true
+      additionalProperties: true
+
+GeocodeResponse:
+  type: object
+  required: [data]
+  properties:
+    data:
+      $ref: '#/components/schemas/GeocodeResult'

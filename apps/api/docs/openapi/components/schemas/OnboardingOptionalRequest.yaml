@@ -6,7 +6,7 @@ OnboardingOptionalRequest:
       type: string
       maxLength: 300
       nullable: true
-      example: 'Люблю настолки та біг'
+      example: 'Board games and running enthusiast'
     languages:
       type: array
       nullable: true

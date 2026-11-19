@@ -23,6 +23,12 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
 
 /api/v1/onboarding/date-of-birth:
   post:
@@ -56,6 +62,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed, or date of birth already set, or step out of order
         content:
@@ -100,6 +118,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed, or step out of order
         content:
@@ -138,6 +168,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed, or step out of order
         content:
@@ -183,6 +225,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed, or step out of order
         content:
@@ -229,6 +283,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed, or step out of order
         content:
@@ -262,6 +328,18 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
       '409':
         description: Onboarding already completed
         content:

@@ -11,6 +11,19 @@ ErrorResponse:
       type: string
       example: Invalid credentials
 
+ForbiddenResponse:
+  type: object
+  required:
+    - status
+    - message
+  properties:
+    status:
+      type: string
+      example: error
+    message:
+      type: string
+      example: Account is blocked
+
 ValidationErrorDetail:
   type: object
   required:

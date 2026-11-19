@@ -1,0 +1,22 @@
+/health:
+  get:
+    tags: [Health]
+    summary: Liveness probe
+    responses:
+      '200':
+        description: Service is alive
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, service, timestamp]
+              properties:
+                status:
+                  type: string
+                  example: ok
+                service:
+                  type: string
+                  example: lokua-api
+                timestamp:
+                  type: string
+                  format: date-time
