@@ -8,8 +8,8 @@ export const coordinatesSchema = z.object({
 export const createLocationSchema = z.object({
   name: z.string().min(2).max(255),
   address: z.string().min(3),
-  cityId: z.string().uuid(),
-  districtId: z.string().uuid().nullable().optional(),
+  cityId: z.uuid(),
+  districtId: z.uuid().nullable().optional(),
   countryCode: z.string().length(2).default('UA'),
   exactCoordinates: coordinatesSchema,
   publicCoordinates: coordinatesSchema.optional(),
@@ -18,7 +18,7 @@ export const createLocationSchema = z.object({
 });
 
 export const getLocationParamsSchema = z.object({
-  id: z.string().uuid()
+  id: z.uuid()
 });
 
 export const getLocationQuerySchema = z.object({
