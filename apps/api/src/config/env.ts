@@ -10,6 +10,18 @@ const envSchema = z.object({
   DATABASE_URL: z.url(),
   DATABASE_URL_DIRECT: z.url().optional(),
 
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  LOG_HTTP: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+
+  DB_LOGGING: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+
   JWT_ACCESS_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
@@ -33,11 +45,14 @@ const envSchema = z.object({
   STORAGE_BUCKET: z.string().min(1),
   STORAGE_ACCESS_KEY_ID: z.string().min(1),
   STORAGE_SECRET_ACCESS_KEY: z.string().min(1),
+
   STORAGE_FORCE_PATH_STYLE: z
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+
   STORAGE_SIGNED_URL_TTL: z.coerce.number().int().positive().max(604800).default(900),
+
   STORAGE_MAX_UPLOAD_BYTES: z.coerce
     .number()
     .int()

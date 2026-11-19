@@ -9,20 +9,36 @@ let cachedYaml: string | null = null;
 let cachedJson: string | null = null;
 
 const DOCS_DIR_CANDIDATES = [
-  ['docs/openapi'],
-  ['apps/api/docs/openapi'],
-  ['../../docs/openapi'],
-  ['../../../docs/openapi']
+  'docs/openapi',
+  'apps/api/docs/openapi',
+  '../../docs/openapi',
+  '../../../docs/openapi'
 ];
 
 function findDocsDir(): string {
-  for (const [relative] of DOCS_DIR_CANDIDATES) {
-    const candidate = path.resolve(import.meta.dirname ?? process.cwd(), relative);
-    if (fs.existsSync(candidate)) return candidate;
-    const fromCwd = path.resolve(process.cwd(), relative);
-    if (fs.existsSync(fromCwd)) return fromCwd;
+  const bases = new Set<string>();
+
+  if (typeof import.meta.dirname === 'string') {
+    bases.add(import.meta.dirname);
   }
-  throw new Error('OpenAPI docs directory not found');
+
+  bases.add(process.cwd());
+
+  const tried: string[] = [];
+
+  for (const base of bases) {
+    for (const relative of DOCS_DIR_CANDIDATES) {
+      const candidate = path.resolve(base, relative);
+
+      tried.push(candidate);
+
+      if (fs.existsSync(path.join(candidate, 'openapi.yaml'))) {
+        return candidate;
+      }
+    }
+  }
+
+  throw new Error(`[openapi] OpenAPI document not found. Tried:\n  ${tried.join('\n  ')}`);
 }
 
 export function loadOpenApiDocument(): OpenApiSpec {

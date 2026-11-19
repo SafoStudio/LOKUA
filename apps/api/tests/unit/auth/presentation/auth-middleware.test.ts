@@ -6,7 +6,10 @@ import {
   REFRESH_TOKEN_COOKIE
 } from '../../../../src/modules/auth/presentation/http/cookies.js';
 import { AppError } from '../../../../src/common/index.js';
-import type { TokenService, UserProvider } from '../../../../src/modules/auth/application/index.js';
+import type { TokenService } from '../../../../src/modules/auth/application/index.js';
+import type { AuthUserProvider  } from '../../../../src/modules/users/index.js';
+import { AccessService } from '../../../../src/modules/users/index.js';
+import { createMockAuthUser } from '../../../fixtures/users.fixture.js'
 
 describe('auth.middleware', () => {
   const tokenService: TokenService = {
@@ -16,23 +19,25 @@ describe('auth.middleware', () => {
     verifyRefreshToken: vi.fn()
   };
 
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
     markEmailVerified: vi.fn()
   };
 
-  const middleware = createAuthMiddleware({ tokenService, users });
+  const access = new AccessService();
+
+  const middleware = createAuthMiddleware({ tokenService, users, access  });
 
   describe('requireAuth', () => {
     it('authenticates with valid cookie and attaches user to req', async () => {
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'user-1',
         email: 'user@example.com',
         name: 'User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(tokenService.verifyAccessToken).mockResolvedValueOnce({ userId: 'user-1' });
       vi.mocked(users.findById).mockResolvedValueOnce(mockUser);
@@ -51,12 +56,12 @@ describe('auth.middleware', () => {
     });
 
     it('authenticates with Bearer authorization header', async () => {
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'user-2',
         email: 'bearer@example.com',
         name: 'Bearer User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(tokenService.verifyAccessToken).mockResolvedValueOnce({ userId: 'user-2' });
       vi.mocked(users.findById).mockResolvedValueOnce(mockUser);

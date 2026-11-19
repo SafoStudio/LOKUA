@@ -22,7 +22,7 @@ export function isValidCoordinates(coords: Coordinates | null | undefined): bool
  */
 export function obfuscateCoordinates(coords: Coordinates): Coordinates {
   return {
-    latitude: Math.round(coords.latitude * 10) / 10,
-    longitude: Math.round(coords.longitude * 10) / 10
+    latitude: Math.round(coords.latitude * 100) / 100,
+    longitude: Math.round(coords.longitude * 100) / 100
   };
 }

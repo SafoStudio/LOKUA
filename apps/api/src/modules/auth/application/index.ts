@@ -27,6 +27,8 @@ export type { PasskeySignupTransaction } from './ports/passkey-signup-transactio
 export type { PasskeyChallengeRepository } from './ports/passkey-challenge.repository.js';
 export type { EmailVerificationTokenRepository } from './ports/email-verification-token.repository.js';
 
+export { GetAuthUserProfileUseCase } from './use-cases/get-auth-user-profile.use-case.js';
+
 export type {
   PasskeyVerificationService,
   PasskeyCredentialData

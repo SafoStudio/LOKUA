@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StartPasskeySignupUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   PasskeyChallengeRepository,
   PasskeyVerificationService
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('StartPasskeySignupUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -62,12 +63,14 @@ describe('StartPasskeySignupUseCase', () => {
   });
 
   it('throws AppError 409 if email is already registered', async () => {
-    vi.mocked(users.findByEmail).mockResolvedValueOnce({
-      id: 'existing-id',
-      email: 'alice@example.com',
-      name: 'Alice',
-      emailVerified: true
-    });
+    vi.mocked(users.findByEmail).mockResolvedValueOnce(
+      createMockAuthUser({
+                           id: 'existing-id',
+                           email: 'alice@example.com',
+                           name: 'Alice',
+                           emailVerified: true
+                         })
+    );
 
     await expect(
       useCase.execute({

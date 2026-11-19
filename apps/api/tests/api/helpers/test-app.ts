@@ -1,6 +1,7 @@
 import { vi } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import { createAuthController } from '../../../src/modules/auth/presentation/http/auth.controller.js';
+import type { GetMyProfileUseCase } from '../../../src/modules/auth/presentation/http/auth.controller.js';
 import { createAuthMiddleware } from '../../../src/modules/auth/presentation/http/auth.middleware.js';
 import { createAuthRouter } from '../../../src/modules/auth/presentation/http/auth.routes.js';
 import type {
@@ -23,9 +24,12 @@ import type {
   ChangePasswordUseCase,
   LogoutUseCase,
   LogoutAllUseCase,
-  TokenService,
-  UserProvider
+  TokenService
 } from '../../../src/modules/auth/application/index.js';
+import type {
+  AuthUserProvider,
+  AccessService
+} from '../../../src/modules/users/index.js';
 
 export function createMockDependencies() {
   const register = {
@@ -49,8 +53,9 @@ export function createMockDependencies() {
   } as unknown as IssueAuthTokensUseCase;
 
   const googleOAuth = {
-    buildAuthUrl: vi.fn().mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?mock=true'),
-    exchangeCode: vi.fn()
+    buildAuthUrl: vi.fn().mockReturnValue(
+        'https://accounts.google.com/o/oauth2/v2/auth?mock=true'
+    )
   } as unknown as GoogleOAuthProvider;
 
   const startPasskeySignup = {
@@ -105,6 +110,10 @@ export function createMockDependencies() {
     execute: vi.fn()
   } as unknown as LogoutAllUseCase;
 
+  const getMyProfile = {
+    execute: vi.fn()
+  } as unknown as GetMyProfileUseCase;
+
   const tokenService = {
     signAccessToken: vi.fn(),
     signRefreshToken: vi.fn(),
@@ -117,7 +126,11 @@ export function createMockDependencies() {
     findByEmail: vi.fn(),
     create: vi.fn(),
     markEmailVerified: vi.fn()
-  } as unknown as UserProvider;
+  } as unknown as AuthUserProvider;
+
+  const access = {
+    isBlocked: vi.fn().mockReturnValue(false)
+  } as unknown as AccessService;
 
   return {
     register,
@@ -139,8 +152,10 @@ export function createMockDependencies() {
     changePassword,
     logout,
     logoutAll,
+    getMyProfile,
     tokenService,
-    users
+    users,
+    access
   };
 }
 
@@ -164,12 +179,14 @@ export function createTestApp(mocks = createMockDependencies()) {
     resetPassword: mocks.resetPassword,
     changePassword: mocks.changePassword,
     logout: mocks.logout,
-    logoutAll: mocks.logoutAll
+    logoutAll: mocks.logoutAll,
+    getMyProfile: mocks.getMyProfile
   });
 
   const middleware = createAuthMiddleware({
     tokenService: mocks.tokenService,
-    users: mocks.users
+    users: mocks.users,
+    access: mocks.access
   });
 
   const authRouter = createAuthRouter(controller, middleware);

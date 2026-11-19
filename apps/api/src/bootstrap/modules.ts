@@ -7,6 +7,7 @@ import { createGeolocationModule } from '../modules/geolocation/index.js';
 import { createEventsModule } from '../modules/events/index.js';
 import { createModerationModule } from '../modules/moderation/index.js';
 import { createNotificationsModule } from '../modules/notifications/index.js';
+import { createOnboardingModule } from '../modules/onboarding/index.js';
 
 export function createModules(dataSource: DataSource) {
   const dictionariesModule = createDictionariesModule({ dataSource });
@@ -15,10 +16,23 @@ export function createModules(dataSource: DataSource) {
   const authModule = createAuthModule({
     dataSource,
     users: usersModule.authUsers,
-    access: usersModule.access
+    access: usersModule.access,
+    profiles: usersModule.profiles
   });
 
   const storageModule = createStorageModule();
+
+  const moderationModule = createModerationModule({ dataSource });
+
+  const onboardingModule = createOnboardingModule({
+    dataSource,
+    users: usersModule.users,
+    onboardingUsers: usersModule.onboarding,
+    cities: dictionariesModule.cities,
+    interests: dictionariesModule.interests,
+    audit: moderationModule.audit,
+    requireAuth: authModule.requireAuth
+  });
 
   const geolocationModule = createGeolocationModule({
     dataSource,
@@ -31,7 +45,7 @@ export function createModules(dataSource: DataSource) {
     dataSource,
     access: usersModule.access
   });
-  const moderationModule = createModerationModule({ dataSource });
+
   const notificationsModule = createNotificationsModule({ dataSource });
 
   return {
@@ -39,9 +53,10 @@ export function createModules(dataSource: DataSource) {
     users: usersModule,
     auth: authModule,
     storage: storageModule,
+    moderation: moderationModule,
+    onboarding: onboardingModule,
     geolocation: geolocationModule,
     events: eventsModule,
-    moderation: moderationModule,
     notifications: notificationsModule
   };
 }

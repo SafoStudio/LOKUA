@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { AppError } from '../../src/common/index.js';
+import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Email Verification API', () => {
     describe('GET /api/v1/auth/verify-email', () => {
@@ -55,12 +56,7 @@ describe('Auth Email Verification API', () => {
         it('returns 200 when authenticated', async () => {
             const { app, mocks } = createTestApp();
 
-            const mockUser = {
-                id: 'user-1',
-                email: 'user@example.com',
-                name: 'User',
-                emailVerified: false
-            };
+            const mockUser = createMockAuthUser();
 
             vi.mocked(mocks.tokenService.verifyAccessToken).mockResolvedValueOnce({
                 userId: 'user-1'

@@ -4,21 +4,21 @@ import { calculateAge } from '../../domain/index.js';
 export type AgeRestriction = 'NONE' | 'AGE_16' | 'AGE_18';
 
 export class AccessService {
-  canCreateEvent(user: AuthUser): boolean {
+  canCreateEvent(user: AuthUser, now?: Date): boolean {
     if (user.status !== 'ACTIVE') return false;
     if (!user.emailVerified) return false;
     if (!user.onboardingCompleted) return false;
 
-    const age = calculateAge(user.birthDate);
+    const age = calculateAge(user.birthDate, now);
     return age !== null && age >= 16;
   }
 
-  canJoinEvent(user: AuthUser, restriction: AgeRestriction): boolean {
+  canJoinEvent(user: AuthUser, restriction: AgeRestriction, now?: Date): boolean {
     if (user.status !== 'ACTIVE') return false;
     if (!user.emailVerified) return false;
     if (!user.onboardingCompleted) return false;
 
-    const age = calculateAge(user.birthDate);
+    const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
     if (restriction === 'AGE_18') return age >= 18;
@@ -26,21 +26,21 @@ export class AccessService {
     return true;
   }
 
-  canViewEvent(user: AuthUser | null, restriction: AgeRestriction): boolean {
+  canViewEvent(user: AuthUser | null, restriction: AgeRestriction, now?: Date): boolean {
     if (restriction === 'NONE') return true;
     if (!user) return false;
 
-    const age = calculateAge(user.birthDate);
+    const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
     if (restriction === 'AGE_18') return age >= 18;
     return age >= 16;
   }
 
-  canCreateEventWithRestriction(user: AuthUser, restriction: AgeRestriction): boolean {
-    if (!this.canCreateEvent(user)) return false;
+  canCreateEventWithRestriction(user: AuthUser, restriction: AgeRestriction, now?: Date): boolean {
+    if (!this.canCreateEvent(user, now)) return false;
 
-    const age = calculateAge(user.birthDate);
+    const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
     if (restriction === 'AGE_18') return age >= 18;

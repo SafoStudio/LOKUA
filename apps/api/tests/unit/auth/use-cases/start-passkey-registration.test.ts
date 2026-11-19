@@ -1,15 +1,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StartPasskeyRegistrationUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   PasskeyChallengeRepository,
   PasskeyVerificationService,
   PasskeyCredentialRepository
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 
 describe('StartPasskeyRegistrationUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -39,12 +40,12 @@ describe('StartPasskeyRegistrationUseCase', () => {
   const useCase = new StartPasskeyRegistrationUseCase(users, credentials, challenges, passkey);
 
   it('generates options and populates existing credentials in exclude list', async () => {
-    const user = {
+    const user = createMockAuthUser({
       id: 'existing-user-1',
       email: 'user@example.com',
       name: 'User',
       emailVerified: true
-    };
+    });
 
     vi.mocked(users.findById).mockResolvedValueOnce(user);
     vi.mocked(credentials.findByUserId).mockResolvedValueOnce([

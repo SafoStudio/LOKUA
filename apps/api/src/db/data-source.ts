@@ -12,7 +12,7 @@ export const AppDataSource = new DataSource({
 
   synchronize: false,
 
-  logging: isDev,
+  logging: env.DB_LOGGING ? ['query', 'error', 'warn'] : ['error'],
 
   entities: [isDev ? 'src/**/*.entity.ts' : 'dist/**/*.entity.js'],
 

@@ -1,0 +1,16 @@
+type: object
+required:
+  - status
+  - message
+  - details
+properties:
+  status:
+    type: string
+    example: error
+  message:
+    type: string
+    example: Validation failed
+  details:
+    type: array
+    items:
+      $ref: './ValidationErrorDetail.yaml'

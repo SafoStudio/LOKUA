@@ -6,5 +6,6 @@ export type Interest = {
 
 export interface InterestProvider {
   findById(id: string): Promise<Interest | null>;
+  findByIds(ids: string[]): Promise<Interest[]>;
   listActive(): Promise<Interest[]>;
 }

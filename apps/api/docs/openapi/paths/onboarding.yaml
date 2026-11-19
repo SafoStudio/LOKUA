@@ -1,0 +1,486 @@
+/api/v1/onboarding/state:
+  get:
+    tags:
+      - Onboarding
+    summary: Get onboarding state
+    description: |
+      Returns the current onboarding state for the authenticated user.
+      If the user has not started onboarding yet, an empty state is created
+      (idempotent) with `currentStep: DATE_OF_BIRTH` and empty `completedSteps`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Current onboarding state
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: DATE_OF_BIRTH
+                completedSteps: []
+                completedAt: null
+                dateOfBirth: null
+                name: null
+                mainPhotoUrl: null
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+
+/api/v1/onboarding/date-of-birth:
+  post:
+    tags:
+      - Onboarding
+    summary: Step 1 — set date of birth
+    description: |
+      Sets the user's date of birth. Requires age >= 14 (BR-AGE-01).
+      The date of birth is immutable for the user once set (BR-AGE-02):
+      repeated calls after a successful set return 409.
+      The response reports `currentStep: DATE_OF_BIRTH`.
+      The next step is `PROFILE`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingDateOfBirthRequest'
+    responses:
+      '200':
+        description: Date of birth set
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: DATE_OF_BIRTH
+                completedSteps: []
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: null
+                mainPhotoUrl: null
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed, or date of birth already set, or step out of order
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: Age is below 14
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/onboarding/profile:
+  post:
+    tags:
+      - Onboarding
+    summary: Step 2 — set name and main photo
+    description: |
+      Sets the user's display name and main profile photo URL.
+      Requires `DATE_OF_BIRTH` to be completed.
+      The response reports `currentStep: PROFILE`.
+      The next step is `CITY`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingProfileRequest'
+    responses:
+      '200':
+        description: Profile set
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: PROFILE
+                completedSteps:
+                  - DATE_OF_BIRTH
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: null
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed, or step out of order
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/onboarding/city:
+  post:
+    tags:
+      - Onboarding
+    summary: Step 3 — set city
+    description: |
+      Sets the user's city. The city must exist in the `cities` dictionary and be active.
+      Requires `PROFILE` to be completed.
+      The response reports `currentStep: CITY`.
+      The next step is `INTERESTS`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingCityRequest'
+    responses:
+      '200':
+        description: City set
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: CITY
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds: null
+                bio: null
+                languages: null
+                socialLinks: null
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed, or step out of order
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: City not found or inactive
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/onboarding/interests:
+  post:
+    tags:
+      - Onboarding
+    summary: Step 4 — set interests
+    description: |
+      Sets the user's interests. Requires at least 3 interests (BR-ACC-01),
+      maximum 20. All interest IDs must exist in the `interests` dictionary
+      and be active. Requires `CITY` to be completed.
+      The response reports `currentStep: INTERESTS`.
+      The next step is `OPTIONAL`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingInterestsRequest'
+    responses:
+      '200':
+        description: Interests set
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: INTERESTS
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: null
+                languages: null
+                socialLinks: null
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed, or step out of order
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: One or more interests not found or inactive
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/onboarding/optional:
+  post:
+    tags:
+      - Onboarding
+    summary: Step 5 — optional profile fields
+    description: |
+      Sets optional profile fields (bio, languages, social links).
+      At least one field must be provided.
+      Requires `INTERESTS` to be completed.
+      The response reports `currentStep: OPTIONAL`.
+      The onboarding is not finalized until `POST /complete` is called.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingOptionalRequest'
+    responses:
+      '200':
+        description: Optional fields set
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: OPTIONAL
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                  - INTERESTS
+                completedAt: null
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: I enjoy discovering new places and meeting people.
+                languages:
+                  - en
+                  - uk
+                socialLinks:
+                  instagram: https://instagram.com/johndoe
+      '400':
+        description: Validation error, or no optional fields provided
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed, or step out of order
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/onboarding/complete:
+  post:
+    tags:
+      - Onboarding
+    summary: Finalize onboarding
+    description: |
+      Finalizes onboarding. Requires all mandatory steps to be completed:
+      `DATE_OF_BIRTH`, `PROFILE`, `CITY`, `INTERESTS`.
+      Sets `users.onboarding_completed = true` and `completedAt`.
+      After this call, all `POST /onboarding/*` endpoints return 409.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Onboarding completed
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStateResponse'
+            example:
+              data:
+                id: 123e4567-e89b-12d3-a456-426614174000
+                currentStep: COMPLETED
+                completedSteps:
+                  - DATE_OF_BIRTH
+                  - PROFILE
+                  - CITY
+                  - INTERESTS
+                  - OPTIONAL
+                completedAt: '2026-11-19T12:00:00.000Z'
+                dateOfBirth: '1995-05-15'
+                name: John Doe
+                mainPhotoUrl: https://cdn.example.com/photos/avatar.jpg
+                cityId: 123e4567-e89b-12d3-a456-426614174001
+                interestIds:
+                  - 123e4567-e89b-12d3-a456-426614174002
+                  - 123e4567-e89b-12d3-a456-426614174003
+                  - 123e4567-e89b-12d3-a456-426614174004
+                bio: I enjoy discovering new places and meeting people.
+                languages:
+                  - en
+                  - uk
+                socialLinks:
+                  instagram: https://instagram.com/johndoe
+      '400':
+        description: Onboarding not started
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is blocked
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '409':
+        description: Onboarding already completed
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: One or more mandatory steps are incomplete
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

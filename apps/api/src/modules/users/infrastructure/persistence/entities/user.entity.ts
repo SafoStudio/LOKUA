@@ -8,6 +8,7 @@ import {
   UpdateDateColumn
 } from 'typeorm';
 import type { UserRole, UserStatus } from '../../../domain/index.js';
+import { dateTransformer } from '../../../../../common/index.js';
 
 @Entity('users')
 @Unique('uq_users_email', ['email'])
@@ -24,7 +25,7 @@ export class UserEntity {
   @Column({ type: 'boolean', name: 'email_verified', default: false })
   emailVerified!: boolean;
 
-  @Column({ type: 'date', name: 'birth_date', nullable: true })
+  @Column({ type: 'date', name: 'birth_date', nullable: true, transformer: dateTransformer })
   birthDate!: Date | null;
 
   @Column({ type: 'varchar', length: 20, default: 'USER' })

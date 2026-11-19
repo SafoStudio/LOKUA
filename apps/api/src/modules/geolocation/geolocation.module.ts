@@ -28,7 +28,8 @@ import {
   GeocodingCacheRepositoryAdapter,
   NominatimGeocodingProvider
 } from './infrastructure/index.js';
-import { createGeolocationController, createGeolocationRouter } from './presentation/index.js';
+import { createGeolocationController } from './presentation/http/geolocation.controller.js';
+import { createGeolocationRouter } from './presentation/http/geolocation.routes.js';
 
 export interface CreateGeolocationModuleDependencies {
   dataSource: DataSource;

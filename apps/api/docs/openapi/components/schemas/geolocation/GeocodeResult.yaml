@@ -1,0 +1,33 @@
+type: object
+required:
+  - formattedAddress
+  - city
+  - countryCode
+  - coordinates
+  - provider
+properties:
+  formattedAddress:
+    type: string
+    example: Khreshchatyk St, 1, Kyiv, Ukraine
+  city:
+    type: string
+    example: Kyiv
+  district:
+    type: string
+    nullable: true
+    example: Shevchenkivskyi
+  countryCode:
+    type: string
+    example: UA
+  coordinates:
+    $ref: './Coordinates.yaml'
+  provider:
+    type: string
+    example: nominatim
+  providerPlaceId:
+    type: string
+    nullable: true
+  rawPayload:
+    type: object
+    nullable: true
+    additionalProperties: true

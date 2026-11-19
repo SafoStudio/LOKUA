@@ -1,0 +1,24 @@
+type: object
+required: [id, name, cityId, countryCode, coordinates, isExact]
+properties:
+  id:
+    type: string
+    format: uuid
+  name:
+    type: string
+  address:
+    type: string
+    description: Present only when precision=EXACT
+  cityId:
+    type: string
+    format: uuid
+  districtId:
+    type: string
+    format: uuid
+    nullable: true
+  countryCode:
+    type: string
+  coordinates:
+    $ref: './Coordinates.yaml'
+  isExact:
+    type: boolean

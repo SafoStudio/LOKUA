@@ -1,0 +1,32 @@
+type: object
+required:
+  - id
+  - email
+  - name
+  - emailVerified
+  - role
+  - status
+  - onboardingCompleted
+properties:
+  id:
+    type: string
+    format: uuid
+  email:
+    type: string
+    format: email
+  name:
+    type: string
+  emailVerified:
+    type: boolean
+  role:
+    type: string
+    enum: [USER, MODERATOR, ADMIN]
+  status:
+    type: string
+    enum: [ACTIVE, BLOCKED_TEMPORARY, BLOCKED_PERMANENT, PENDING_DELETION, DELETED]
+  onboardingCompleted:
+    type: boolean
+  birthDate:
+    type: string
+    format: date
+    nullable: true

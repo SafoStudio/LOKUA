@@ -4,6 +4,7 @@ import type {
   TokenService,
   RefreshSessionRepository
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('IssueAuthTokensUseCase', () => {
   const tokenService: TokenService = {
@@ -24,20 +25,20 @@ describe('IssueAuthTokensUseCase', () => {
   const useCase = new IssueAuthTokensUseCase(tokenService, refreshSessions);
 
   it('issues both access and refresh tokens for user', async () => {
-    const user = {
+    const mockUser = createMockAuthUser({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       emailVerified: true
-    };
+    });
 
     vi.mocked(tokenService.signAccessToken).mockResolvedValueOnce('mock-access-token');
     vi.mocked(tokenService.signRefreshToken).mockResolvedValueOnce('mock-refresh-token');
 
-    const result = await useCase.execute(user);
+    const result = await useCase.execute(mockUser);
 
     expect(result).toEqual({
-      user,
+      user: mockUser,
       accessToken: 'mock-access-token',
       refreshToken: 'mock-refresh-token'
     });

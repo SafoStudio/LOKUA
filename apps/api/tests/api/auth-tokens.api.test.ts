@@ -1,20 +1,22 @@
+
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createTestApp } from './helpers/test-app.js';
 import { AppError } from '../../src/common/index.js';
 import { getSetCookies } from '../helpers/get-set-cookies.js';
+import { createMockAuthUser, createMockUserProfile } from '../fixtures/users.fixture.js';
 
 describe('Auth Tokens & /me API', () => {
   describe('POST /api/v1/auth/refresh', () => {
     it('returns 200 with user and refreshed cookies when valid refreshToken cookie is sent', async () => {
       const { app, mocks } = createTestApp();
 
-      const mockUser = {
+      const mockUser = createMockAuthUser({
         id: 'usr-1',
         email: 'user@example.com',
         name: 'User',
         emailVerified: true
-      };
+      });
 
       vi.mocked(mocks.refresh.execute).mockResolvedValueOnce({
         user: mockUser,
@@ -88,39 +90,50 @@ describe('Auth Tokens & /me API', () => {
   });
 
   describe('GET /api/v1/auth/me', () => {
-    const mockUser = {
+    const mockUser = createMockAuthUser({
       id: 'usr-me-1',
       email: 'me@example.com',
       name: 'Me User',
       emailVerified: true
-    };
+    });
+
+    const mockProfile = createMockUserProfile({
+      name: 'Me User',
+      email: 'me@example.com'
+    });
 
     it('returns 200 with user when authenticated via accessToken cookie', async () => {
       const { app, mocks } = createTestApp();
 
-      vi.mocked(mocks.tokenService.verifyAccessToken).mockResolvedValueOnce({ userId: 'usr-me-1' });
+      vi.mocked(mocks.tokenService.verifyAccessToken).mockResolvedValueOnce({
+        userId: 'usr-me-1'
+      });
       vi.mocked(mocks.users.findById).mockResolvedValueOnce(mockUser);
+      vi.mocked(mocks.getMyProfile.execute).mockResolvedValueOnce(mockProfile);
 
       const res = await request(app)
           .get('/api/v1/auth/me')
           .set('Cookie', ['accessToken=valid-access-token']);
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ user: mockUser });
+      expect(mocks.getMyProfile.execute).toHaveBeenCalledWith('usr-me-1');
     });
 
     it('returns 200 with user when authenticated via Bearer header', async () => {
       const { app, mocks } = createTestApp();
 
-      vi.mocked(mocks.tokenService.verifyAccessToken).mockResolvedValueOnce({ userId: 'usr-me-1' });
+      vi.mocked(mocks.tokenService.verifyAccessToken).mockResolvedValueOnce({
+        userId: 'usr-me-1'
+      });
       vi.mocked(mocks.users.findById).mockResolvedValueOnce(mockUser);
+      vi.mocked(mocks.getMyProfile.execute).mockResolvedValueOnce(mockProfile);
 
       const res = await request(app)
           .get('/api/v1/auth/me')
           .set('Authorization', 'Bearer bearer-token-123');
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ user: mockUser });
+      expect(mocks.getMyProfile.execute).toHaveBeenCalledWith('usr-me-1');
     });
 
     it('returns 401 when no auth credentials provided', async () => {
@@ -138,7 +151,9 @@ describe('Auth Tokens & /me API', () => {
     it('returns 401 when access token is expired or invalid', async () => {
       const { app, mocks } = createTestApp();
 
-      vi.mocked(mocks.tokenService.verifyAccessToken).mockRejectedValueOnce(new Error('expired'));
+      vi.mocked(mocks.tokenService.verifyAccessToken).mockRejectedValueOnce(
+          new Error('expired')
+      );
 
       const res = await request(app)
           .get('/api/v1/auth/me')

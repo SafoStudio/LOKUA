@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { AppError } from '../../../../common/index.js';
 import type {
   CreateLocationUseCase,
   FindLocationByIdUseCase,
@@ -8,6 +9,8 @@ import type {
   GeocodeAddressUseCase,
   ReverseGeocodeUseCase
 } from '../../application/index.js';
+import { toLocationView, toNearbyLocationItemView } from './location.view.js';
+import { toGeocodeView } from './geocode.view.js';
 
 interface GeolocationControllerDependencies {
   createLocation: CreateLocationUseCase;
@@ -31,7 +34,7 @@ export function createGeolocationController({
   return {
     async create(req: Request, res: Response): Promise<void> {
       const location = await createLocation.execute(req.body);
-      res.status(201).json({ status: 'success', data: location });
+      res.status(201).json({ data: toLocationView(location) });
     },
 
     async getById(req: Request, res: Response): Promise<void> {
@@ -40,12 +43,12 @@ export function createGeolocationController({
 
       if (precision === 'EXACT') {
         const location = await findLocationById.execute({ id });
-        res.status(200).json({ status: 'success', data: location });
+        res.status(200).json({ data: toLocationView(location) });
         return;
       }
 
       const location = await findPublicLocationById.execute({ id });
-      res.status(200).json({ status: 'success', data: location });
+      res.status(200).json({ data: location });
     },
 
     async nearby(req: Request, res: Response): Promise<void> {
@@ -65,7 +68,7 @@ export function createGeolocationController({
         limit: limit ? Number(limit) : undefined
       });
 
-      res.status(200).json({ status: 'success', data: results });
+      res.status(200).json({ data: results.map(toNearbyLocationItemView) });
     },
 
     async inBBox(req: Request, res: Response): Promise<void> {
@@ -85,19 +88,16 @@ export function createGeolocationController({
         limit: limit ? Number(limit) : undefined
       });
 
-      res.status(200).json({ status: 'success', data: results });
+      res.status(200).json({ data: results });
     },
 
     async geocode(req: Request, res: Response): Promise<void> {
       const { address, city } = req.body;
       const result = await geocodeAddress.execute({ address, city });
 
-      if (!result) {
-        res.status(404).json({ status: 'error', message: 'Address could not be geocoded' });
-        return;
-      }
+      if (!result) throw new AppError('Address could not be geocoded', 404);
 
-      res.status(200).json({ status: 'success', data: result });
+      res.status(200).json({ data: toGeocodeView(result) });
     },
 
     async reverse(req: Request, res: Response): Promise<void> {
@@ -107,14 +107,9 @@ export function createGeolocationController({
         longitude: Number(longitude)
       });
 
-      if (!result) {
-        res
-          .status(404)
-          .json({ status: 'error', message: 'Coordinates could not be reverse-geocoded' });
-        return;
-      }
+      if (!result) throw new AppError('Coordinates could not be reverse-geocoded', 404);
 
-      res.status(200).json({ status: 'success', data: result });
+      res.status(200).json({ data: toGeocodeView(result) });
     }
   };
 }

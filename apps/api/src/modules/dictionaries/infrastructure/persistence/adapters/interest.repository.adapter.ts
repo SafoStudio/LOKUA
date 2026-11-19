@@ -1,4 +1,5 @@
 import type { Repository } from 'typeorm';
+import { In } from 'typeorm';
 import type { Interest, InterestProvider } from '../../../application/index.js';
 import type { InterestEntity } from '../entities/interest.entity.js';
 
@@ -8,6 +9,14 @@ export class InterestRepositoryAdapter implements InterestProvider {
   async findById(id: string): Promise<Interest | null> {
     const entity = await this.repo.findOne({ where: { id } });
     return entity ? this.toDomain(entity) : null;
+  }
+
+  async findByIds(ids: string[]): Promise<Interest[]> {
+    if (ids.length === 0) return [];
+    const entities = await this.repo.find({
+      where: { id: In(ids), is_active: true }
+    });
+    return entities.map((e) => this.toDomain(e));
   }
 
   async listActive(): Promise<Interest[]> {

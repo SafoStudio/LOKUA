@@ -1,14 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoginWithPasswordUseCase } from '../../../../src/modules/auth/application/index.js';
-import type { UserProvider } from '../../../../src/modules/auth/index.js';
+import type { AuthUserProvider } from '../../../../src/modules/users/index.js';
 import type {
   PasswordHasher,
   PasswordCredentialRepository,
   SecurityEventRepository
 } from '../../../../src/modules/auth/application/index.js';
+import {createMockAuthUser} from "../../../fixtures/users.fixture.js";
 
 describe('LoginWithPasswordUseCase', () => {
-  const users: UserProvider = {
+  const users: AuthUserProvider = {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
@@ -40,12 +41,12 @@ describe('LoginWithPasswordUseCase', () => {
   );
 
   it('authenticates user successfully with valid credentials and normalized email', async () => {
-    const user = {
+    const user = createMockAuthUser({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       emailVerified: true
-    };
+    });
 
     vi.mocked(users.findByEmail).mockResolvedValueOnce(user);
     vi.mocked(credentials.findByUserId).mockResolvedValueOnce({
@@ -100,12 +101,12 @@ describe('LoginWithPasswordUseCase', () => {
   });
 
   it('throws AppError 401 when user has no password credentials (e.g. Google-only account)', async () => {
-    vi.mocked(users.findByEmail).mockResolvedValueOnce({
+    vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
       id: 'google-user',
       email: 'google@example.com',
       name: 'Google User',
       emailVerified: true
-    });
+    }));
     vi.mocked(credentials.findByUserId).mockResolvedValueOnce(null);
 
     await expect(
@@ -123,12 +124,12 @@ describe('LoginWithPasswordUseCase', () => {
   });
 
   it('throws AppError 401 when password comparison returns false', async () => {
-    vi.mocked(users.findByEmail).mockResolvedValueOnce({
+    vi.mocked(users.findByEmail).mockResolvedValueOnce(createMockAuthUser({
       id: 'user-1',
       email: 'user@example.com',
       name: 'User',
       emailVerified: true
-    });
+    }));
     vi.mocked(credentials.findByUserId).mockResolvedValueOnce({
       userId: 'user-1',
       passwordHash: 'stored-hash'

@@ -1,12 +1,17 @@
 import type { DataSource } from 'typeorm';
+import type { AuditLogger } from './application/index.js';
+import { AuditLogEntity, AuditLoggerAdapter } from './infrastructure/index.js';
 
-export interface CreateModerationModuleDependencies {
+interface CreateModerationModuleDependencies {
   dataSource: DataSource;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: remove when logic is added
 export function createModerationModule({ dataSource }: CreateModerationModuleDependencies) {
-  return {};
+  const audit: AuditLogger = new AuditLoggerAdapter(dataSource.getRepository(AuditLogEntity));
+
+  return {
+    audit
+  };
 }
 
 export type ModerationModule = ReturnType<typeof createModerationModule>;

@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-docs.mjs",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "smoke": "tsx scripts/smoke-onboarding.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
@@ -16,6 +20,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "typecheck:src": "tsc --noEmit -p tsconfig.build.json",
     "typecheck:tests": "tsc --noEmit -p tsconfig.test.json",
+    "validate:openapi": "tsx scripts/validate-openapi.ts",
     "typeorm": "typeorm-ts-node-esm",
     "m:gen": "pnpm typeorm migration:generate -d src/db/data-source.ts",
     "m:run": "pnpm typeorm migration:run -d src/db/data-source.ts",

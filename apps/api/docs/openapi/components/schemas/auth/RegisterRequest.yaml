@@ -1,0 +1,21 @@
+type: object
+required:
+  - email
+  - name
+  - password
+properties:
+  email:
+    type: string
+    format: email
+    example: user@example.com
+  name:
+    type: string
+    minLength: 1
+    maxLength: 100
+    example: John Doe
+  password:
+    type: string
+    minLength: 8
+    maxLength: 72
+    description: Password (8 to 72 UTF-8 characters/bytes)
+    example: Password123!

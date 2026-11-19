@@ -1,0 +1,5 @@
+type: object
+required: [user]
+properties:
+  user:
+    $ref: './UserProfileView.yaml'

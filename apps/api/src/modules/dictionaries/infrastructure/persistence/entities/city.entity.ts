@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { CountryEntity } from './country.entity.js';
 import type { GeoJSONPolygon } from '../../../../../common/index.js';
-import { geojsonPolygonTransformer } from '../transformers/geojson.transformer.js';
+import { geojsonPolygonTransformer } from '../../../../../common/index.js';
 
 @Entity('cities')
 @Unique('uq_cities_country_slug', ['country_code', 'slug'])
