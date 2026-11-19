@@ -9,11 +9,11 @@ import {
   optionalProfileSchema
 } from './onboarding.schema.js';
 import { requireOnboardingInProgress } from './onboarding.middleware.js';
-import type { createOnboardingController } from './onboarding.controller.js';
+import type { OnboardingController } from './onboarding.controller.js';
 
 interface OnboardingRouterDependencies {
   requireAuth: RequestHandler;
-  controller: ReturnType<typeof createOnboardingController>;
+  controller: OnboardingController;
 }
 
 export function createOnboardingRouter({ requireAuth, controller }: OnboardingRouterDependencies) {

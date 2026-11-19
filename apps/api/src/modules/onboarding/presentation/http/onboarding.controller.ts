@@ -1,4 +1,4 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import type {
   SetDateOfBirthUseCase,
   SetProfileUseCase,
@@ -8,9 +8,6 @@ import type {
   CompleteOnboardingUseCase,
   GetOnboardingStateUseCase
 } from '../../application/index.js';
-import type { OnboardingContext } from '../../application/index.js';
-import type { OnboardingState } from '../../domain/index.js';
-import { AppError } from '../../../../common/index.js';
 import type {
   DateOfBirthInput,
   ProfileInput,
@@ -18,6 +15,8 @@ import type {
   InterestsInput,
   OptionalProfileInput
 } from './onboarding.schema.js';
+import { toOnboardingContext } from './onboarding-context.js';
+import { toOnboardingStateView } from './onboarding-state.view.js';
 
 interface OnboardingControllerDependencies {
   setDateOfBirth: SetDateOfBirthUseCase;
@@ -29,31 +28,6 @@ interface OnboardingControllerDependencies {
   getOnboardingState: GetOnboardingStateUseCase;
 }
 
-function toContext(req: Request): OnboardingContext {
-  if (!req.user) throw new AppError('Authentication required', 401);
-  return {
-    user: req.user,
-    ip: req.ip ?? null
-  };
-}
-
-function toView(state: OnboardingState) {
-  return {
-    id: state.id,
-    currentStep: state.currentStep,
-    completedSteps: state.completedSteps,
-    completedAt: state.completedAt,
-    dateOfBirth: state.dateOfBirth ? state.dateOfBirth.toISOString().slice(0, 10) : null,
-    name: state.name,
-    mainPhotoUrl: state.mainPhotoUrl,
-    cityId: state.cityId,
-    interestIds: state.interestIds,
-    bio: state.bio,
-    languages: state.languages,
-    socialLinks: state.socialLinks
-  };
-}
-
 export function createOnboardingController({
   setDateOfBirth,
   setProfile,
@@ -63,90 +37,56 @@ export function createOnboardingController({
   completeOnboarding,
   getOnboardingState
 }: OnboardingControllerDependencies) {
-  const getState = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const state = await getOnboardingState.execute(toContext(req));
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+  return {
+    async getState(req: Request, res: Response): Promise<void> {
+      const state = await getOnboardingState.execute(toOnboardingContext(req));
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const applyDateOfBirth = async (req: Request, res: Response, next: NextFunction) => {
-    try {
+    async applyDateOfBirth(req: Request, res: Response): Promise<void> {
       const body = req.body as DateOfBirthInput;
-      const state = await setDateOfBirth.execute(toContext(req), body.birthDate);
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+      const state = await setDateOfBirth.execute(toOnboardingContext(req), body.birthDate);
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const applyProfile = async (req: Request, res: Response, next: NextFunction) => {
-    try {
+    async applyProfile(req: Request, res: Response): Promise<void> {
       const body = req.body as ProfileInput;
-      const state = await setProfile.execute(toContext(req), {
+      const state = await setProfile.execute(toOnboardingContext(req), {
         name: body.name,
         mainPhotoUrl: body.mainPhotoUrl
       });
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const applyCity = async (req: Request, res: Response, next: NextFunction) => {
-    try {
+    async applyCity(req: Request, res: Response): Promise<void> {
       const body = req.body as CityInput;
-      const state = await setCity.execute(toContext(req), { cityId: body.cityId });
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+      const state = await setCity.execute(toOnboardingContext(req), { cityId: body.cityId });
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const applyInterests = async (req: Request, res: Response, next: NextFunction) => {
-    try {
+    async applyInterests(req: Request, res: Response): Promise<void> {
       const body = req.body as InterestsInput;
-      const state = await setInterests.execute(toContext(req), {
+      const state = await setInterests.execute(toOnboardingContext(req), {
         interestIds: body.interestIds
       });
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const applyOptionalProfile = async (req: Request, res: Response, next: NextFunction) => {
-    try {
+    async applyOptionalProfile(req: Request, res: Response): Promise<void> {
       const body = req.body as OptionalProfileInput;
-      const state = await setOptionalProfile.execute(toContext(req), {
+      const state = await setOptionalProfile.execute(toOnboardingContext(req), {
         bio: body.bio,
         languages: body.languages,
         socialLinks: body.socialLinks
       });
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
-    }
-  };
+      res.status(200).json({ data: toOnboardingStateView(state) });
+    },
 
-  const complete = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const state = await completeOnboarding.execute(toContext(req));
-      res.status(200).json({ data: toView(state) });
-    } catch (error) {
-      next(error);
+    async complete(req: Request, res: Response): Promise<void> {
+      const state = await completeOnboarding.execute(toOnboardingContext(req));
+      res.status(200).json({ data: toOnboardingStateView(state) });
     }
-  };
-
-  return {
-    getState,
-    applyDateOfBirth,
-    applyProfile,
-    applyCity,
-    applyInterests,
-    applyOptionalProfile,
-    complete
   };
 }
+
+export type OnboardingController = ReturnType<typeof createOnboardingController>;
