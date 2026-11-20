@@ -20,7 +20,7 @@ properties:
     type: string
     example: UA
   coordinates:
-    $ref: './Coordinates.yaml'
+    $ref: '#/components/schemas/Coordinates'
   provider:
     type: string
     example: nominatim

@@ -21,9 +21,9 @@ properties:
     maxLength: 2
     default: UA
   exactCoordinates:
-    $ref: './Coordinates.yaml'
+    $ref: '#/components/schemas/Coordinates'
   publicCoordinates:
-    $ref: './Coordinates.yaml'
+    $ref: '#/components/schemas/Coordinates'
   provider:
     type: string
     maxLength: 50

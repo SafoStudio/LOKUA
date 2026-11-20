@@ -19,6 +19,6 @@ properties:
   countryCode:
     type: string
   coordinates:
-    $ref: './Coordinates.yaml'
+    $ref: '#/components/schemas/Coordinates'
   isExact:
     type: boolean

@@ -2,4 +2,4 @@ type: object
 required: [user]
 properties:
   user:
-    $ref: './UserProfileView.yaml'
+    $ref: '#/components/schemas/UserProfileView'

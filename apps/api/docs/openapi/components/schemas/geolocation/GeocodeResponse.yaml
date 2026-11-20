@@ -2,4 +2,4 @@ type: object
 required: [data]
 properties:
   data:
-    $ref: './GeocodeResult.yaml'
+    $ref: '#/components/schemas/GeocodeResult'
