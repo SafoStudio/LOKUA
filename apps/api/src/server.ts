@@ -12,7 +12,8 @@ try {
   const app = createApp({
     authRouter: modules.auth.router,
     onboardingRouter: modules.onboarding.router,
-    geolocationRouter: modules.geolocation.router
+    geolocationRouter: modules.geolocation.router,
+    adminUsersRouter: modules.moderation.adminUsersRouter
   });
 
   const server = app.listen(env.PORT, () => {

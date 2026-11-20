@@ -12,11 +12,17 @@ interface AppDependencies {
   authRouter: express.Router;
   onboardingRouter?: express.Router;
   geolocationRouter?: express.Router;
+  adminUsersRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
 
-export function createApp({ authRouter, onboardingRouter, geolocationRouter }: AppDependencies) {
+export function createApp({
+  authRouter,
+  onboardingRouter,
+  geolocationRouter,
+  adminUsersRouter
+}: AppDependencies) {
   const app = express();
 
   app.use(
@@ -89,6 +95,10 @@ export function createApp({ authRouter, onboardingRouter, geolocationRouter }: A
 
   if (geolocationRouter) {
     app.use(`${API_PREFIX}/geo`, geolocationRouter);
+  }
+
+  if (adminUsersRouter) {
+    app.use(`${API_PREFIX}/admin`, adminUsersRouter);
   }
 
   app.use(notFound);

@@ -1,0 +1,14 @@
+type: object
+required:
+  - id
+  - birthDate
+properties:
+  id:
+    type: string
+    format: uuid
+  birthDate:
+    type: string
+    format: date
+    nullable: true
+    description: '`null` only if the user has no birth date set.'
+    example: '2000-05-15'
