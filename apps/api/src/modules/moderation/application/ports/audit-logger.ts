@@ -1,6 +1,6 @@
-import type { EntityManager } from 'typeorm';
 import type { AuditEntry } from '../types/audit-entry.js';
+import type { TransactionContext } from '../../../../common/index.js';
 
 export interface AuditLogger {
-  log(entry: AuditEntry, manager?: EntityManager): Promise<void>;
+  log(entry: AuditEntry, tx?: TransactionContext): Promise<void>;
 }

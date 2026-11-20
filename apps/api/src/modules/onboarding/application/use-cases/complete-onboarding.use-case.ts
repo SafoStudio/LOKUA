@@ -1,6 +1,7 @@
 import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
+import type { TransactionContext } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -64,7 +65,8 @@ export class CompleteOnboardingUseCase {
           afterState: { completedAt: completedAt.toISOString() },
           ip: context.ip
         },
-        manager
+        // TODO: migrate onboarding to UnitOfWork; bridge EntityManager -> TransactionContext for now
+        manager as unknown as TransactionContext
       );
 
       return updated;
