@@ -22,7 +22,12 @@ export function createModules(dataSource: DataSource) {
 
   const storageModule = createStorageModule();
 
-  const moderationModule = createModerationModule({ dataSource });
+  const moderationModule = createModerationModule({
+    dataSource,
+    users: usersModule.users,
+    requireAuth: authModule.requireAuth,
+    requireRole: authModule.requireRole
+  });
 
   const onboardingModule = createOnboardingModule({
     dataSource,

@@ -13,4 +13,4 @@ properties:
   details:
     type: array
     items:
-      $ref: './ValidationErrorDetail.yaml'
+      $ref: '#/components/schemas/ValidationErrorDetail'

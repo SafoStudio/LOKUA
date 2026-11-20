@@ -1,7 +1,7 @@
-import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import { calculateAge } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
+import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -14,7 +14,7 @@ import { ensureOnboardingState } from './ensure-onboarding-state.js';
 
 export class SetDateOfBirthUseCase {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
@@ -35,10 +35,10 @@ export class SetDateOfBirthUseCase {
       throw new OnboardingStepImmutableError('DATE_OF_BIRTH');
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const state = await ensureOnboardingState(this.stateRepository, context.user.id, manager);
+    return this.unitOfWork.run(async (tx) => {
+      const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
-      await this.onboardingUsers.applyDateOfBirth(context.user.id, birthDate, manager);
+      await this.onboardingUsers.applyDateOfBirth(context.user.id, birthDate, tx);
 
       const updated = await this.stateRepository.updateStep(
         state.id,
@@ -47,7 +47,7 @@ export class SetDateOfBirthUseCase {
           currentStep: 'PROFILE',
           completedSteps: [...state.completedSteps, 'DATE_OF_BIRTH']
         },
-        manager
+        tx
       );
 
       await this.audit.log(
@@ -59,7 +59,7 @@ export class SetDateOfBirthUseCase {
           afterState: { dateOfBirth: birthDate.toISOString() },
           ip: context.ip
         },
-        manager
+        tx
       );
 
       return updated;

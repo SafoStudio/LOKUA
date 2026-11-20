@@ -10,7 +10,7 @@ import {
     createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import { createMockOnboardingState } from '../../../fixtures/onboarding.fixture.js';
@@ -19,14 +19,16 @@ describe('SetDateOfBirthUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
     let audit: ReturnType<typeof createMockAuditLogger>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: SetDateOfBirthUseCase;
 
     beforeEach(() => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
         audit = createMockAuditLogger();
+        unitOfWork = createMockUnitOfWork();
         useCase = new SetDateOfBirthUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -53,6 +55,7 @@ describe('SetDateOfBirthUseCase', () => {
 
         expect(result.currentStep).toBe('PROFILE');
         expect(result.completedSteps).toContain('DATE_OF_BIRTH');
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
         expect(onboardingUsers.applyDateOfBirth).toHaveBeenCalledWith(
             'user-1',
             validBirthDate,

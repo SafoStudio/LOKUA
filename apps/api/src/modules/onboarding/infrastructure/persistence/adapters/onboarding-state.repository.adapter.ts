@@ -1,28 +1,30 @@
-import type { EntityManager, Repository } from 'typeorm';
+import type { Repository } from 'typeorm';
 import type {
   OnboardingStateRepository,
   UpdateOnboardingStepData
 } from '../../../application/index.js';
 import type { OnboardingState, OnboardingStep } from '../../../domain/index.js';
 import { OnboardingStateEntity } from '../entities/onboarding-state.entity.js';
+import type { TransactionContext } from '../../../../../common/index.js';
+import { toEntityManager } from '../../../../../common/index.js';
 
 export class OnboardingStateRepositoryAdapter implements OnboardingStateRepository {
   constructor(private readonly repo: Repository<OnboardingStateEntity>) {}
 
-  async findByUserId(userId: string, manager?: EntityManager): Promise<OnboardingState | null> {
-    const repo = this.getRepo(manager);
+  async findByUserId(userId: string, tx?: TransactionContext): Promise<OnboardingState | null> {
+    const repo = this.getRepo(tx);
     const entity = await repo.findOne({ where: { userId } });
     return entity ? this.toDomain(entity) : null;
   }
 
-  async findById(id: string, manager?: EntityManager): Promise<OnboardingState | null> {
-    const repo = this.getRepo(manager);
+  async findById(id: string, tx?: TransactionContext): Promise<OnboardingState | null> {
+    const repo = this.getRepo(tx);
     const entity = await repo.findOne({ where: { id } });
     return entity ? this.toDomain(entity) : null;
   }
 
-  async create(userId: string, manager?: EntityManager): Promise<OnboardingState> {
-    const repo = this.getRepo(manager);
+  async create(userId: string, tx?: TransactionContext): Promise<OnboardingState> {
+    const repo = this.getRepo(tx);
     await repo.upsert({ userId, currentStep: 'DATE_OF_BIRTH', completedSteps: [] }, ['userId']);
     const entity = await repo.findOneOrFail({ where: { userId } });
     return this.toDomain(entity);
@@ -31,9 +33,9 @@ export class OnboardingStateRepositoryAdapter implements OnboardingStateReposito
   async updateStep(
     id: string,
     data: UpdateOnboardingStepData,
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<OnboardingState> {
-    const repo = this.getRepo(manager);
+    const repo = this.getRepo(tx);
     const entity = await repo.findOne({ where: { id } });
     if (!entity) throw new Error(`OnboardingState ${id} not found`);
 
@@ -53,8 +55,8 @@ export class OnboardingStateRepositoryAdapter implements OnboardingStateReposito
     return this.toDomain(saved);
   }
 
-  private getRepo(manager?: EntityManager): Repository<OnboardingStateEntity> {
-    return manager ? manager.getRepository(OnboardingStateEntity) : this.repo;
+  private getRepo(tx?: TransactionContext): Repository<OnboardingStateEntity> {
+    return tx ? toEntityManager(tx).getRepository(OnboardingStateEntity) : this.repo;
   }
 
   private toDomain(entity: OnboardingStateEntity): OnboardingState {

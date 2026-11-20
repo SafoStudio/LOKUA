@@ -1,14 +1,14 @@
-import type { EntityManager } from 'typeorm';
+import type { TransactionContext } from '../../../../common/index.js';
 
 export interface UserOnboardingProvider {
-  applyDateOfBirth(userId: string, birthDate: Date, manager?: EntityManager): Promise<void>;
+  applyDateOfBirth(userId: string, birthDate: Date, tx?: TransactionContext): Promise<void>;
   applyProfile(
     userId: string,
     data: { name: string; mainPhotoUrl: string },
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<void>;
-  applyCity(userId: string, cityId: string, manager?: EntityManager): Promise<void>;
-  applyInterests(userId: string, interestIds: string[], manager?: EntityManager): Promise<void>;
+  applyCity(userId: string, cityId: string, tx?: TransactionContext): Promise<void>;
+  applyInterests(userId: string, interestIds: string[], tx?: TransactionContext): Promise<void>;
   applyOptionalProfile(
     userId: string,
     data: {
@@ -16,7 +16,7 @@ export interface UserOnboardingProvider {
       languages?: string[] | null;
       socialLinks?: Record<string, string> | null;
     },
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<void>;
-  completeOnboarding(userId: string, manager?: EntityManager): Promise<void>;
+  completeOnboarding(userId: string, tx?: TransactionContext): Promise<void>;
 }

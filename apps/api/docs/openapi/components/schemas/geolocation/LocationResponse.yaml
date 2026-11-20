@@ -3,5 +3,5 @@ required: [data]
 properties:
   data:
     anyOf:
-      - $ref: './PublicLocationView.yaml'
-      - $ref: './Location.yaml'
+      - $ref: '#/components/schemas/PublicLocationView'
+      - $ref: '#/components/schemas/Location'

@@ -6,7 +6,7 @@ import {
     createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import {
@@ -17,13 +17,15 @@ import {
 describe('SetOptionalProfileUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: SetOptionalProfileUseCase;
 
     beforeEach(() => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
+        unitOfWork = createMockUnitOfWork();
         useCase = new SetOptionalProfileUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -51,6 +53,7 @@ describe('SetOptionalProfileUseCase', () => {
             { bio: 'test bio', languages: ['uk', 'en'] }
         );
         expect(result.currentStep).toBe('COMPLETED');
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
     });
 
     it('sets socialLinks', async () => {

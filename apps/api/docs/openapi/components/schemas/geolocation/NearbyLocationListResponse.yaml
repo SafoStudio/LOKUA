@@ -4,4 +4,4 @@ properties:
   data:
     type: array
     items:
-      $ref: './NearbyLocationItem.yaml'
+      $ref: '#/components/schemas/NearbyLocationItem'

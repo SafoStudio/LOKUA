@@ -50,6 +50,7 @@ import {
 
 import { createAuthController } from './presentation/http/auth.controller.js';
 import { createAuthMiddleware } from './presentation/http/auth.middleware.js';
+import { createRequireRole } from './presentation/http/require-role.middleware.js';
 import { createAuthRouter } from './presentation/http/auth.routes.js';
 import { env } from '../../config/env.js';
 
@@ -66,6 +67,8 @@ export function createAuthModule({
   access,
   profiles
 }: CreateAuthModuleDependencies) {
+  const roleMiddleware = createRequireRole();
+
   const passwordCredentials = new PasswordCredentialRepositoryAdapter(
     dataSource.getRepository(PasswordCredentialEntity)
   );
@@ -248,7 +251,8 @@ export function createAuthModule({
   return {
     router,
     access,
-    requireAuth: middleware.requireAuth
+    requireAuth: middleware.requireAuth,
+    requireRole: roleMiddleware.requireRole
   };
 }
 

@@ -46,6 +46,9 @@ tags:
   - name: Auth / Password Reset
     description: Password recovery via email link
 
+  - name: Admin / Users
+    description: Admin operations on user accounts (audit-logged)
+
   - name: Onboarding
     description: Multi-step onboarding flow (date of birth -> profile -> city -> interests -> optional -> complete)
 

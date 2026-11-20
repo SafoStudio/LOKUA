@@ -33,7 +33,8 @@ describe('Users Use Cases', () => {
     findById: vi.fn(),
     findByEmail: vi.fn(),
     create: vi.fn(),
-    markEmailVerified: vi.fn()
+    markEmailVerified: vi.fn(),
+    setBirthDate: vi.fn()
   };
 
   it('CreateUserUseCase delegates creation to repository', async () => {

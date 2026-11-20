@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SetProfileUseCase } from '../../../../src/modules/onboarding/application/index.js';
-import { AppError } from '../../../../src/common/index.js';
 import {
     OnboardingAlreadyCompletedError,
     OnboardingStepOutOfOrderError
@@ -10,7 +9,7 @@ import {
     createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import {
@@ -22,14 +21,16 @@ describe('SetProfileUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
     let audit: ReturnType<typeof createMockAuditLogger>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: SetProfileUseCase;
 
     beforeEach(() => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
         audit = createMockAuditLogger();
+        unitOfWork = createMockUnitOfWork();
         useCase = new SetProfileUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -62,6 +63,7 @@ describe('SetProfileUseCase', () => {
         );
 
         expect(result.currentStep).toBe('CITY');
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
         expect(onboardingUsers.applyProfile).toHaveBeenCalledWith('user-1', validData, expect.anything());
     });
 

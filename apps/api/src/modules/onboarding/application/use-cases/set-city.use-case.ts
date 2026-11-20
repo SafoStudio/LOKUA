@@ -1,7 +1,7 @@
-import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import type { CityProvider } from '../../../dictionaries/index.js';
 import { AppError, assertString } from '../../../../common/index.js';
+import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -14,7 +14,7 @@ import { ensureOnboardingState } from './ensure-onboarding-state.js';
 
 export class SetCityUseCase {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
@@ -32,14 +32,14 @@ export class SetCityUseCase {
     if (!city) throw new AppError('City not found', 422);
     if (!city.isActive) throw new AppError('City is not active', 422);
 
-    return this.dataSource.transaction(async (manager) => {
-      const state = await ensureOnboardingState(this.stateRepository, context.user.id, manager);
+    return this.unitOfWork.run(async (tx) => {
+      const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('PROFILE')) {
         throw new OnboardingStepOutOfOrderError('PROFILE', state.currentStep);
       }
 
-      await this.onboardingUsers.applyCity(context.user.id, cityId, manager);
+      await this.onboardingUsers.applyCity(context.user.id, cityId, tx);
 
       const nextCompleted = state.completedSteps.includes('CITY')
         ? state.completedSteps
@@ -52,7 +52,7 @@ export class SetCityUseCase {
           currentStep: 'INTERESTS',
           completedSteps: nextCompleted
         },
-        manager
+        tx
       );
 
       await this.audit.log(
@@ -64,7 +64,7 @@ export class SetCityUseCase {
           afterState: { cityId },
           ip: context.ip
         },
-        manager
+        tx
       );
 
       return updated;

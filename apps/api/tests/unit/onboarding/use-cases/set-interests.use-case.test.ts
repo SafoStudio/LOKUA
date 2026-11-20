@@ -7,7 +7,7 @@ import {
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockInterestProvider,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import {
@@ -19,6 +19,7 @@ describe('SetInterestsUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
     let interests: ReturnType<typeof createMockInterestProvider>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: SetInterestsUseCase;
 
     const ids = ['i1', 'i2', 'i3'];
@@ -27,8 +28,9 @@ describe('SetInterestsUseCase', () => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
         interests = createMockInterestProvider();
+        unitOfWork = createMockUnitOfWork();
         useCase = new SetInterestsUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -62,6 +64,7 @@ describe('SetInterestsUseCase', () => {
             { interestIds: ids }
         );
         expect(result.currentStep).toBe('OPTIONAL');
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
         expect(onboardingUsers.applyInterests).toHaveBeenCalledWith('user-1', ids, expect.anything());
     });
 

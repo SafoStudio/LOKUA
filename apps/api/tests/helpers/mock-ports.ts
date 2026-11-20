@@ -1,12 +1,9 @@
 import { vi } from 'vitest';
-import type { DataSource } from 'typeorm';
 import type { OnboardingStateRepository } from '../../src/modules/onboarding/application/index.js';
-import type {
-    UserProvider,
-    UserOnboardingProvider
-} from '../../src/modules/users/index.js';
+import type { UserProvider, UserOnboardingProvider } from '../../src/modules/users/index.js';
 import type { AuditLogger } from '../../src/modules/moderation/index.js';
 import type { CityProvider, InterestProvider } from '../../src/modules/dictionaries/index.js';
+import type { TransactionContext, UnitOfWork } from '../../src/common/index.js';
 
 export function createMockStateRepository(): OnboardingStateRepository {
     return {
@@ -22,7 +19,8 @@ export function createMockUserProvider(): UserProvider {
         findById: vi.fn(),
         findByEmail: vi.fn(),
         create: vi.fn(),
-        markEmailVerified: vi.fn()
+        markEmailVerified: vi.fn(),
+        setBirthDate: vi.fn()
     };
 }
 
@@ -57,8 +55,10 @@ export function createMockInterestProvider(): InterestProvider {
     };
 }
 
-export function createMockDataSource(): DataSource {
+export function createMockUnitOfWork(): UnitOfWork {
+    const tx = {} as TransactionContext;
+
     return {
-        transaction: vi.fn(async (fn: (manager: unknown) => Promise<unknown>) => fn({}))
-    } as unknown as DataSource;
+        run: vi.fn(async (fn: (t: TransactionContext) => Promise<unknown>) => fn(tx))
+    } as unknown as UnitOfWork;
 }

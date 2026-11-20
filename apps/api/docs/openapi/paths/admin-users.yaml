@@ -1,0 +1,54 @@
+/api/v1/admin/users/{id}/birth-date:
+  patch:
+    tags: [Admin / Users]
+    summary: Change user birth date
+    description: |
+      Admin-only. Atomically updates `users.birth_date` and writes an entry
+      to `audit_logs` with `action: USER_BIRTH_DATE_CHANGED`.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdminChangeBirthDateRequest'
+    responses:
+      '200':
+        description: Birth date updated
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminBirthDateView'
+      '400':
+        description: Validation error
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Forbidden (ADMIN role required)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForbiddenResponse'
+      '404':
+        description: User not found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
