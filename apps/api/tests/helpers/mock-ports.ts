@@ -22,7 +22,8 @@ export function createMockUserProvider(): UserProvider {
         findById: vi.fn(),
         findByEmail: vi.fn(),
         create: vi.fn(),
-        markEmailVerified: vi.fn()
+        markEmailVerified: vi.fn(),
+        setBirthDate: vi.fn()
     };
 }
 

@@ -1,5 +1,6 @@
 import type { CreateUserData, UserProvider, UserRepository } from '../../../application/index.js';
 import type { User } from '../../../domain/index.js';
+import type { TransactionContext } from '../../../../../common/index.js';
 
 export class UserProviderAdapter implements UserProvider {
   constructor(private readonly repository: UserRepository) {}
@@ -18,5 +19,9 @@ export class UserProviderAdapter implements UserProvider {
 
   async markEmailVerified(id: string): Promise<void> {
     await this.repository.markEmailVerified(id);
+  }
+
+  async setBirthDate(id: string, birthDate: Date, tx?: TransactionContext): Promise<User> {
+    return this.repository.setBirthDate(id, birthDate, tx);
   }
 }

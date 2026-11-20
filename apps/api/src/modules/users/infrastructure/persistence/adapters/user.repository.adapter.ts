@@ -1,7 +1,9 @@
 import type { Repository } from 'typeorm';
 import type { CreateUserData, UserRepository } from '../../../application/index.js';
 import type { User } from '../../../domain/index.js';
-import type { UserEntity } from '../entities/user.entity.js';
+import { UserEntity } from '../entities/user.entity.js';
+import type { TransactionContext } from '../../../../../common/index.js';
+import { toEntityManager } from '../../../../../common/index.js';
 
 export class UserRepositoryAdapter implements UserRepository {
   constructor(private readonly repo: Repository<UserEntity>) {}
@@ -33,6 +35,13 @@ export class UserRepositoryAdapter implements UserRepository {
 
   async markEmailVerified(id: string): Promise<void> {
     await this.repo.update({ id }, { emailVerified: true });
+  }
+
+  async setBirthDate(id: string, birthDate: Date, tx?: TransactionContext): Promise<User> {
+    const repo = tx ? toEntityManager(tx).getRepository(UserEntity) : this.repo;
+    await repo.update({ id }, { birthDate });
+    const updated = await repo.findOneOrFail({ where: { id } });
+    return this.toDomain(updated);
   }
 
   private toDomain(entity: UserEntity): User {
