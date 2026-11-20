@@ -8,7 +8,7 @@ import {
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockCityProvider,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import {
@@ -20,6 +20,7 @@ describe('SetCityUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
     let cities: ReturnType<typeof createMockCityProvider>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: SetCityUseCase;
 
     const cityId = 'city-123';
@@ -39,8 +40,9 @@ describe('SetCityUseCase', () => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
         cities = createMockCityProvider();
+        unitOfWork = createMockUnitOfWork();
         useCase = new SetCityUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -66,6 +68,7 @@ describe('SetCityUseCase', () => {
         );
 
         expect(result.currentStep).toBe('INTERESTS');
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
         expect(onboardingUsers.applyCity).toHaveBeenCalledWith('user-1', cityId, expect.anything());
     });
 

@@ -1,8 +1,7 @@
-import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import type { InterestProvider } from '../../../dictionaries/index.js';
 import { AppError, assertString } from '../../../../common/index.js';
-import type { TransactionContext } from '../../../../common/index.js';
+import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -15,7 +14,7 @@ import { ensureOnboardingState } from './ensure-onboarding-state.js';
 
 export class SetInterestsUseCase {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
@@ -53,14 +52,14 @@ export class SetInterestsUseCase {
       throw new AppError(`Interests not found or inactive: ${missing.join(', ')}`, 422);
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const state = await ensureOnboardingState(this.stateRepository, context.user.id, manager);
+    return this.unitOfWork.run(async (tx) => {
+      const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('CITY')) {
         throw new OnboardingStepOutOfOrderError('CITY', state.currentStep);
       }
 
-      await this.onboardingUsers.applyInterests(context.user.id, uniqueIds, manager);
+      await this.onboardingUsers.applyInterests(context.user.id, uniqueIds, tx);
 
       const nextCompleted = state.completedSteps.includes('INTERESTS')
         ? state.completedSteps
@@ -73,7 +72,7 @@ export class SetInterestsUseCase {
           currentStep: 'OPTIONAL',
           completedSteps: nextCompleted
         },
-        manager
+        tx
       );
 
       await this.audit.log(
@@ -85,8 +84,7 @@ export class SetInterestsUseCase {
           afterState: { interestIds: uniqueIds },
           ip: context.ip
         },
-        // TODO: migrate onboarding to UnitOfWork; bridge EntityManager -> TransactionContext for now
-        manager as unknown as TransactionContext
+        tx
       );
 
       return updated;

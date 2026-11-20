@@ -3,12 +3,14 @@ import type { UserOnboardingProvider } from '../../../application/index.js';
 import { UserEntity } from '../entities/user.entity.js';
 import { UserPhotoEntity } from '../entities/user-photo.entity.js';
 import { UserInterestEntity } from '../entities/user-interest.entity.js';
+import type { TransactionContext } from '../../../../../common/index.js';
+import { toEntityManager } from '../../../../../common/index.js';
 
 export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
   constructor(private readonly dataSource: DataSource) {}
 
-  async applyDateOfBirth(userId: string, birthDate: Date, manager?: EntityManager): Promise<void> {
-    await this.withManager(manager, async (m) => {
+  async applyDateOfBirth(userId: string, birthDate: Date, tx?: TransactionContext): Promise<void> {
+    await this.withManager(tx, async (m) => {
       await m.getRepository(UserEntity).update({ id: userId }, { birthDate });
     });
   }
@@ -16,9 +18,9 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
   async applyProfile(
     userId: string,
     data: { name: string; mainPhotoUrl: string },
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<void> {
-    await this.withManager(manager, async (m) => {
+    await this.withManager(tx, async (m) => {
       await m.getRepository(UserEntity).update({ id: userId }, { name: data.name });
 
       const photos = m.getRepository(UserPhotoEntity);
@@ -40,8 +42,8 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
     });
   }
 
-  async applyCity(userId: string, cityId: string, manager?: EntityManager): Promise<void> {
-    await this.withManager(manager, async (m) => {
+  async applyCity(userId: string, cityId: string, tx?: TransactionContext): Promise<void> {
+    await this.withManager(tx, async (m) => {
       await m.getRepository(UserEntity).update({ id: userId }, { cityId });
     });
   }
@@ -49,9 +51,9 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
   async applyInterests(
     userId: string,
     interestIds: string[],
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<void> {
-    await this.withManager(manager, async (m) => {
+    await this.withManager(tx, async (m) => {
       const repo = m.getRepository(UserInterestEntity);
       await repo.delete({ userId });
       if (interestIds.length > 0) {
@@ -67,9 +69,9 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
       languages?: string[] | null;
       socialLinks?: Record<string, string> | null;
     },
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<void> {
-    await this.withManager(manager, async (m) => {
+    await this.withManager(tx, async (m) => {
       const patch: QueryDeepPartialEntity<UserEntity> = {};
       if (data.bio !== undefined) patch.bio = data.bio;
       if (data.languages !== undefined) patch.languages = data.languages;
@@ -79,18 +81,18 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
     });
   }
 
-  async completeOnboarding(userId: string, manager?: EntityManager): Promise<void> {
-    await this.withManager(manager, async (m) => {
+  async completeOnboarding(userId: string, tx?: TransactionContext): Promise<void> {
+    await this.withManager(tx, async (m) => {
       await m.getRepository(UserEntity).update({ id: userId }, { onboardingCompleted: true });
     });
   }
 
   private async withManager(
-    manager: EntityManager | undefined,
+    tx: TransactionContext | undefined,
     fn: (m: EntityManager) => Promise<void>
   ): Promise<void> {
-    if (manager) {
-      await fn(manager);
+    if (tx) {
+      await fn(toEntityManager(tx));
       return;
     }
     await this.dataSource.transaction(fn);

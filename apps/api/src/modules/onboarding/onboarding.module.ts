@@ -15,6 +15,7 @@ import {
 import { OnboardingStateEntity, OnboardingStateRepositoryAdapter } from './infrastructure/index.js';
 import { createOnboardingController } from './presentation/http/onboarding.controller.js';
 import { createOnboardingRouter } from './presentation/http/onboarding.routes.js';
+import { TypeOrmUnitOfWork } from '../../common/index.js';
 
 export interface CreateOnboardingModuleDependencies {
   dataSource: DataSource;
@@ -39,10 +40,12 @@ export function createOnboardingModule({
     dataSource.getRepository(OnboardingStateEntity)
   );
 
+  const unitOfWork = new TypeOrmUnitOfWork(dataSource);
+
   const getOnboardingState = new GetOnboardingStateUseCase(stateRepository);
 
   const setDateOfBirth = new SetDateOfBirthUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,
@@ -50,7 +53,7 @@ export function createOnboardingModule({
   );
 
   const setProfile = new SetProfileUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,
@@ -58,7 +61,7 @@ export function createOnboardingModule({
   );
 
   const setCity = new SetCityUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,
@@ -67,7 +70,7 @@ export function createOnboardingModule({
   );
 
   const setInterests = new SetInterestsUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,
@@ -76,7 +79,7 @@ export function createOnboardingModule({
   );
 
   const setOptionalProfile = new SetOptionalProfileUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,
@@ -84,7 +87,7 @@ export function createOnboardingModule({
   );
 
   const completeOnboarding = new CompleteOnboardingUseCase(
-    dataSource,
+    unitOfWork,
     stateRepository,
     users,
     onboardingUsers,

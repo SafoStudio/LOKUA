@@ -1,4 +1,4 @@
-import type { EntityManager } from 'typeorm';
+import type { TransactionContext } from '../../../../common/index.js';
 import type { OnboardingState, OnboardingStep } from '../../domain/index.js';
 
 export interface UpdateOnboardingStepData {
@@ -16,12 +16,12 @@ export interface UpdateOnboardingStepData {
 }
 
 export interface OnboardingStateRepository {
-  findByUserId(userId: string, manager?: EntityManager): Promise<OnboardingState | null>;
-  findById(id: string, manager?: EntityManager): Promise<OnboardingState | null>;
-  create(userId: string, manager?: EntityManager): Promise<OnboardingState>;
+  findByUserId(userId: string, tx?: TransactionContext): Promise<OnboardingState | null>;
+  findById(id: string, tx?: TransactionContext): Promise<OnboardingState | null>;
+  create(userId: string, tx?: TransactionContext): Promise<OnboardingState>;
   updateStep(
     id: string,
     data: UpdateOnboardingStepData,
-    manager?: EntityManager
+    tx?: TransactionContext
   ): Promise<OnboardingState>;
 }

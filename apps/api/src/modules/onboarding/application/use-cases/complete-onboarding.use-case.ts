@@ -1,7 +1,6 @@
-import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
-import type { TransactionContext } from '../../../../common/index.js';
+import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -10,7 +9,7 @@ import { OnboardingAlreadyCompletedError, OnboardingIncompleteError } from '../.
 
 export class CompleteOnboardingUseCase {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
@@ -22,8 +21,8 @@ export class CompleteOnboardingUseCase {
       throw new OnboardingAlreadyCompletedError();
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const state = await this.stateRepository.findByUserId(context.user.id, manager);
+    return this.unitOfWork.run(async (tx) => {
+      const state = await this.stateRepository.findByUserId(context.user.id, tx);
       if (!state) {
         throw new AppError('Onboarding not started', 400);
       }
@@ -45,7 +44,7 @@ export class CompleteOnboardingUseCase {
 
       const completedAt = new Date();
 
-      await this.onboardingUsers.completeOnboarding(context.user.id, manager);
+      await this.onboardingUsers.completeOnboarding(context.user.id, tx);
 
       const updated = await this.stateRepository.updateStep(
         state.id,
@@ -53,7 +52,7 @@ export class CompleteOnboardingUseCase {
           currentStep: 'COMPLETED',
           completedAt
         },
-        manager
+        tx
       );
 
       await this.audit.log(
@@ -65,8 +64,7 @@ export class CompleteOnboardingUseCase {
           afterState: { completedAt: completedAt.toISOString() },
           ip: context.ip
         },
-        // TODO: migrate onboarding to UnitOfWork; bridge EntityManager -> TransactionContext for now
-        manager as unknown as TransactionContext
+        tx
       );
 
       return updated;

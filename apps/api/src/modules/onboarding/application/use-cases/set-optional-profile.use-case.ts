@@ -1,7 +1,6 @@
-import type { DataSource } from 'typeorm';
 import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
-import type { TransactionContext } from '../../../../common/index.js';
+import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
@@ -14,7 +13,7 @@ import { ensureOnboardingState } from './ensure-onboarding-state.js';
 
 export class SetOptionalProfileUseCase {
   constructor(
-    private readonly dataSource: DataSource,
+    private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
@@ -93,14 +92,14 @@ export class SetOptionalProfileUseCase {
       throw new AppError('No optional fields provided', 400);
     }
 
-    return this.dataSource.transaction(async (manager) => {
-      const state = await ensureOnboardingState(this.stateRepository, context.user.id, manager);
+    return this.unitOfWork.run(async (tx) => {
+      const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('INTERESTS')) {
         throw new OnboardingStepOutOfOrderError('INTERESTS', state.currentStep);
       }
 
-      await this.onboardingUsers.applyOptionalProfile(context.user.id, patch, manager);
+      await this.onboardingUsers.applyOptionalProfile(context.user.id, patch, tx);
 
       const nextCompleted = state.completedSteps.includes('OPTIONAL')
         ? state.completedSteps
@@ -115,7 +114,7 @@ export class SetOptionalProfileUseCase {
           currentStep: 'COMPLETED',
           completedSteps: nextCompleted
         },
-        manager
+        tx
       );
 
       await this.audit.log(
@@ -127,8 +126,7 @@ export class SetOptionalProfileUseCase {
           afterState: patch as Record<string, unknown>,
           ip: context.ip
         },
-        // TODO: migrate onboarding to UnitOfWork; bridge EntityManager -> TransactionContext for now
-        manager as unknown as TransactionContext
+        tx
       );
 
       return updated;

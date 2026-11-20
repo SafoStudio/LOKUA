@@ -9,7 +9,7 @@ import {
     createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
-    createMockDataSource
+    createMockUnitOfWork
 } from '../../../helpers/mock-ports.js';
 import { createMockAuthUser } from '../../../fixtures/users.fixture.js';
 import {
@@ -21,14 +21,16 @@ describe('CompleteOnboardingUseCase', () => {
     let stateRepository: ReturnType<typeof createMockStateRepository>;
     let onboardingUsers: ReturnType<typeof createMockUserOnboardingProvider>;
     let audit: ReturnType<typeof createMockAuditLogger>;
+    let unitOfWork: ReturnType<typeof createMockUnitOfWork>;
     let useCase: CompleteOnboardingUseCase;
 
     beforeEach(() => {
         stateRepository = createMockStateRepository();
         onboardingUsers = createMockUserOnboardingProvider();
         audit = createMockAuditLogger();
+        unitOfWork = createMockUnitOfWork();
         useCase = new CompleteOnboardingUseCase(
-            createMockDataSource(),
+            unitOfWork,
             stateRepository,
             createMockUserProvider(),
             onboardingUsers,
@@ -51,6 +53,7 @@ describe('CompleteOnboardingUseCase', () => {
 
         expect(result.currentStep).toBe('COMPLETED');
         expect(result.completedAt).not.toBeNull();
+        expect(unitOfWork.run).toHaveBeenCalledTimes(1);
         expect(onboardingUsers.completeOnboarding).toHaveBeenCalledWith('user-1', expect.anything());
         expect(audit.log).toHaveBeenCalledWith(
             expect.objectContaining({ action: 'ONBOARDING_COMPLETED' }),
@@ -96,7 +99,7 @@ describe('CompleteOnboardingUseCase', () => {
         ).rejects.toMatchObject({ statusCode: 400 });
     });
 
-    it('rolls back if audit.log throws (transaction)', async () => {
+    it('propagates audit.log failure through the transaction', async () => {
         const state = createMockOnboardingState(
             withCompletedSteps('DATE_OF_BIRTH', 'PROFILE', 'CITY', 'INTERESTS')
         );
