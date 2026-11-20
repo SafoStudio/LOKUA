@@ -10,3 +10,6 @@ export type { GeoJSONPolygon, GeoJSONMultiPolygon, GeoJSONGeometry } from './typ
 export { geojsonPointTransformer } from './transformers/geojson-point.transformer.js';
 export { geojsonPolygonTransformer } from './transformers/geojson-polygon.transformer.js';
 export { dateTransformer } from './transformers/date.transformer.js';
+
+export type { TransactionContext, UnitOfWork } from './types/unit-of-work.js';
+export { TypeOrmUnitOfWork, toEntityManager } from './database/typeorm-unit-of-work.js';
