@@ -1,14 +1,40 @@
 import type { DataSource } from 'typeorm';
-import type { AccessService } from '../users/index.js';
+import type { RequestHandler } from 'express';
+import type { UserProvider } from '../users/index.js';
+
+import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
+import { CreateEventUseCase } from './application/index.js';
+import { createEventsController } from './presentation/http/events.controller.js';
+import { createEventsRouter } from './presentation/http/events.routes.js';
 
 export interface CreateEventsModuleDependencies {
   dataSource: DataSource;
-  access: AccessService;
+  users: UserProvider;
+  requireAuth: RequestHandler;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- TODO: remove when logic is added
-export function createEventsModule({ dataSource, access }: CreateEventsModuleDependencies) {
-  return {};
+export function createEventsModule({
+  dataSource,
+  users,
+  requireAuth
+}: CreateEventsModuleDependencies) {
+  const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
+
+  const createEvent = new CreateEventUseCase(eventRepository, users);
+
+  const controller = createEventsController({
+    createEvent
+  });
+
+  const router = createEventsRouter({
+    requireAuth,
+    controller
+  });
+
+  return {
+    createEvent,
+    router
+  };
 }
 
 export type EventsModule = ReturnType<typeof createEventsModule>;

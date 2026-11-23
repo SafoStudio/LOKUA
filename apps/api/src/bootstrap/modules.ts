@@ -48,7 +48,8 @@ export function createModules(dataSource: DataSource) {
 
   const eventsModule = createEventsModule({
     dataSource,
-    access: usersModule.access
+    users: usersModule.users,
+    requireAuth: authModule.requireAuth
   });
 
   const notificationsModule = createNotificationsModule({ dataSource });

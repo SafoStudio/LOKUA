@@ -13,6 +13,7 @@ interface AppDependencies {
   onboardingRouter?: express.Router;
   geolocationRouter?: express.Router;
   adminUsersRouter?: express.Router;
+  eventsRouter: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -21,7 +22,8 @@ export function createApp({
   authRouter,
   onboardingRouter,
   geolocationRouter,
-  adminUsersRouter
+  adminUsersRouter,
+  eventsRouter
 }: AppDependencies) {
   const app = express();
 
@@ -99,6 +101,10 @@ export function createApp({
 
   if (adminUsersRouter) {
     app.use(`${API_PREFIX}/admin`, adminUsersRouter);
+  }
+
+  if (eventsRouter) {
+    app.use(`${API_PREFIX}/events`, eventsRouter);
   }
 
   app.use(notFound);

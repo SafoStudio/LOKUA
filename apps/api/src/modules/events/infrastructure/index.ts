@@ -6,3 +6,5 @@ export { EventReviewEntity } from './persistence/entities/event-review.entity.js
 export { EventTagEntity } from './persistence/entities/event-tag.entity.js';
 export { EventEntity } from './persistence/entities/event.entity.js';
 export { TagEntity } from './persistence/entities/tag.entity.js';
+
+export { EventRepositoryAdapter } from './persistence/adapters/event.repository.adapter.js';
