@@ -13,7 +13,8 @@ try {
     authRouter: modules.auth.router,
     onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router,
-    adminUsersRouter: modules.moderation.adminUsersRouter
+    adminUsersRouter: modules.moderation.adminUsersRouter,
+    eventsRouter: modules.events.router
   });
 
   const server = app.listen(env.PORT, () => {

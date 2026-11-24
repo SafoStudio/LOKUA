@@ -1,3 +1,4 @@
+import { createUsersModule } from '../../src/modules/users/index.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import type { DataSource } from 'typeorm';
 import { createTestDataSource, clearAllTables, TEST_DATABASE_URL } from './helpers/test-db.js';
@@ -95,7 +96,7 @@ describe('Database & Transactions Integration Tests', () => {
     it('atomically creates User + PasswordCredential via TypeOrmRegistrationTransaction and rolls back on duplicate email', async (ctx) => {
       if (!dbAvailable) ctx.skip();
 
-      const transaction = new TypeOrmRegistrationTransaction(dataSource);
+      const transaction = new TypeOrmRegistrationTransaction(dataSource, createUsersModule({ dataSource }).authUsers);
 
       const user = await transaction.createUserWithPasswordCredential({
         email: 'transaction-pwd@example.com',
@@ -127,7 +128,7 @@ describe('Database & Transactions Integration Tests', () => {
     it('atomically creates User + GoogleCredential via TypeOrmGoogleLoginTransaction', async (ctx) => {
       if (!dbAvailable) ctx.skip();
 
-      const transaction = new TypeOrmGoogleLoginTransaction(dataSource);
+      const transaction = new TypeOrmGoogleLoginTransaction(dataSource, createUsersModule({ dataSource }).authUsers);
 
       const user = await transaction.createUserWithGoogleCredential({
         email: 'tx-google@gmail.com',
@@ -158,7 +159,7 @@ describe('Database & Transactions Integration Tests', () => {
     it('atomically creates User + PasskeyCredential with pre-generated UUID via TypeOrmPasskeySignupTransaction', async (ctx) => {
       if (!dbAvailable) ctx.skip();
 
-      const transaction = new TypeOrmPasskeySignupTransaction(dataSource);
+      const transaction = new TypeOrmPasskeySignupTransaction(dataSource, createUsersModule({ dataSource }).authUsers);
       const preGeneratedUserId = randomUUID();
 
       const user = await transaction.createUserWithPasskeyCredential({

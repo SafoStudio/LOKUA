@@ -1,13 +1,15 @@
+import type { TransactionContext } from '../../../../common/index.js';
 import type { DataSource } from 'typeorm';
 import type { PasskeySignupTransaction } from '../../application/index.js';
-import type { AuthUser } from '../../../users/index.js';
-import { UserRepositoryAdapter, UserEntity } from '../../../users/infrastructure/index.js';
+import type { AuthUser, AuthUserProvider } from '../../../users/index.js';
 import { PasskeyCredentialRepositoryAdapter, PasskeyCredentialEntity } from '../index.js';
 import { AppError } from '../../../../common/index.js';
-import { toAuthUser } from './to-auth-user.mapper.js';
 
 export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly users: AuthUserProvider
+  ) {}
 
   async createUserWithPasskeyCredential(data: {
     userId: string;
@@ -23,23 +25,25 @@ export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction
   }): Promise<AuthUser> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const userRepository = new UserRepositoryAdapter(manager.getRepository(UserEntity));
         const credentialRepository = new PasskeyCredentialRepositoryAdapter(
           manager.getRepository(PasskeyCredentialEntity)
         );
 
-        const user = await userRepository.create({
-          id: data.userId,
-          email: data.email,
-          name: data.name
-        });
+        const user = await this.users.create(
+          {
+            id: data.userId,
+            email: data.email,
+            name: data.name
+          },
+          manager as unknown as TransactionContext
+        );
 
         await credentialRepository.create({
           userId: user.id,
           ...data.credential
         });
 
-        return toAuthUser(user);
+        return user;
       });
     } catch (error) {
       const databaseError = error as {

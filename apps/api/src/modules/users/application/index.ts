@@ -11,7 +11,6 @@ export { FindUserByEmailUseCase } from './use-cases/find-user-by-email.use-case.
 export { MarkEmailVerifiedUseCase } from './use-cases/mark-email-verified.use-case.js';
 
 export { AccessService } from './services/access.service.js';
-export type { AgeRestriction } from './services/access.service.js';
 
 export type { UserProfile } from './types/user-profile.js';
 export type { UserProfileProvider } from './ports/user-profile.provider.js';

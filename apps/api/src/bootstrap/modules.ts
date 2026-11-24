@@ -43,12 +43,15 @@ export function createModules(dataSource: DataSource) {
     dataSource,
     cities: dictionariesModule.cities,
     countries: dictionariesModule.countries,
-    users: usersModule.users
+    users: usersModule.users,
+    requireAuth: authModule.requireAuth
   });
 
   const eventsModule = createEventsModule({
     dataSource,
-    access: usersModule.access
+    access: usersModule.access,
+    optionalAuth: authModule.optionalAuth,
+    requireAuth: authModule.requireAuth
   });
 
   const notificationsModule = createNotificationsModule({ dataSource });

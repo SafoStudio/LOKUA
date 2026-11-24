@@ -4,7 +4,10 @@
     summary: Create a location
     description: |
       Creates a location with exact and (optionally) public coordinates.
-      Currently public (no auth). Access control (visibility/auth) is planned as a separate task.
+      The authenticated account is recorded as the creator.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
     requestBody:
       required: true
       content:
@@ -24,6 +27,24 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Inactive account
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: Invalid location data
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 /api/v1/geo/locations/nearby:
   get:
@@ -130,7 +151,11 @@
     description: |
       Returns the location. When precision=PUBLIC (default), only public coordinates
       are returned and address is omitted. When precision=EXACT, exact coordinates
-      and the address are returned.
+      and the address are returned to an authenticated active account.
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
     parameters:
       - name: id
         in: path
@@ -160,6 +185,18 @@
               $ref: '#/components/schemas/ValidationErrorResponse'
       '404':
         description: Location not found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: Authentication required for EXACT precision
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Inactive account requesting EXACT precision
         content:
           application/json:
             schema:

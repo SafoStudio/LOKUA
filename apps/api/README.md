@@ -6,7 +6,7 @@ Backend for event management
 
 - **Runtime:** Node.js 24, TypeScript 5.9, ESM (`"type": "module"`)
 - **HTTP:** Express 5
-- **Database:** PostgreSQL 16, TypeORM 0.3.x (migrations, `synchronize` disabled)
+- **Database:** PostgreSQL 16, TypeORM (migrations, `synchronize` disabled)
 - **Validation:** Zod 4
 - **Authentication:** JWT (`jose`), bcrypt, Google OAuth, WebAuthn (passkeys)
 - **Email:** nodemailer + Brevo SMTP
@@ -30,13 +30,19 @@ apps/api/src/
 ├── docs/ # OpenAPI (builder, loader, router)
 ├── middlewares/ # error, not-found, validate
 ├── modules/
-│ ├── auth/ # authentication (email/password, Google, passkeys, sessions)
+│ ├── auth/ # authentication and sessions
+│ ├── dictionaries/ # countries, cities, interests, categories
+│ ├── events/ # event drafts and discovery
+│ ├── geolocation/ # locations and geocoding
+│ ├── moderation/ # administrative actions and audit
+│ ├── notifications/ # notification persistence
+│ ├── onboarding/ # profile setup
 │ ├── storage/ # S3 adapter (MinIO / R2)
-│ └── users/ # identity (User + UserProvider)
+│ └── users/ # accounts, profiles and access policies
 └── types/ # express.d.ts
 ```
 
-Each module has `domain / application / infrastructure / presentation` layers. The composition root is `bootstrap/modules.ts`. Barrel files (`index.ts`) use explicit named exports only (`export *` is forbidden). Cross-module imports go through the module's public `index.ts`.
+Modules use `domain / application / infrastructure / presentation` layers as needed. See [AGENTS.md](./AGENTS.md) for implementation conventions. The composition root is `bootstrap/modules.ts`. Barrel files (`index.ts`) use explicit named exports only (`export *` is forbidden). Cross-module imports go through the module's public `index.ts`.
 
 ## Requirements
 
@@ -184,11 +190,11 @@ tests/
 ```
 
 - vitest.config.ts uses fileParallelism: false to avoid TRUNCATE deadlocks in parallel integration files.
-- Integration tests apply migrations once via global-setup.ts and refuse to run against the dev database lokua (only lokua_test, or ALLOW_UNSAFE_TEST_DB).
+- Integration tests apply migrations once via global-setup.ts and refuse to run against the dev database lokua unless ALLOW_UNSAFE_TEST_DB is set. Use lokua_test or another dedicated test database.
 
 OpenAPI / Scalar UI: /docs
 
-The spec is assembled from src/docs/paths/_.yaml (one file per module) and src/docs/components/schemas/_.yaml (one file per schema).
+The spec is assembled from docs/openapi/paths/_.yaml (one file per module) and docs/openapi/components/schemas/\**/_.yaml (one file per schema).
 
 - loader — src/docs/openapi.loader.ts;
 - builder — openapi.builder.ts.

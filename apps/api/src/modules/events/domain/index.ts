@@ -3,4 +3,20 @@ export type { EventStatus } from './types/event-status.js';
 export type { ParticipationMode } from './types/participation-mode.js';
 export type { ParticipationStatus } from './types/participation-status.js';
 export type { OccurrenceStatus } from './types/occurrence-status.js';
-export type { AgeRestriction } from './types/age-restriction.js';
+export type { AgeRestriction } from '../../../common/index.js';
+
+export type { Event } from './models/event.js';
+
+export {
+  validateCreateEvent,
+  validateEventDates,
+  validateEventFormat,
+  validateEventPrice
+} from './rules/create-event.rules.js';
+
+export {
+  EventDomainError,
+  InvalidEventDatesError,
+  InvalidEventFormatError,
+  InvalidEventPriceError
+} from './errors.js';

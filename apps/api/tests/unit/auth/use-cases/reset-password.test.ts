@@ -30,6 +30,7 @@ describe('ResetPasswordUseCase', () => {
         create: vi.fn(),
         findById: vi.fn(),
         revokeById: vi.fn(),
+        rotate: vi.fn().mockResolvedValue(true),
         revokeByTokenHash: vi.fn(),
         revokeAllByUserId: vi.fn()
     };

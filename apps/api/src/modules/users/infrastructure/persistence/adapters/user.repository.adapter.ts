@@ -18,8 +18,9 @@ export class UserRepositoryAdapter implements UserRepository {
     return entity ? this.toDomain(entity) : null;
   }
 
-  async create(data: CreateUserData): Promise<User> {
-    const entity = this.repo.create({
+  async create(data: CreateUserData, tx?: TransactionContext): Promise<User> {
+    const repo = tx ? toEntityManager(tx).getRepository(UserEntity) : this.repo;
+    const entity = repo.create({
       id: data.id,
       email: data.email,
       name: data.name,
@@ -29,7 +30,7 @@ export class UserRepositoryAdapter implements UserRepository {
       status: data.status ?? 'ACTIVE',
       cityId: data.cityId ?? null
     });
-    const saved = await this.repo.save(entity);
+    const saved = await repo.save(entity);
     return this.toDomain(saved);
   }
 

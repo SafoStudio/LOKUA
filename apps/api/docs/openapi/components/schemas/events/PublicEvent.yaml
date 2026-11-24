@@ -1,0 +1,41 @@
+type: object
+required:
+  - id
+  - title
+  - categoryId
+  - description
+  - coverUrl
+  - mediaUrls
+  - format
+  - capacityLimit
+  - participationMode
+  - ageRestriction
+  - isFree
+  - priceText
+  - itemsToBring
+  - firstStartsAt
+  - firstEndsAt
+  - timezone
+  - publishedAt
+  - createdAt
+properties:
+  id: { type: string, format: uuid }
+  title: { type: string }
+  categoryId: { type: string, format: uuid }
+  description: { type: string }
+  coverUrl: { type: [string, 'null'] }
+  mediaUrls:
+    type: array
+    items: { type: string }
+  format: { type: string, enum: [OFFLINE, ONLINE] }
+  capacityLimit: { type: [integer, 'null'] }
+  participationMode: { type: string, enum: [FREE, REQUEST] }
+  ageRestriction: { type: string, enum: [ALL, SIXTEEN_PLUS, EIGHTEEN_PLUS] }
+  isFree: { type: boolean }
+  priceText: { type: [string, 'null'] }
+  itemsToBring: { type: [string, 'null'] }
+  firstStartsAt: { type: [string, 'null'], format: date-time }
+  firstEndsAt: { type: [string, 'null'], format: date-time }
+  timezone: { type: string }
+  publishedAt: { type: [string, 'null'], format: date-time }
+  createdAt: { type: string, format: date-time }

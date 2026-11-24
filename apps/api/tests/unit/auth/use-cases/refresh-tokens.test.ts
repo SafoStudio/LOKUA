@@ -31,6 +31,7 @@ describe('RefreshTokensUseCase', () => {
     create: vi.fn(),
     findById: vi.fn(),
     revokeById: vi.fn(),
+    rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
     revokeAllByUserId: vi.fn()
   };
@@ -41,7 +42,7 @@ describe('RefreshTokensUseCase', () => {
 
   const context = { ip: '127.0.0.1', userAgent: 'vitest' };
 
-  const useCase = new RefreshTokensUseCase(users, tokens, refreshSessions, securityEvents);
+  const useCase = new RefreshTokensUseCase(users, tokens, refreshSessions, securityEvents, 7 * 24 * 60 * 60 * 1000);
 
   it('refreshes tokens and returns user with new pair of tokens', async () => {
     const user = createMockAuthUser({
@@ -78,8 +79,10 @@ describe('RefreshTokensUseCase', () => {
     expect(tokens.verifyRefreshToken).toHaveBeenCalledWith('valid-refresh-token');
     expect(refreshSessions.findById).toHaveBeenCalledWith('session-1');
     expect(users.findById).toHaveBeenCalledWith('user-1');
-    expect(refreshSessions.create).toHaveBeenCalled();
-    expect(refreshSessions.revokeById).toHaveBeenCalledWith('session-1');
+    expect(refreshSessions.rotate).toHaveBeenCalledWith('session-1', expect.objectContaining({
+      userId: expect.any(String),
+      tokenHash: expect.any(String)
+    }));
     expect(refreshSessions.revokeAllByUserId).not.toHaveBeenCalled();
   });
 

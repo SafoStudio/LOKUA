@@ -1,3 +1,4 @@
+import type { RequestHandler } from 'express';
 import type { DataSource } from 'typeorm';
 import type { CityProvider, CountryProvider } from '../dictionaries/index.js';
 import type { UserProvider } from '../users/index.js';
@@ -36,6 +37,7 @@ export interface CreateGeolocationModuleDependencies {
   cities: CityProvider;
   countries: CountryProvider;
   users: UserProvider;
+  requireAuth: RequestHandler;
   geocodingProvider?: GeocodingProvider;
   reverseGeocodingProvider?: ReverseGeocodingProvider;
 }
@@ -45,6 +47,7 @@ export function createGeolocationModule({
   cities,
   countries,
   users,
+  requireAuth,
   geocodingProvider,
   reverseGeocodingProvider
 }: CreateGeolocationModuleDependencies) {
@@ -94,7 +97,7 @@ export function createGeolocationModule({
     reverseGeocode
   });
 
-  const router = createGeolocationRouter(controller);
+  const router = createGeolocationRouter(controller, requireAuth);
 
   const locations: LocationProvider = new LocationProviderAdapter(
     locationRepository,

@@ -30,6 +30,7 @@ import type {
   AuthUserProvider,
   AccessService
 } from '../../../src/modules/users/index.js';
+import {Router} from "express";
 
 export function createMockDependencies() {
   const register = {
@@ -190,7 +191,10 @@ export function createTestApp(mocks = createMockDependencies()) {
   });
 
   const authRouter = createAuthRouter(controller, middleware);
-  const app = createApp({ authRouter });
+  const app = createApp({
+    authRouter,
+    eventsRouter: Router()
+  });
 
   return { app, mocks };
 }

@@ -1,7 +1,7 @@
 import type { AuthUser } from '../../domain/index.js';
 import { calculateAge } from '../../domain/index.js';
 
-export type AgeRestriction = 'NONE' | 'AGE_16' | 'AGE_18';
+import type { AgeRestriction } from '../../../../common/index.js';
 
 export class AccessService {
   canCreateEvent(user: AuthUser, now?: Date): boolean {
@@ -21,19 +21,19 @@ export class AccessService {
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
-    if (restriction === 'AGE_18') return age >= 18;
-    if (restriction === 'AGE_16') return age >= 16;
+    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
+    if (restriction === 'SIXTEEN_PLUS') return age >= 16;
     return true;
   }
 
   canViewEvent(user: AuthUser | null, restriction: AgeRestriction, now?: Date): boolean {
-    if (restriction === 'NONE') return true;
-    if (!user) return false;
+    if (restriction === 'ALL') return true;
+    if (!user || this.isBlocked(user)) return false;
 
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
-    if (restriction === 'AGE_18') return age >= 18;
+    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
     return age >= 16;
   }
 
@@ -43,8 +43,8 @@ export class AccessService {
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
-    if (restriction === 'AGE_18') return age >= 18;
-    if (restriction === 'AGE_16') return age >= 16;
+    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
+    if (restriction === 'SIXTEEN_PLUS') return age >= 16;
     return true;
   }
 

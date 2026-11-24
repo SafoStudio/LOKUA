@@ -4,6 +4,7 @@ export { isUniqueConstraintViolation } from './database/is-unique-constraint-vio
 
 export { logger } from './logger.js';
 
+export type { AgeRestriction } from './types/age-restriction.js';
 export type { Coordinates } from './types/coordinates.js';
 export type { GeoJSONPolygon, GeoJSONMultiPolygon, GeoJSONGeometry } from './types/geojson.js';
 

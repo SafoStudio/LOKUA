@@ -1,0 +1,143 @@
+/api/v1/events:
+  get:
+    tags: [Events]
+    summary: List published events
+    description: Anonymous visitors see unrestricted events. Signed-in visitors also see events allowed by their age.
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      - name: cursor
+        in: query
+        schema: { type: string, minLength: 1 }
+      - name: categoryId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: format
+        in: query
+        schema: { type: string, enum: [OFFLINE, ONLINE] }
+    responses:
+      '200':
+        description: Page of published events
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PublicEvent'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'] }
+                    hasMore: { type: boolean }
+      '400':
+        description: Invalid query or pagination cursor
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/ValidationErrorResponse'
+                - $ref: '#/components/schemas/ErrorResponse'
+      '401': &eventUnauthorized
+        description: Invalid or expired credentials
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403': &eventForbidden
+        description: Inactive account
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  post:
+    tags: [Events]
+    summary: Create an event draft
+    description: Requires an active account with verified email, completed onboarding, and the applicable minimum age.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CreateEventRequest'
+    responses:
+      '201':
+        description: Event draft created
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/EventDraft'
+      '400': &eventValidation
+        description: Request validation failed
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401':
+        description: Authentication required or credentials rejected
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: Account is ineligible to create this event
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: Event dates, format or price violate a domain rule
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}:
+  get:
+    tags: [Events]
+    summary: Get a published event
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses:
+      '200':
+        description: Published event visible to the visitor
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/PublicEvent'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404':
+        description: Event is missing or unavailable to the visitor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

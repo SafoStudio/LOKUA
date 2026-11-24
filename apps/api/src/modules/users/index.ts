@@ -7,7 +7,7 @@ export { calculateAge } from './domain/index.js';
 export type { CreateUserData } from './application/index.js';
 export type { UserProvider, AuthUserProvider } from './application/index.js';
 export { AccessService } from './application/index.js';
-export type { AgeRestriction } from './application/index.js';
+export type { AgeRestriction } from '../../common/index.js';
 export type { UserOnboardingProvider } from './application/index.js';
 
 export type { UserProfile, UserProfileProvider } from './application/index.js';

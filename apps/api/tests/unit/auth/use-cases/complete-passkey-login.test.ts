@@ -45,6 +45,7 @@ describe('CompletePasskeyLoginUseCase', () => {
     create: vi.fn(),
     findById: vi.fn(),
     revokeById: vi.fn(),
+    rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
     revokeAllByUserId: vi.fn()
   };
@@ -60,7 +61,8 @@ describe('CompletePasskeyLoginUseCase', () => {
         verifyAccessToken: vi.fn(),
         verifyRefreshToken: vi.fn()
       },
-      refreshSessions
+      refreshSessions,
+      7 * 24 * 60 * 60 * 1000
   );
 
   const context = { ip: '127.0.0.1', userAgent: 'vitest' };
