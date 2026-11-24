@@ -1,6 +1,8 @@
-export class EventDomainError extends Error {
+import { AppError } from '../../../common/index.js';
+
+export class EventDomainError extends AppError {
   constructor(message: string) {
-    super(message);
+    super(message, 422);
     this.name = 'EventDomainError';
   }
 }
@@ -23,12 +25,5 @@ export class InvalidEventPriceError extends EventDomainError {
   constructor(message: string) {
     super(message);
     this.name = 'InvalidEventPriceError';
-  }
-}
-
-export class InvalidEventAgeRestrictionError extends EventDomainError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidEventAgeRestrictionError';
   }
 }

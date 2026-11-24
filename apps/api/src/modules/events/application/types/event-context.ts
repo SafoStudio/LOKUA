@@ -1,6 +1,6 @@
+import type { AuthUser } from '../../../users/index.js';
+
 export interface EventContext {
-  user: {
-    id: string;
-  };
+  user: AuthUser;
   ip: string | null;
 }

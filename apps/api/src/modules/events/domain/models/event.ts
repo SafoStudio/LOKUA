@@ -1,4 +1,4 @@
-import type { AgeRestriction } from '../types/age-restriction.js';
+import type { AgeRestriction } from '../../../../common/index.js';
 import type { EventFormat } from '../types/event-format.js';
 import type { EventStatus } from '../types/event-status.js';
 import type { ParticipationMode } from '../types/participation-mode.js';

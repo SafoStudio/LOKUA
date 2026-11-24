@@ -1,6 +1,6 @@
 import type { DataSource } from 'typeorm';
 import type { RequestHandler } from 'express';
-import type { UserProvider } from '../users/index.js';
+import type { AccessService } from '../users/index.js';
 import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
 import { createEventsController } from './presentation/http/events.controller.js';
@@ -8,20 +8,22 @@ import { createEventsRouter } from './presentation/http/events.routes.js';
 
 export interface CreateEventsModuleDependencies {
   dataSource: DataSource;
-  users: UserProvider;
+  access: AccessService;
+  optionalAuth: RequestHandler;
   requireAuth: RequestHandler;
 }
 
 export function createEventsModule({
   dataSource,
-  users,
+  access,
+  optionalAuth,
   requireAuth
 }: CreateEventsModuleDependencies) {
   const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
 
-  const createEvent = new CreateEventUseCase(eventRepository, users);
-  const getEvents = new GetEventsUseCase(eventRepository);
-  const getEventById = new GetEventByIdUseCase(eventRepository);
+  const createEvent = new CreateEventUseCase(eventRepository, access);
+  const getEvents = new GetEventsUseCase(eventRepository, access);
+  const getEventById = new GetEventByIdUseCase(eventRepository, access);
 
   const controller = createEventsController({
     createEvent,
@@ -31,6 +33,7 @@ export function createEventsModule({
 
   const router = createEventsRouter({
     requireAuth,
+    optionalAuth,
     controller
   });
 

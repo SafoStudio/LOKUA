@@ -7,16 +7,16 @@ info:
     LOKUA events platform API.
 
     ### Authorization
-    All private routes use HttpOnly Cookies:
+    Private routes accept an access token via HttpOnly cookie or Bearer header.
     - `accessToken`: valid for the entire API (`Path=/api/v1`).
     - `refreshToken`: valid for all authentication routes (`Path=/api/v1/auth`).
-    - The `Authorization: Bearer <token>` header is also supported.
 
     To work from a browser, you must send `credentials: 'include'` (Fetch) or `withCredentials: true` (Axios).
 
     ### Response shape
     - Auth success: `{ "user": ... }`
     - Onboarding success: `{ "data": ... }`
+    - Events success: `{ "data": ... }` (with `pagination` for the list)
     - Geolocation success: `{ "data": ... }`
     - Errors: `{ "status": "error", "message": "..." }` (plus `details` for validation errors)
 
@@ -25,6 +25,9 @@ servers:
     description: Local Development Server
 
 tags:
+  - name: Events
+    description: Event drafts and public event discovery
+
   - name: Auth / Password
     description: Registration and password-based sign-in
 

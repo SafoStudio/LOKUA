@@ -7,7 +7,7 @@ import type {
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
 import { toEventView, toPublicEventView } from './event.view.js';
-import { GetEventsQuerySchema, GetEventByIdParamsSchema } from './get-events.schema.js';
+import type { GetEventsQuery } from '../../application/index.js';
 
 interface EventsControllerDependencies {
   createEvent: CreateEventUseCase;
@@ -30,8 +30,8 @@ export function createEventsController({
     },
 
     async getAll(req: Request, res: Response): Promise<void> {
-      const query = GetEventsQuerySchema.parse(req.query);
-      const result = await getEvents.execute(query);
+      const query = req.query as unknown as GetEventsQuery;
+      const result = await getEvents.execute(query, req.user ?? null);
 
       res.status(200).json({
         data: result.items.map(toPublicEventView),
@@ -43,8 +43,8 @@ export function createEventsController({
     },
 
     async getById(req: Request, res: Response): Promise<void> {
-      const { id } = GetEventByIdParamsSchema.parse(req.params);
-      const event = await getEventById.execute(id);
+      const { id } = req.params as { id: string };
+      const event = await getEventById.execute(id, req.user ?? null);
 
       res.status(200).json({
         data: toPublicEventView(event)

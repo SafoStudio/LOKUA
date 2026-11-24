@@ -1,11 +1,9 @@
 import {
-  InvalidEventAgeRestrictionError,
   InvalidEventDatesError,
   InvalidEventFormatError,
   InvalidEventPriceError
 } from '../errors.js';
 
-import type { AgeRestriction } from '../types/age-restriction.js';
 import type { EventFormat } from '../types/event-format.js';
 
 interface CreateEventRulesData {
@@ -18,23 +16,6 @@ interface CreateEventRulesData {
 
   isFree: boolean;
   priceText?: string | null;
-
-  ageRestriction: AgeRestriction;
-}
-
-function calculateAge(birthDate: Date, currentDate: Date): number {
-  let age = currentDate.getFullYear() - birthDate.getFullYear();
-
-  const hasBirthdayPassed =
-    currentDate.getMonth() > birthDate.getMonth() ||
-    (currentDate.getMonth() === birthDate.getMonth() &&
-      currentDate.getDate() >= birthDate.getDate());
-
-  if (!hasBirthdayPassed) {
-    age--;
-  }
-
-  return age;
 }
 
 export function validateEventDates(data: CreateEventRulesData): void {
@@ -99,34 +80,8 @@ export function validateEventPrice(data: CreateEventRulesData): void {
   }
 }
 
-export function validateOrganizerAge(
-  birthDate: Date | null,
-  ageRestriction: AgeRestriction,
-  currentDate: Date = new Date()
-): void {
-  if (!birthDate || Number.isNaN(birthDate.getTime())) {
-    throw new InvalidEventAgeRestrictionError('Organizer date of birth is required');
-  }
-
-  const age = calculateAge(birthDate, currentDate);
-
-  if (age < 16) {
-    throw new InvalidEventAgeRestrictionError('Users under 16 cannot create events');
-  }
-
-  if (age < 18 && ageRestriction === 'EIGHTEEN_PLUS') {
-    throw new InvalidEventAgeRestrictionError(
-      'Users under 18 cannot create events restricted to adults'
-    );
-  }
-}
-
-export function validateCreateEvent(
-  data: CreateEventRulesData,
-  organizerBirthDate: Date | null
-): void {
+export function validateCreateEvent(data: CreateEventRulesData): void {
   validateEventDates(data);
   validateEventFormat(data);
   validateEventPrice(data);
-  validateOrganizerAge(organizerBirthDate, data.ageRestriction);
 }

@@ -50,7 +50,10 @@ export class EventRepositoryAdapter implements EventRepository {
     const queryBuilder = this.repository
       .createQueryBuilder('event')
       .where('event.status = :status', { status: 'PUBLISHED' })
-      .andWhere('event.isHiddenByAdmin = :isHidden', { isHidden: false });
+      .andWhere('event.isHiddenByAdmin = :isHidden', { isHidden: false })
+      .andWhere('event.ageRestriction IN (:...ageRestrictions)', {
+        ageRestrictions: query.ageRestrictions
+      });
 
     if (query.categoryId) {
       queryBuilder.andWhere('event.categoryId = :categoryId', {
