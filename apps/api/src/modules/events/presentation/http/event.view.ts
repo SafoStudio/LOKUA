@@ -30,3 +30,26 @@ export function toEventView(event: Event) {
     updatedAt: event.updatedAt
   };
 }
+
+export function toPublicEventView(event: Event) {
+  return {
+    id: event.id,
+    title: event.title,
+    categoryId: event.categoryId,
+    description: event.description,
+    coverUrl: event.coverUrl,
+    mediaUrls: event.mediaUrls,
+    format: event.format,
+    capacityLimit: event.capacityLimit,
+    participationMode: event.participationMode,
+    ageRestriction: event.ageRestriction,
+    isFree: event.isFree,
+    priceText: event.priceText,
+    itemsToBring: event.itemsToBring,
+    firstStartsAt: event.firstStartsAt,
+    firstEndsAt: event.firstEndsAt,
+    timezone: event.timezone,
+    publishedAt: event.publishedAt,
+    createdAt: event.createdAt
+  };
+}

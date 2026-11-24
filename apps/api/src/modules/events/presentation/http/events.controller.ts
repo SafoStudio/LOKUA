@@ -1,14 +1,25 @@
 import type { Request, Response } from 'express';
-import type { CreateEventUseCase } from '../../application/index.js';
+import type {
+  CreateEventUseCase,
+  GetEventsUseCase,
+  GetEventByIdUseCase
+} from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
-import { toEventView } from './event.view.js';
+import { toEventView, toPublicEventView } from './event.view.js';
+import { GetEventsQuerySchema, GetEventByIdParamsSchema } from './get-events.schema.js';
 
 interface EventsControllerDependencies {
   createEvent: CreateEventUseCase;
+  getEvents: GetEventsUseCase;
+  getEventById: GetEventByIdUseCase;
 }
 
-export function createEventsController({ createEvent }: EventsControllerDependencies) {
+export function createEventsController({
+  createEvent,
+  getEvents,
+  getEventById
+}: EventsControllerDependencies) {
   return {
     async create(req: Request, res: Response): Promise<void> {
       const body = req.body as CreateEventSchema;
@@ -16,6 +27,28 @@ export function createEventsController({ createEvent }: EventsControllerDependen
       const event = await createEvent.execute(toEventContext(req), body);
 
       res.status(201).json({ data: toEventView(event) });
+    },
+
+    async getAll(req: Request, res: Response): Promise<void> {
+      const query = GetEventsQuerySchema.parse(req.query);
+      const result = await getEvents.execute(query);
+
+      res.status(200).json({
+        data: result.items.map(toPublicEventView),
+        pagination: {
+          nextCursor: result.nextCursor,
+          hasMore: result.nextCursor !== null
+        }
+      });
+    },
+
+    async getById(req: Request, res: Response): Promise<void> {
+      const { id } = GetEventByIdParamsSchema.parse(req.params);
+      const event = await getEventById.execute(id);
+
+      res.status(200).json({
+        data: toPublicEventView(event)
+      });
     }
   };
 }
