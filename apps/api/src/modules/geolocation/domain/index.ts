@@ -1,4 +1,3 @@
-export type { EventFormat } from './types/event-format.js';
 export type { PrecisionLevel } from './types/precision-level.js';
 
 export { isValidCoordinates, obfuscateCoordinates } from './utils/coordinates.js';

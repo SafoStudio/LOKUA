@@ -1,5 +1,5 @@
 import type { Coordinates } from '../../../../common/index.js';
-import type { EventFormat } from '../types/event-format.js';
+import type { EventFormat } from '../../../events/index.js';
 
 export interface GeoMarker {
   id: string;

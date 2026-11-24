@@ -33,7 +33,8 @@ export function createGeolocationController({
 }: GeolocationControllerDependencies) {
   return {
     async create(req: Request, res: Response): Promise<void> {
-      const location = await createLocation.execute(req.body);
+      if (!req.user) throw new AppError('Authentication required', 401);
+      const location = await createLocation.execute({ ...req.body, createdBy: req.user.id });
       res.status(201).json({ data: toLocationView(location) });
     },
 

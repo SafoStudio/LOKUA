@@ -1,3 +1,4 @@
+import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { validate } from '../../../../middlewares/index.js';
 import type { GeolocationController } from './geolocation.controller.js';
@@ -11,10 +12,18 @@ import {
   reverseGeocodeSchema
 } from './geolocation.schema.js';
 
-export function createGeolocationRouter(controller: GeolocationController): Router {
+export function createGeolocationRouter(
+  controller: GeolocationController,
+  requireAuth: RequestHandler
+): Router {
   const router = Router();
 
-  router.post('/locations', validate({ body: createLocationSchema }), controller.create);
+  router.post(
+    '/locations',
+    requireAuth,
+    validate({ body: createLocationSchema }),
+    controller.create
+  );
 
   router.get('/locations/nearby', validate({ query: searchNearbyQuerySchema }), controller.nearby);
 
@@ -23,6 +32,7 @@ export function createGeolocationRouter(controller: GeolocationController): Rout
   router.get(
     '/locations/:id',
     validate({ params: getLocationParamsSchema, query: getLocationQuerySchema }),
+    (req, res, next) => (req.query.precision === 'EXACT' ? requireAuth(req, res, next) : next()),
     controller.getById
   );
 
