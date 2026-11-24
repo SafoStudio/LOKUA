@@ -52,6 +52,7 @@ import { createAuthController } from './presentation/http/auth.controller.js';
 import { createAuthMiddleware } from './presentation/http/auth.middleware.js';
 import { createRequireRole } from './presentation/http/require-role.middleware.js';
 import { createAuthRouter } from './presentation/http/auth.routes.js';
+import { parseTtlToMs } from './application/use-cases/parse-ttl.js';
 import { env } from '../../config/env.js';
 
 interface CreateAuthModuleDependencies {
@@ -101,9 +102,9 @@ export function createAuthModule({
     dataSource.getRepository(SecurityEventEntity)
   );
 
-  const registrationTransaction = new TypeOrmRegistrationTransaction(dataSource);
-  const googleLoginTransaction = new TypeOrmGoogleLoginTransaction(dataSource);
-  const passkeySignupTransaction = new TypeOrmPasskeySignupTransaction(dataSource);
+  const registrationTransaction = new TypeOrmRegistrationTransaction(dataSource, users);
+  const googleLoginTransaction = new TypeOrmGoogleLoginTransaction(dataSource, users);
+  const passkeySignupTransaction = new TypeOrmPasskeySignupTransaction(dataSource, users);
 
   const passwordHasher = new BcryptPasswordHasher();
   const tokenService = new JwtTokenService();
@@ -116,7 +117,8 @@ export function createAuthModule({
     origin: env.WEBAUTHN_ORIGIN
   });
 
-  const issueTokens = new IssueAuthTokensUseCase(tokenService, refreshSessions);
+  const refreshTtlMs = parseTtlToMs(env.JWT_REFRESH_TTL);
+  const issueTokens = new IssueAuthTokensUseCase(tokenService, refreshSessions, refreshTtlMs);
 
   const sendVerificationEmail = new SendVerificationEmailUseCase(
     users,
@@ -149,7 +151,13 @@ export function createAuthModule({
     securityEvents
   );
 
-  const refresh = new RefreshTokensUseCase(users, tokenService, refreshSessions, securityEvents);
+  const refresh = new RefreshTokensUseCase(
+    users,
+    tokenService,
+    refreshSessions,
+    securityEvents,
+    refreshTtlMs
+  );
 
   const requestPasswordReset = new RequestPasswordResetUseCase(
     users,
@@ -252,6 +260,7 @@ export function createAuthModule({
     router,
     access,
     requireAuth: middleware.requireAuth,
+    optionalAuth: middleware.optionalAuth,
     requireRole: roleMiddleware.requireRole
   };
 }

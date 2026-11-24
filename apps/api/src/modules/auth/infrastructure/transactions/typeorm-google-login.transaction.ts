@@ -1,13 +1,15 @@
+import type { TransactionContext } from '../../../../common/index.js';
 import type { DataSource } from 'typeorm';
-import type { AuthUser } from '../../../users/index.js';
+import type { AuthUser, AuthUserProvider } from '../../../users/index.js';
 import type { GoogleLoginTransaction } from '../../application/index.js';
-import { UserEntity, UserRepositoryAdapter } from '../../../users/infrastructure/index.js';
 import { GoogleCredentialEntity, GoogleCredentialRepositoryAdapter } from '../index.js';
 import { AppError, isUniqueConstraintViolation } from '../../../../common/index.js';
-import { toAuthUser } from './to-auth-user.mapper.js';
 
 export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly users: AuthUserProvider
+  ) {}
 
   async createUserWithGoogleCredential(data: {
     email: string;
@@ -16,23 +18,25 @@ export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
   }): Promise<AuthUser> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const userRepository = new UserRepositoryAdapter(manager.getRepository(UserEntity));
         const credentialRepository = new GoogleCredentialRepositoryAdapter(
           manager.getRepository(GoogleCredentialEntity)
         );
 
-        const user = await userRepository.create({
-          email: data.email,
-          name: data.name,
-          emailVerified: true
-        });
+        const user = await this.users.create(
+          {
+            email: data.email,
+            name: data.name,
+            emailVerified: true
+          },
+          manager as unknown as TransactionContext
+        );
 
         await credentialRepository.create({
           userId: user.id,
           googleSub: data.googleSub
         });
 
-        return toAuthUser(user);
+        return user;
       });
     } catch (error) {
       if (isUniqueConstraintViolation(error)) {

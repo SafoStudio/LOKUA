@@ -12,32 +12,36 @@ interface AuthMiddlewareDependencies {
 }
 
 export function createAuthMiddleware({ tokenService, users, access }: AuthMiddlewareDependencies) {
-  const requireAuth: RequestHandler = async (req: Request, _res: Response, next: NextFunction) => {
-    const authorization = req.headers.authorization;
+  function authenticate(required: boolean): RequestHandler {
+    return async (req, _res, next) => {
+      const authorization = req.headers.authorization;
 
-    const token = authorization?.startsWith('Bearer ')
-      ? authorization.slice(7)
-      : req.cookies?.[ACCESS_TOKEN_COOKIE];
+      const token = authorization?.startsWith('Bearer ')
+        ? authorization.slice(7)
+        : req.cookies?.[ACCESS_TOKEN_COOKIE];
 
-    if (!token) return next(new AppError('Authentication required', 401));
+      if (!token) {
+        return required ? next(new AppError('Authentication required', 401)) : next();
+      }
 
-    let payload: Awaited<ReturnType<typeof tokenService.verifyAccessToken>>;
+      let payload: Awaited<ReturnType<typeof tokenService.verifyAccessToken>>;
 
-    try {
-      payload = await tokenService.verifyAccessToken(token);
-    } catch {
-      return next(new AppError('Invalid or expired access token', 401));
-    }
+      try {
+        payload = await tokenService.verifyAccessToken(token);
+      } catch {
+        return next(new AppError('Invalid or expired access token', 401));
+      }
 
-    const user = await users.findById(payload.userId);
-    if (!user) return next(new AppError('User not found', 401));
+      const user = await users.findById(payload.userId);
+      if (!user) return next(new AppError('User not found', 401));
 
-    if (access.isBlocked(user)) return next(new AppError('Account is blocked', 403));
+      if (access.isBlocked(user)) return next(new AppError('Account is blocked', 403));
 
-    req.user = user;
+      req.user = user;
 
-    next();
-  };
+      next();
+    };
+  }
 
   const requireRefreshToken: RequestHandler = (
     req: Request,
@@ -52,7 +56,8 @@ export function createAuthMiddleware({ tokenService, users, access }: AuthMiddle
   };
 
   return {
-    requireAuth,
+    requireAuth: authenticate(true),
+    optionalAuth: authenticate(false),
     requireRefreshToken
   };
 }

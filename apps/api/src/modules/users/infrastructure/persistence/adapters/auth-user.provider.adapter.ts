@@ -1,4 +1,5 @@
 import type { AuthUser, User } from '../../../domain/index.js';
+import type { TransactionContext } from '../../../../../common/index.js';
 import type { AuthUserProvider, UserRepository } from '../../../application/index.js';
 
 export class AuthUserProviderAdapter implements AuthUserProvider {
@@ -14,20 +15,28 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
     return user ? this.toAuthUser(user) : null;
   }
 
-  async create(data: {
-    email: string;
-    name: string;
-    emailVerified?: boolean;
-    role?: AuthUser['role'];
-    status?: AuthUser['status'];
-  }): Promise<AuthUser> {
-    const user = await this.repository.create({
-      email: data.email,
-      name: data.name,
-      emailVerified: data.emailVerified ?? false,
-      role: data.role,
-      status: data.status
-    });
+  async create(
+    data: {
+      id?: string;
+      email: string;
+      name: string;
+      emailVerified?: boolean;
+      role?: AuthUser['role'];
+      status?: AuthUser['status'];
+    },
+    tx?: TransactionContext
+  ): Promise<AuthUser> {
+    const user = await this.repository.create(
+      {
+        id: data.id,
+        email: data.email,
+        name: data.name,
+        emailVerified: data.emailVerified ?? false,
+        role: data.role,
+        status: data.status
+      },
+      tx
+    );
     return this.toAuthUser(user);
   }
 

@@ -1,3 +1,4 @@
+import { IsNull, MoreThan } from 'typeorm';
 import type { Repository } from 'typeorm';
 import type { RefreshSession } from '../../../domain/index.js';
 import type { RefreshSessionRepository } from '../../../application/index.js';
@@ -21,6 +22,30 @@ export class RefreshSessionRepositoryAdapter implements RefreshSessionRepository
     });
 
     await this.repository.save(entity);
+  }
+
+  async rotate(
+    currentId: string,
+    replacement: { id: string; userId: string; tokenHash: string; expiresAt: Date }
+  ): Promise<boolean> {
+    return this.repository.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(RefreshSessionEntity);
+      const now = new Date();
+      const revoked = await repository.update(
+        {
+          id: currentId,
+          userId: replacement.userId,
+          revokedAt: IsNull(),
+          expiresAt: MoreThan(now)
+        },
+        { revokedAt: now }
+      );
+
+      if (revoked.affected !== 1) return false;
+
+      await new RefreshSessionRepositoryAdapter(repository).create(replacement);
+      return true;
+    });
   }
 
   async findById(id: string): Promise<RefreshSession | null> {

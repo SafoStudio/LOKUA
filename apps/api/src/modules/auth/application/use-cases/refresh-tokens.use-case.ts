@@ -5,9 +5,7 @@ import type { RefreshSessionRepository } from '../ports/refresh-session.reposito
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
 import type { SecurityContext } from '../security-context.js';
 import { AppError } from '../../../../common/index.js';
-import { env } from '../../../../config/env.js';
 import { logger } from '../../../../common/logger.js';
-import { parseTtlToMs } from './parse-ttl.js';
 import type { AuthResult } from './issue-auth-tokens.use-case.js';
 
 export class RefreshTokensUseCase {
@@ -15,7 +13,8 @@ export class RefreshTokensUseCase {
     private readonly users: AuthUserProvider,
     private readonly tokens: TokenService,
     private readonly refreshSessions: RefreshSessionRepository,
-    private readonly securityEvents: SecurityEventRepository
+    private readonly securityEvents: SecurityEventRepository,
+    private readonly refreshTtlMs: number
   ) {}
 
   async execute(refreshToken: string, context: SecurityContext): Promise<AuthResult> {
@@ -72,16 +71,16 @@ export class RefreshTokensUseCase {
     ]);
 
     const newTokenHash = createHash('sha256').update(newRefreshToken).digest('hex');
-    const expiresAt = new Date(Date.now() + parseTtlToMs(env.JWT_REFRESH_TTL));
+    const expiresAt = new Date(Date.now() + this.refreshTtlMs);
 
-    await this.refreshSessions.create({
+    const rotated = await this.refreshSessions.rotate(session.id, {
       id: newSessionId,
       userId: user.id,
       tokenHash: newTokenHash,
       expiresAt
     });
 
-    await this.refreshSessions.revokeById(session.id);
+    if (!rotated) throw new AppError('Invalid refresh token', 401);
 
     return {
       user,

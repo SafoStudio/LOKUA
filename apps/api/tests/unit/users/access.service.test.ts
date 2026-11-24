@@ -36,50 +36,50 @@ describe('AccessService', () => {
 
     describe('canJoinEvent', () => {
         it('NONE + active → true (14+)', () => {
-            expect(service.canJoinEvent(userWithAge(14), 'NONE', NOW)).toBe(true);
+            expect(service.canJoinEvent(userWithAge(14), 'ALL', NOW)).toBe(true);
         });
-        it('AGE_16 + age 15 → false', () => {
-            expect(service.canJoinEvent(userWithAge(15), 'AGE_16', NOW)).toBe(false);
+        it('SIXTEEN_PLUS + age 15 → false', () => {
+            expect(service.canJoinEvent(userWithAge(15), 'SIXTEEN_PLUS', NOW)).toBe(false);
         });
-        it('AGE_16 + age 16 → true', () => {
-            expect(service.canJoinEvent(userWithAge(16), 'AGE_16', NOW)).toBe(true);
+        it('SIXTEEN_PLUS + age 16 → true', () => {
+            expect(service.canJoinEvent(userWithAge(16), 'SIXTEEN_PLUS', NOW)).toBe(true);
         });
-        it('AGE_18 + age 17 → false', () => {
-            expect(service.canJoinEvent(userWithAge(17), 'AGE_18', NOW)).toBe(false);
+        it('EIGHTEEN_PLUS + age 17 → false', () => {
+            expect(service.canJoinEvent(userWithAge(17), 'EIGHTEEN_PLUS', NOW)).toBe(false);
         });
-        it('AGE_18 + age 18 → true', () => {
-            expect(service.canJoinEvent(userWithAge(18), 'AGE_18', NOW)).toBe(true);
+        it('EIGHTEEN_PLUS + age 18 → true', () => {
+            expect(service.canJoinEvent(userWithAge(18), 'EIGHTEEN_PLUS', NOW)).toBe(true);
         });
         it('false if not onboarded', () => {
-            expect(service.canJoinEvent(userWithAge(20, { onboardingCompleted: false }), 'NONE', NOW)).toBe(false);
+            expect(service.canJoinEvent(userWithAge(20, { onboardingCompleted: false }), 'ALL', NOW)).toBe(false);
         });
     });
 
     describe('canViewEvent', () => {
         it('NONE + null user → true', () => {
-            expect(service.canViewEvent(null, 'NONE', NOW)).toBe(true);
+            expect(service.canViewEvent(null, 'ALL', NOW)).toBe(true);
         });
-        it('AGE_18 + null user → false', () => {
-            expect(service.canViewEvent(null, 'AGE_18', NOW)).toBe(false);
+        it('EIGHTEEN_PLUS + null user → false', () => {
+            expect(service.canViewEvent(null, 'EIGHTEEN_PLUS', NOW)).toBe(false);
         });
-        it('AGE_18 + age 17 → false', () => {
-            expect(service.canViewEvent(userWithAge(17), 'AGE_18', NOW)).toBe(false);
+        it('EIGHTEEN_PLUS + age 17 → false', () => {
+            expect(service.canViewEvent(userWithAge(17), 'EIGHTEEN_PLUS', NOW)).toBe(false);
         });
-        it('AGE_18 + age 18 → true', () => {
-            expect(service.canViewEvent(userWithAge(18), 'AGE_18', NOW)).toBe(true);
+        it('EIGHTEEN_PLUS + age 18 → true', () => {
+            expect(service.canViewEvent(userWithAge(18), 'EIGHTEEN_PLUS', NOW)).toBe(true);
         });
     });
 
     describe('canCreateEventWithRestriction', () => {
-        it('AGE_18 + age 17 → false', () => {
-            expect(service.canCreateEventWithRestriction(userWithAge(17), 'AGE_18', NOW)).toBe(false);
+        it('EIGHTEEN_PLUS + age 17 → false', () => {
+            expect(service.canCreateEventWithRestriction(userWithAge(17), 'EIGHTEEN_PLUS', NOW)).toBe(false);
         });
-        it('AGE_16 + age 17 → true', () => {
-            expect(service.canCreateEventWithRestriction(userWithAge(17), 'AGE_16', NOW)).toBe(true);
+        it('SIXTEEN_PLUS + age 17 → true', () => {
+            expect(service.canCreateEventWithRestriction(userWithAge(17), 'SIXTEEN_PLUS', NOW)).toBe(true);
         });
         it('false if base check fails', () => {
             expect(
-                service.canCreateEventWithRestriction(userWithAge(20, { onboardingCompleted: false }), 'NONE', NOW)
+                service.canCreateEventWithRestriction(userWithAge(20, { onboardingCompleted: false }), 'ALL', NOW)
             ).toBe(false);
         });
     });
