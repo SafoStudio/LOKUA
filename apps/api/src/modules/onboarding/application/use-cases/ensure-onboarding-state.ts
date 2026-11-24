@@ -1,5 +1,6 @@
 import type { TransactionContext } from '../../../../common/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
+import { OnboardingAlreadyCompletedError } from '../../domain/index.js';
 import type { OnboardingState } from '../../domain/index.js';
 
 export async function ensureOnboardingState(
@@ -7,7 +8,8 @@ export async function ensureOnboardingState(
   userId: string,
   tx?: TransactionContext
 ): Promise<OnboardingState> {
-  const existing = await repository.findByUserId(userId, tx);
-  if (existing) return existing;
-  return repository.create(userId, tx);
+  const state =
+    (await repository.findByUserId(userId, tx)) ?? (await repository.create(userId, tx));
+  if (tx && state.completedAt != null) throw new OnboardingAlreadyCompletedError();
+  return state;
 }

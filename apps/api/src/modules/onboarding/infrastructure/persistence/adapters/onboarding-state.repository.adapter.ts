@@ -13,7 +13,10 @@ export class OnboardingStateRepositoryAdapter implements OnboardingStateReposito
 
   async findByUserId(userId: string, tx?: TransactionContext): Promise<OnboardingState | null> {
     const repo = this.getRepo(tx);
-    const entity = await repo.findOne({ where: { userId } });
+    const entity = await repo.findOne({
+      where: { userId },
+      ...(tx ? { lock: { mode: 'pessimistic_write' as const } } : {})
+    });
     return entity ? this.toDomain(entity) : null;
   }
 
@@ -25,9 +28,15 @@ export class OnboardingStateRepositoryAdapter implements OnboardingStateReposito
 
   async create(userId: string, tx?: TransactionContext): Promise<OnboardingState> {
     const repo = this.getRepo(tx);
-    await repo.upsert({ userId, currentStep: 'DATE_OF_BIRTH', completedSteps: [] }, ['userId']);
-    const entity = await repo.findOneOrFail({ where: { userId } });
-    return this.toDomain(entity);
+    await repo
+      .createQueryBuilder()
+      .insert()
+      .values({ userId, currentStep: 'DATE_OF_BIRTH', completedSteps: [] })
+      .orIgnore()
+      .execute();
+    const state = await this.findByUserId(userId, tx);
+    if (!state) throw new Error(`Onboarding state for user ${userId} not found after insert`);
+    return state;
   }
 
   async updateStep(

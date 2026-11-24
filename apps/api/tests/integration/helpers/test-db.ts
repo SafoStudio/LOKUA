@@ -51,6 +51,8 @@ import { SeedDictionaries1794817300000 } from '../../../src/db/migrations/179481
 import { AddOnboardingSchema1794923437553 } from '../../../src/db/migrations/1794923437553-AddOnboardingSchema.js';
 
 
+import { SeedEventsData1795000000000 } from '../../../src/db/migrations/1795000000000-SeedEventsData.js';
+
 export const TEST_DATABASE_URL =
     process.env.TEST_DATABASE_URL ?? 'postgres://lokua:lokua@localhost:5433/lokua_test';
 
@@ -114,7 +116,8 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
       InitialSchema1794056977895,
       FullSchema1794817225368,
       SeedDictionaries1794817300000,
-      AddOnboardingSchema1794923437553
+      AddOnboardingSchema1794923437553,
+      SeedEventsData1795000000000
     ]
   });
 }
