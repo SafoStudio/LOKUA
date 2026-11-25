@@ -8,6 +8,7 @@ export interface Event {
   organizerId: string;
 
   title: string;
+  tags?: string[];
   categoryId: string;
   description: string;
 
