@@ -1,5 +1,9 @@
 import type { DataSource } from 'typeorm';
 import type { RequestHandler } from 'express';
+import { TypeOrmUnitOfWork } from '../../common/index.js';
+import type { CategoryProvider } from '../dictionaries/index.js';
+import type { LocationProvider } from '../geolocation/index.js';
+import { ManageEventUseCase } from './application/use-cases/manage-event.use-case.js';
 import type { AccessService } from '../users/index.js';
 import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
@@ -9,6 +13,8 @@ import { createEventsRouter } from './presentation/http/events.routes.js';
 export interface CreateEventsModuleDependencies {
   dataSource: DataSource;
   access: AccessService;
+  categories: CategoryProvider;
+  locations: LocationProvider;
   optionalAuth: RequestHandler;
   requireAuth: RequestHandler;
 }
@@ -16,16 +22,27 @@ export interface CreateEventsModuleDependencies {
 export function createEventsModule({
   dataSource,
   access,
+  categories,
+  locations,
   optionalAuth,
   requireAuth
 }: CreateEventsModuleDependencies) {
   const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
 
-  const createEvent = new CreateEventUseCase(eventRepository, access);
+  const manageEvent = new ManageEventUseCase(
+    eventRepository,
+    new TypeOrmUnitOfWork(dataSource),
+    access,
+    categories,
+    locations,
+    () => new Date()
+  );
+  const createEvent = new CreateEventUseCase(manageEvent);
   const getEvents = new GetEventsUseCase(eventRepository, access);
-  const getEventById = new GetEventByIdUseCase(eventRepository, access);
+  const getEventById = new GetEventByIdUseCase(eventRepository, access, manageEvent);
 
   const controller = createEventsController({
+    manageEvent,
     createEvent,
     getEvents,
     getEventById

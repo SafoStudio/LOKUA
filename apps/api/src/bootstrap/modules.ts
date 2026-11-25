@@ -48,6 +48,8 @@ export function createModules(dataSource: DataSource) {
   });
 
   const eventsModule = createEventsModule({
+    categories: dictionariesModule.categories,
+    locations: geolocationModule.locations,
     dataSource,
     access: usersModule.access,
     optionalAuth: authModule.optionalAuth,

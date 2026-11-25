@@ -1,6 +1,11 @@
 import type { Repository, SelectQueryBuilder } from 'typeorm';
-import { AppError } from '../../../../../common/index.js';
-import type { Event } from '../../../domain/index.js';
+import { In } from 'typeorm';
+import type { TransactionContext } from '../../../../../common/index.js';
+import { obfuscateCoordinates } from '../../../../geolocation/index.js';
+import type { Location } from '../../../../geolocation/index.js';
+import type { EventManagementRepository } from '../../../application/ports/event-management.repository.js';
+import { AppError, toEntityManager } from '../../../../../common/index.js';
+import type { Event, EventStatus, OccurrenceStatus } from '../../../domain/index.js';
 import type {
   EventRepository,
   FindPublishedEventsQuery,
@@ -9,9 +14,22 @@ import type {
 import type { CreateEventData } from '../../../application/index.js';
 import { decodeEventCursor, encodeEventCursor } from '../event-cursor.js';
 import type { EventCursor } from '../event-cursor.js';
-import type { EventEntity } from '../entities/event.entity.js';
+import { EventParticipationEntity } from '../entities/event-participation.entity.js';
+import { EventOccurrenceEntity } from '../entities/event-occurrence.entity.js';
+import { EventLocationSnapshotEntity } from '../entities/event-location-snapshot.entity.js';
+import { EventTagEntity } from '../entities/event-tag.entity.js';
+import { TagEntity } from '../entities/tag.entity.js';
+import { EventEntity } from '../entities/event.entity.js';
 
-export class EventRepositoryAdapter implements EventRepository {
+const statusByEventStatus: Record<EventStatus, OccurrenceStatus> = {
+  DRAFT: 'SCHEDULED',
+  PUBLISHED: 'SCHEDULED',
+  FULL: 'FULL',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED'
+};
+
+export class EventRepositoryAdapter implements EventRepository, EventManagementRepository {
   constructor(private readonly repository: Repository<EventEntity>) {}
 
   async create(organizerId: string, data: CreateEventData): Promise<Event> {
@@ -44,6 +62,148 @@ export class EventRepositoryAdapter implements EventRepository {
     const savedEntity = await this.repository.save(entity);
 
     return this.toDomain(savedEntity);
+  }
+
+  inTransaction(tx: TransactionContext): EventRepositoryAdapter {
+    return new EventRepositoryAdapter(toEntityManager(tx).getRepository(EventEntity));
+  }
+
+  async lockOrganizer(id: string): Promise<void> {
+    await this.repository.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [
+      'events-organizer',
+      id
+    ]);
+  }
+
+  async findOwned(id: string, organizerId: string, lock = false): Promise<Event | null> {
+    const entity = await this.repository.findOne({
+      where: { id, organizerId },
+      ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {})
+    });
+    return entity ? this.toDomain(entity) : null;
+  }
+
+  countUpcoming(organizerId: string, now: Date): Promise<number> {
+    return this.repository
+      .createQueryBuilder('event')
+      .where('event.organizerId = :organizerId', { organizerId })
+      .andWhere("event.status IN ('PUBLISHED', 'FULL')")
+      .andWhere('event.firstStartsAt > :now', { now })
+      .getCount();
+  }
+
+  countApproved(event: Event): Promise<number> {
+    return this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .createQueryBuilder('p')
+      .where('p.eventId = :id AND p.userId <> :organizerId', {
+        id: event.id,
+        organizerId: event.organizerId
+      })
+      .andWhere("p.status = 'APPROVED'")
+      .getCount();
+  }
+
+  hasParticipantHistory(event: Event): Promise<boolean> {
+    return this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .createQueryBuilder('p')
+      .where('p.eventId = :id AND p.userId <> :organizerId', {
+        id: event.id,
+        organizerId: event.organizerId
+      })
+      .andWhere("p.status IN ('APPROVED', 'REMOVED_BY_ORGANIZER')")
+      .getExists();
+  }
+
+  async save(event: Event): Promise<Event> {
+    const entity = this.repository.create(event);
+    return this.toDomain(await this.repository.save(entity));
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.repository.delete(id);
+  }
+
+  async readTags(id: string): Promise<string[]> {
+    const tags = await this.repository.manager
+      .getRepository(TagEntity)
+      .createQueryBuilder('tag')
+      .innerJoin(EventTagEntity, 'link', 'link.tagId = tag.id')
+      .where('link.eventId = :id', { id })
+      .orderBy('tag.name', 'ASC')
+      .getMany();
+    return tags.map((tag) => tag.name);
+  }
+
+  async replaceTags(id: string, tags: string[]): Promise<void> {
+    const links = this.repository.manager.getRepository(EventTagEntity);
+    await links.delete({ eventId: id });
+    if (!tags.length) return;
+
+    const catalog = this.repository.manager.getRepository(TagEntity);
+    const names = [...tags].sort();
+    await catalog
+      .createQueryBuilder()
+      .insert()
+      .values(names.map((name) => ({ name })))
+      .orIgnore()
+      .execute();
+    const entries = await catalog
+      .createQueryBuilder('tag')
+      .where('tag.name IN (:...names)', { names })
+      .getMany();
+    await links.insert(entries.map((tag) => ({ eventId: id, tagId: tag.id })));
+  }
+
+  async syncSchedule(event: Event, previousStart: Date | null): Promise<void> {
+    if (!event.firstStartsAt || !event.firstEndsAt) return;
+
+    const occurrences = this.repository.manager.getRepository(EventOccurrenceEntity);
+    const existing = await occurrences.findOne({
+      where: { eventId: event.id, startsAt: previousStart ?? event.firstStartsAt }
+    });
+    await occurrences.save(
+      occurrences.create({
+        ...existing,
+        eventId: event.id,
+        locationId: event.primaryLocationId,
+        startsAt: event.firstStartsAt,
+        endsAt: event.firstEndsAt,
+        timezone: event.timezone,
+        status: statusByEventStatus[event.status]
+      })
+    );
+  }
+
+  async replaceSnapshot(id: string, location: Location | null): Promise<void> {
+    const snapshots = this.repository.manager.getRepository(EventLocationSnapshotEntity);
+    if (!location) {
+      await snapshots.delete({ eventId: id });
+      return;
+    }
+
+    const existing = await snapshots.findOneBy({ eventId: id });
+    const exact = location.exactCoordinates;
+    const coordinates = {
+      latitude: Number(exact.latitude.toFixed(6)),
+      longitude: Number(exact.longitude.toFixed(6))
+    };
+    await snapshots.save(
+      snapshots.create({
+        ...existing,
+        eventId: id,
+        locationId: location.id,
+        cityId: location.cityId,
+        districtId: location.districtId,
+        countryCode: location.countryCode,
+        name: location.name,
+        address: location.address,
+        coordinates,
+        publicCoordinates: obfuscateCoordinates(exact),
+        snapshotAt: new Date()
+      })
+    );
   }
 
   async findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult> {
@@ -107,7 +267,7 @@ export class EventRepositoryAdapter implements EventRepository {
     const entity = await this.repository.findOne({
       where: {
         id,
-        status: 'PUBLISHED',
+        status: In(['PUBLISHED', 'FULL']),
         isHiddenByAdmin: false
       }
     });
