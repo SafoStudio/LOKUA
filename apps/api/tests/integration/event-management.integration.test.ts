@@ -8,7 +8,7 @@ import { AccessService, createUsersModule } from '../../src/modules/users/index.
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
-import { toFeedEventView } from '../../src/modules/events/presentation/http/event.view.js';
+import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
 import { EventEntity, EventRepositoryAdapter } from '../../src/modules/events/infrastructure/index.js';
@@ -329,5 +329,88 @@ describe('event management and feed with PostgreSQL', () => {
       .map((event) => event.id)).toEqual([local.id]);
     expect((await getEvents.execute({ ...query, to: schedule.firstStartsAt }, null)).items)
       .toEqual([]);
+  });
+
+  it('uses the same public point for map bounds, marker and distance, including ties', async () => {
+    const owner = await createUser();
+    const tag = randomUUID();
+    const exactCoordinates = { latitude: 50.454321, longitude: 30.524321 };
+    const origin = obfuscateCoordinates(exactCoordinates);
+    const location = await locations.create({
+      name: 'Hidden map venue',
+      address: 'Private venue address',
+      cityId: kyivId,
+      districtId: null,
+      countryCode: 'UA',
+      exactCoordinates,
+      publicCoordinates: origin,
+      provider: 'manual',
+      providerPlaceId: null,
+      createdBy: null
+    });
+    locationIds.push(location.id);
+    const offline = {
+      tags: [tag],
+      format: 'OFFLINE' as const,
+      primaryLocationId: location.id,
+      onlineUrl: null
+    };
+    const hidden = await publishForFeed(owner, { ...offline, hideExactAddress: true });
+    const tied = await publishForFeed(owner, { ...offline, hideExactAddress: true });
+    const visible = await publishForFeed(owner, offline);
+    await publishForFeed(owner, { tags: [tag] });
+
+    // Older snapshots could have copied the exact point before the address was hidden.
+    await dataSource.query(
+      'UPDATE event_location_snapshot SET public_coordinates = coordinates WHERE event_id = $1',
+      [hidden.id]
+    );
+
+    const mapQuery = {
+      limit: 1,
+      search: tag,
+      bounds: { minLat: 50.449, minLng: 30.519, maxLat: 50.451, maxLng: 30.521 }
+    };
+    const firstMap = await getEvents.execute(mapQuery, null);
+    expect(firstMap.nextCursor).not.toBeNull();
+    const secondMap = await getEvents.execute(
+      { ...mapQuery, cursor: firstMap.nextCursor ?? undefined },
+      null
+    );
+    const markers = [...firstMap.items, ...secondMap.items].map(toMapEventView);
+    expect(markers.map((marker) => marker.id)).toEqual([hidden.id, tied.id].sort());
+    expect(markers[0]).toMatchObject({ coordinates: origin });
+    expect(markers[0]).not.toHaveProperty('primaryLocationId');
+    expect(markers[0]).not.toHaveProperty('address');
+    expect(secondMap.nextCursor).toBeNull();
+
+    const exactViewport = await getEvents.execute({
+      limit: 10,
+      search: tag,
+      bounds: { minLat: 50.454, minLng: 30.524, maxLat: 50.455, maxLng: 30.525 }
+    }, null);
+    expect(exactViewport.items.map(toMapEventView)).toMatchObject([
+      { id: visible.id, coordinates: exactCoordinates }
+    ]);
+
+    const query = { limit: 1, search: tag, origin };
+    const firstDistance = await getEvents.execute(query, null);
+    const secondDistance = await getEvents.execute(
+      { ...query, cursor: firstDistance.nextCursor ?? undefined }, null
+    );
+    const thirdDistance = await getEvents.execute(
+      { ...query, cursor: secondDistance.nextCursor ?? undefined }, null
+    );
+    expect([firstDistance.items[0].id, secondDistance.items[0].id])
+      .toEqual([hidden.id, tied.id].sort());
+    expect(firstDistance.items[0].distanceMeters).toBe(0);
+    expect(secondDistance.items[0].distanceMeters).toBe(0);
+    expect(thirdDistance.items[0].id).toBe(visible.id);
+    expect(thirdDistance.items[0].distanceMeters).toBeGreaterThan(0);
+    expect(thirdDistance.nextCursor).toBeNull();
+    await expect(getEvents.execute({
+      ...mapQuery,
+      cursor: firstDistance.nextCursor ?? undefined
+    }, null)).rejects.toMatchObject({ statusCode: 400 });
   });
 });

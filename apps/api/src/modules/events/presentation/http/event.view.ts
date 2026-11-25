@@ -60,6 +60,19 @@ export function toFeedEventView(event: FeedEvent) {
   return {
     ...toPublicEventView(event),
     status: event.status,
-    hasAvailablePlaces: event.hasAvailablePlaces
+    hasAvailablePlaces: event.hasAvailablePlaces,
+    distanceMeters: event.distanceMeters
+  };
+}
+
+export function toMapEventView(event: FeedEvent) {
+  return {
+    id: event.id,
+    title: event.title,
+    categoryId: event.categoryId,
+    firstStartsAt: event.firstStartsAt,
+    status: event.status,
+    hasAvailablePlaces: event.hasAvailablePlaces,
+    coordinates: event.mapCoordinates
   };
 }

@@ -1,7 +1,8 @@
 export interface EventCursor {
   firstStartsAt: string | null;
   id: string;
-  source?: 'CITY' | 'ONLINE';
+  source?: 'CITY' | 'ONLINE' | 'MAP';
+  distanceMeters?: number;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -40,7 +41,14 @@ export function decodeEventCursor(value: string): EventCursor {
     !('id' in parsed) ||
     typeof parsed.id !== 'string' ||
     !UUID_REGEX.test(parsed.id) ||
-    ('source' in parsed && parsed.source !== 'CITY' && parsed.source !== 'ONLINE') ||
+    ('source' in parsed &&
+      parsed.source !== 'CITY' &&
+      parsed.source !== 'ONLINE' &&
+      parsed.source !== 'MAP') ||
+    ('distanceMeters' in parsed &&
+      (typeof parsed.distanceMeters !== 'number' ||
+        !Number.isFinite(parsed.distanceMeters) ||
+        parsed.distanceMeters < 0)) ||
     !('firstStartsAt' in parsed) ||
     !(parsed.firstStartsAt === null || isCursorDate(parsed.firstStartsAt))
   ) {
@@ -50,6 +58,13 @@ export function decodeEventCursor(value: string): EventCursor {
   return {
     id: parsed.id,
     firstStartsAt: parsed.firstStartsAt,
-    source: 'source' in parsed && parsed.source === 'ONLINE' ? 'ONLINE' : 'CITY'
+    source:
+      'source' in parsed && (parsed.source === 'ONLINE' || parsed.source === 'MAP')
+        ? parsed.source
+        : 'CITY',
+    distanceMeters:
+      'distanceMeters' in parsed && typeof parsed.distanceMeters === 'number'
+        ? parsed.distanceMeters
+        : undefined
   };
 }

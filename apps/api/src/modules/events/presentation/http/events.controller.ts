@@ -29,6 +29,22 @@ export function createEventsController({
   getEvents,
   getEventById
 }: EventsControllerDependencies) {
+  const getPage =
+    (view: typeof toFeedEventView | typeof toMapEventView) =>
+    async (req: Request, res: Response): Promise<void> => {
+      const query = req.query as unknown as GetEventsQuery;
+      const result = await getEvents.execute(query, req.user ?? null);
+      res.set('Cache-Control', 'private, no-store');
+
+      res.status(200).json({
+        data: result.items.map(view),
+        pagination: {
+          nextCursor: result.nextCursor,
+          hasMore: result.nextCursor !== null
+        }
+      });
+    };
+
   return {
     async create(req: Request, res: Response): Promise<void> {
       const body = req.body as CreateEventSchema;
@@ -68,19 +84,8 @@ export function createEventsController({
       res.status(201).json({ data: toEventView(event) });
     },
 
-    async getAll(req: Request, res: Response): Promise<void> {
-      const query = req.query as unknown as GetEventsQuery;
-      const result = await getEvents.execute(query, req.user ?? null);
-      res.set('Cache-Control', 'private, no-store');
-
-      res.status(200).json({
-        data: result.items.map(toFeedEventView),
-        pagination: {
-          nextCursor: result.nextCursor,
-          hasMore: result.nextCursor !== null
-        }
-      });
-    },
+    getAll: getPage(toFeedEventView),
+    getMap: getPage(toMapEventView),
 
     async getById(req: Request, res: Response): Promise<void> {
       const { id } = req.params as { id: string };

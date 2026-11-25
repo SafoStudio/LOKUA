@@ -4,7 +4,7 @@
     summary: List upcoming events by start time
     description: >
       Lists future published and full events in ascending start-time order. The first page
-      falls back to online events when no city events match and format is unspecified.
+      falls back to online events with DATE sorting when no city events match and format is unspecified.
       Use the same filters on subsequent pages. Visibility depends on age, moderation and user blocks.
     security:
       - {}
@@ -52,6 +52,18 @@
       - name: format
         in: query
         schema: { type: string, enum: [OFFLINE, ONLINE] }
+      - name: sort
+        in: query
+        description: DISTANCE sorts offline events in the selected city by distance, then start time and ID.
+        schema: { type: string, enum: [DATE, DISTANCE], default: DATE }
+      - name: latitude
+        in: query
+        description: Origin latitude. Required with DISTANCE and accepted only with that sort.
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: longitude
+        in: query
+        description: Origin longitude. Required with DISTANCE and accepted only with that sort.
+        schema: { type: number, minimum: -180, maximum: 180 }
     responses:
       '200':
         description: Page of upcoming events
@@ -300,3 +312,99 @@
       '403': *eventForbidden
       '404': *eventNotOwned
       '422': *eventDomainError
+
+/api/v1/events/map:
+  get:
+    tags: [Events]
+    summary: List upcoming offline event markers within a viewport
+    description: >
+      Returns markers ordered by start time and ID. Bounds include their edges and may span
+      up to five degrees per axis. The viewport determines the area when cityId is omitted.
+      Hidden addresses use rounded public coordinates for both matching and the marker.
+      Use the same viewport and filters on subsequent pages.
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: minLat
+        in: query
+        required: true
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: minLng
+        in: query
+        required: true
+        schema: { type: number, minimum: -180, maximum: 180 }
+      - name: maxLat
+        in: query
+        required: true
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: maxLng
+        in: query
+        required: true
+        schema: { type: number, minimum: -180, maximum: 180 }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      - name: cursor
+        in: query
+        schema: { type: string, minLength: 1 }
+      - name: cityId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: categoryId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: from
+        in: query
+        description: Inclusive start instant.
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        description: Exclusive end instant.
+        schema: { type: string, format: date-time }
+      - name: period
+        in: query
+        description: Uses the selected city, profile city or Kyiv timezone.
+        schema: { type: string, enum: [TODAY, TOMORROW, WEEKEND] }
+      - name: freeOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: participationMode
+        in: query
+        schema: { type: string, enum: [FREE, REQUEST] }
+      - name: availableOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: search
+        in: query
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    responses:
+      '200':
+        description: Page of upcoming offline event markers
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EventMapMarker'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'] }
+                    hasMore: { type: boolean }
+      '400':
+        description: Invalid map query or cursor
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/ValidationErrorResponse'
+                - $ref: '#/components/schemas/ErrorResponse'
+      '401': *eventUnauthorized
+      '403': *eventForbidden

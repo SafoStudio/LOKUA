@@ -1,0 +1,15 @@
+type: object
+required: [id, title, categoryId, firstStartsAt, status, hasAvailablePlaces, coordinates]
+properties:
+  id: { type: string, format: uuid }
+  title: { type: string }
+  categoryId: { type: string, format: uuid }
+  firstStartsAt: { type: string, format: date-time }
+  status: { type: string, enum: [PUBLISHED, FULL] }
+  hasAvailablePlaces: { type: boolean }
+  coordinates:
+    type: object
+    required: [latitude, longitude]
+    properties:
+      latitude: { type: number, minimum: -90, maximum: 90 }
+      longitude: { type: number, minimum: -180, maximum: 180 }

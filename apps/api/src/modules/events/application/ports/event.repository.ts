@@ -1,10 +1,11 @@
+import type { Coordinates } from '../../../../common/index.js';
 import type { Event } from '../../domain/index.js';
 import type { CreateEventData } from '../types/create-event-data.js';
 import type { AgeRestriction } from '../../domain/index.js';
 import type { GetEventsQuery } from '../types/get-events-query.js';
 
 export interface FindPublishedEventsQuery extends GetEventsQuery {
-  cityId: string;
+  cityId?: string;
   timezone: string;
   now: Date;
   blockedOrganizerIds: string[];
@@ -13,6 +14,8 @@ export interface FindPublishedEventsQuery extends GetEventsQuery {
 
 export interface FeedEvent extends Event {
   hasAvailablePlaces: boolean;
+  distanceMeters?: number;
+  mapCoordinates?: Coordinates;
 }
 
 export interface FindPublishedEventsResult {

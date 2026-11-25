@@ -1,6 +1,16 @@
+import type { Coordinates } from '../../../../common/index.js';
 import type { EventFormat, ParticipationMode } from '../../domain/index.js';
 
+export interface EventMapBounds {
+  minLat: number;
+  minLng: number;
+  maxLat: number;
+  maxLng: number;
+}
+
 export interface GetEventsQuery {
+  origin?: Coordinates;
+  bounds?: EventMapBounds;
   limit: number;
   cursor?: string;
   cityId?: string;

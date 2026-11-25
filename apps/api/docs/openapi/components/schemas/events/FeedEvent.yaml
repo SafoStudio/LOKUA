@@ -5,3 +5,4 @@ allOf:
     properties:
       status: { type: string, enum: [PUBLISHED, FULL] }
       hasAvailablePlaces: { type: boolean }
+      distanceMeters: { type: number, minimum: 0, description: Present for distance sorting. }

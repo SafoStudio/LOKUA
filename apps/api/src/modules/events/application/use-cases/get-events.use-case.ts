@@ -25,6 +25,10 @@ export class GetEventsUseCase {
       throw new AppError('The feed date range must end after it starts', 400);
     }
 
+    if (query.origin && query.format === 'ONLINE') {
+      throw new AppError('Distance sorting requires offline events', 400);
+    }
+
     const [city, blockedOrganizerIds] = await Promise.all([
       this.resolveCity(query.cityId, user),
       user ? this.blocks.listRelatedUserIds(user.id) : []
@@ -33,7 +37,7 @@ export class GetEventsUseCase {
     const restrictions: AgeRestriction[] = ['ALL', 'SIXTEEN_PLUS', 'EIGHTEEN_PLUS'];
     return this.eventRepository.findPublished({
       ...query,
-      cityId: city.id,
+      cityId: query.bounds && !query.cityId ? undefined : city.id,
       timezone: city.timezone,
       now,
       blockedOrganizerIds,

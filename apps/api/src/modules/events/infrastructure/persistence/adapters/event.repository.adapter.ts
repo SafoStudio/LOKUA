@@ -21,6 +21,24 @@ import { EventTagEntity } from '../entities/event-tag.entity.js';
 import { TagEntity } from '../entities/tag.entity.js';
 import { EventEntity } from '../entities/event.entity.js';
 
+interface FeedRow {
+  feed_available: boolean;
+  feed_start: string;
+  feed_distance?: number;
+  feed_latitude?: number;
+  feed_longitude?: number;
+}
+
+// Older snapshots can contain full precision in public_coordinates.
+const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
+const publicPoint = `CASE WHEN event.hideExactAddress THEN ST_SetSRID(ST_MakePoint(
+  CAST(ROUND(CAST(ST_X(${publicSnapshot}) AS numeric), 2) AS double precision),
+  CAST(ROUND(CAST(ST_Y(${publicSnapshot}) AS numeric), 2) AS double precision)
+), 4326) ELSE CAST(snapshot.coordinates AS geometry) END`;
+const feedDistance = `ST_Distance(
+  CAST((${publicPoint}) AS geography),
+  CAST(ST_SetSRID(ST_MakePoint(:originLongitude, :originLatitude), 4326) AS geography)
+)`;
 const statusByEventStatus: Record<EventStatus, OccurrenceStatus> = {
   DRAFT: 'SCHEDULED',
   PUBLISHED: 'SCHEDULED',
@@ -215,6 +233,14 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
         throw new AppError('Invalid cursor', 400);
       }
     }
+    if (
+      cursor &&
+      ((cursor.source === 'MAP') !== Boolean(query.bounds) ||
+        (cursor.distanceMeters !== undefined) !== Boolean(query.origin) ||
+        (cursor.distanceMeters !== undefined && cursor.source !== 'CITY'))
+    ) {
+      throw new AppError('Invalid cursor for the requested event view', 400);
+    }
     if (!query.ageRestrictions.length || cursor?.firstStartsAt === null) {
       return { items: [], nextCursor: null };
     }
@@ -243,7 +269,7 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
       )
       .orderBy('event.firstStartsAt', 'ASC')
       .addOrderBy('event.id', 'ASC')
-      .take(query.limit + 1);
+      .limit(query.limit + 1);
 
     if (query.blockedOrganizerIds.length) {
       builder.andWhere('event.organizerId NOT IN (:...blockedOrganizerIds)', {
@@ -278,16 +304,48 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
         { search: query.search }
       );
     }
-    if (cursor) {
+    if (cursor && !query.origin) {
       builder.andWhere('(event.firstStartsAt, event.id) > (:cursorStart, :cursorId)', {
         cursorStart: cursor.firstStartsAt,
         cursorId: cursor.id
       });
     }
 
-    const run = (source: 'CITY' | 'ONLINE') => {
+    const run = (source: 'CITY' | 'ONLINE' | 'MAP') => {
       const scoped = builder.clone();
-      if (source === 'CITY') {
+      if (source === 'ONLINE') {
+        scoped.andWhere("event.format = 'ONLINE'");
+      } else if (query.bounds || query.origin) {
+        scoped
+          .innerJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.eventId = event.id')
+          .andWhere("event.format = 'OFFLINE'");
+        if (query.cityId) {
+          scoped.andWhere('snapshot.cityId = :cityId', { cityId: query.cityId });
+        }
+        if (query.bounds) this.applyMapBounds(scoped, query.bounds);
+        if (query.origin) {
+          scoped
+            .setParameters({
+              originLongitude: query.origin.longitude,
+              originLatitude: query.origin.latitude
+            })
+            .addSelect(feedDistance, 'feed_distance')
+            .orderBy('feed_distance', 'ASC')
+            .addOrderBy('event.firstStartsAt', 'ASC')
+            .addOrderBy('event.id', 'ASC');
+          if (cursor) {
+            scoped.andWhere(
+              `(${feedDistance}, event.firstStartsAt, event.id) >
+                (:cursorDistance, :cursorStart, :cursorId)`,
+              {
+                cursorDistance: cursor.distanceMeters,
+                cursorStart: cursor.firstStartsAt,
+                cursorId: cursor.id
+              }
+            );
+          }
+        }
+      } else {
         scoped.andWhere(
           `event.format = 'OFFLINE' AND EXISTS (
             SELECT 1 FROM event_location_snapshot snapshot
@@ -295,24 +353,33 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
           )`,
           { cityId: query.cityId }
         );
-      } else {
-        scoped.andWhere("event.format = 'ONLINE'");
       }
-      return scoped.getRawAndEntities<{ feed_available: boolean; feed_start: string }>();
+      return scoped.getRawAndEntities<FeedRow>();
     };
 
-    let source: 'CITY' | 'ONLINE' =
-      query.format === 'ONLINE' ? 'ONLINE' : (cursor?.source ?? 'CITY');
+    let source: 'CITY' | 'ONLINE' | 'MAP' = query.bounds
+      ? 'MAP'
+      : query.format === 'ONLINE'
+        ? 'ONLINE'
+        : (cursor?.source ?? 'CITY');
     let page = await run(source);
-    if (!cursor && !query.format && !page.entities.length) {
+    if (!cursor && !query.format && !query.bounds && !query.origin && !page.entities.length) {
       source = 'ONLINE';
       page = await run(source);
     }
 
-    const items = page.entities.slice(0, query.limit).map((entity, index) => ({
-      ...this.toDomain(entity),
-      hasAvailablePlaces: page.raw[index].feed_available
-    }));
+    const items = page.entities.slice(0, query.limit).map((entity, index) => {
+      const row = page.raw[index];
+      return {
+        ...this.toDomain(entity),
+        hasAvailablePlaces: row.feed_available,
+        distanceMeters: row.feed_distance,
+        mapCoordinates:
+          row.feed_latitude === undefined || row.feed_longitude === undefined
+            ? undefined
+            : { latitude: row.feed_latitude, longitude: row.feed_longitude }
+      };
+    });
     const last = items.at(-1);
     return {
       items,
@@ -321,10 +388,23 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
           ? encodeEventCursor({
               id: last.id,
               firstStartsAt: page.raw[items.length - 1].feed_start,
+              distanceMeters: last.distanceMeters,
               source
             })
           : null
     };
+  }
+
+  private applyMapBounds(
+    builder: SelectQueryBuilder<EventEntity>,
+    bounds: NonNullable<FindPublishedEventsQuery['bounds']>
+  ): void {
+    const point = `(${publicPoint})`;
+    const envelope = 'ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326)';
+    builder
+      .andWhere(`ST_Intersects(${point}, ${envelope})`, { ...bounds })
+      .addSelect(`ST_Y(${point})`, 'feed_latitude')
+      .addSelect(`ST_X(${point})`, 'feed_longitude');
   }
 
   private applyFeedPeriod(
