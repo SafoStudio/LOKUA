@@ -6,4 +6,6 @@ export interface EventParticipation {
   userId: string;
   status: ParticipationStatus;
   statusUpdatedAt: Date;
+  applicationMessage?: string | null;
+  removalReason?: string | null;
 }

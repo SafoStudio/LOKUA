@@ -51,6 +51,7 @@ export function createModules(dataSource: DataSource) {
     cities: dictionariesModule.cities,
     profiles: usersModule.profiles,
     blocks: usersModule.blocks,
+    authUsers: usersModule.authUsers,
     categories: dictionariesModule.categories,
     locations: geolocationModule.locations,
     dataSource,

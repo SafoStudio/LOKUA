@@ -4,7 +4,7 @@ const feedBoolean = z.enum(['true', 'false']).transform((value) => value === 'tr
 const feedDate = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 
 const mapCoordinate = (min: number, max: number) =>
-  z.string().trim().min(1).pipe(z.coerce.number().min(min).max(max));
+  z.string().trim().min(1).pipe(z.coerce.number<string>().min(min).max(max));
 
 const latitude = mapCoordinate(-90, 90);
 const longitude = mapCoordinate(-180, 180);

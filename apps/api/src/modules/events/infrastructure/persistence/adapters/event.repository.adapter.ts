@@ -7,7 +7,12 @@ import type { EventParticipationRepository } from '../../../application/ports/ev
 import type { EventParticipation } from '../../../domain/models/event-participation.js';
 import type { EventManagementRepository } from '../../../application/ports/event-management.repository.js';
 import { AppError, toEntityManager } from '../../../../../common/index.js';
-import type { Event, EventStatus, OccurrenceStatus } from '../../../domain/index.js';
+import type {
+  Event,
+  EventStatus,
+  OccurrenceStatus,
+  ParticipationStatus
+} from '../../../domain/index.js';
 import type {
   EventRepository,
   FindPublishedEventsQuery,
@@ -103,6 +108,42 @@ export class EventRepositoryAdapter
       ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {})
     });
     return entity ? this.toDomain(entity) : null;
+  }
+
+  async findEvent(id: string): Promise<Event | null> {
+    const entity = await this.repository.findOneBy({ id });
+    return entity ? this.toDomain(entity) : null;
+  }
+
+  findParticipationById(eventId: string, id: string): Promise<EventParticipation | null> {
+    return this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .findOneBy({ eventId, id });
+  }
+
+  listParticipations(query: {
+    eventId: string;
+    status: ParticipationStatus;
+    after?: string;
+    limit: number;
+    excludedUserIds: string[];
+  }): Promise<EventParticipation[]> {
+    const builder = this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .createQueryBuilder('p')
+      .where('p.event_id = :eventId AND p.status = :status', {
+        eventId: query.eventId,
+        status: query.status
+      })
+      .orderBy('p.id', 'ASC')
+      .take(query.limit);
+    if (query.after) builder.andWhere('p.id > :after', { after: query.after });
+    if (query.excludedUserIds.length) {
+      builder.andWhere('p.user_id NOT IN (:...excludedUserIds)', {
+        excludedUserIds: query.excludedUserIds
+      });
+    }
+    return builder.getMany();
   }
 
   async lockEvent(id: string): Promise<Event | null> {

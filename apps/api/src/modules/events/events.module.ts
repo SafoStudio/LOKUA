@@ -5,7 +5,13 @@ import type { CategoryProvider, CityProvider } from '../dictionaries/index.js';
 import type { LocationProvider } from '../geolocation/index.js';
 import { ManageEventUseCase } from './application/use-cases/manage-event.use-case.js';
 import { ManageParticipationUseCase } from './application/use-cases/manage-participation.use-case.js';
-import type { AccessService, UserBlockProvider, UserProfileProvider } from '../users/index.js';
+import { ListEventParticipationUseCase } from './application/use-cases/list-event-participation.use-case.js';
+import type {
+  AccessService,
+  AuthUserProvider,
+  UserBlockProvider,
+  UserProfileProvider
+} from '../users/index.js';
 import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
 import { createEventsController } from './presentation/http/events.controller.js';
@@ -17,6 +23,7 @@ export interface CreateEventsModuleDependencies {
   cities: CityProvider;
   profiles: UserProfileProvider;
   blocks: UserBlockProvider;
+  authUsers: AuthUserProvider;
   categories: CategoryProvider;
   locations: LocationProvider;
   optionalAuth: RequestHandler;
@@ -31,6 +38,7 @@ export function createEventsModule({
   cities,
   profiles,
   blocks,
+  authUsers,
   optionalAuth,
   requireAuth
 }: CreateEventsModuleDependencies) {
@@ -41,6 +49,7 @@ export function createEventsModule({
   const manageParticipation = new ManageParticipationUseCase(
     eventRepository,
     unitOfWork,
+    authUsers,
     access,
     blocks,
     clock
@@ -57,7 +66,15 @@ export function createEventsModule({
   const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);
   const getEventById = new GetEventByIdUseCase(eventRepository, access, manageEvent);
 
+  const listParticipation = new ListEventParticipationUseCase(
+    eventRepository,
+    access,
+    blocks,
+    profiles,
+    clock
+  );
   const controller = createEventsController({
+    listParticipation,
     manageParticipation,
     manageEvent,
     createEvent,

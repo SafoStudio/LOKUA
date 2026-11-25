@@ -1,6 +1,12 @@
 import { AppError } from '../../../../common/index.js';
 import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
-import type { AccessService, AuthUser, UserBlockProvider } from '../../../users/index.js';
+import type {
+  AccessService,
+  AuthUser,
+  AuthUserProvider,
+  UserBlockProvider
+} from '../../../users/index.js';
+import type { EventParticipation } from '../../domain/models/event-participation.js';
 import type { Event } from '../../domain/index.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 
@@ -8,12 +14,13 @@ export class ManageParticipationUseCase {
   constructor(
     private readonly repository: EventParticipationRepository,
     private readonly unitOfWork: UnitOfWork,
+    private readonly users: AuthUserProvider,
     private readonly access: AccessService,
     private readonly blocks: UserBlockProvider,
     private readonly clock: () => Date
   ) {}
 
-  join(user: AuthUser, eventId: string) {
+  join(user: AuthUser, eventId: string, message?: string) {
     return this.withEvent(eventId, async (events, event, now, tx) => {
       if (
         event.isHiddenByAdmin ||
@@ -29,26 +36,29 @@ export class ManageParticipationUseCase {
       if (event.organizerId === user.id) {
         throw new AppError('The organizer already participates in the event', 409);
       }
-      if (event.participationMode !== 'FREE') {
-        throw new AppError('The event requires an application', 409);
+      const mode = event.participationMode;
+      if (mode === 'FREE' && message !== undefined) {
+        throw new AppError('Application messages require participation mode REQUEST', 409);
       }
-
+      const applicationMessage = this.normalizeText(message);
       let participation = await events.findParticipation(event.id, user.id);
-      if (participation && participation.status !== 'APPROVED') {
+      if (
+        participation &&
+        participation.status !== 'APPROVED' &&
+        participation.status !== 'PENDING'
+      ) {
         throw new AppError('This participation cannot be reopened', 409);
       }
       if (!participation) {
-        const approved = await events.countApproved(event);
-        if (event.capacityLimit !== null && approved >= event.capacityLimit) {
-          throw new AppError('The event has no available places', 409);
-        }
-        participation = await events.saveParticipation({
+        const entry = {
           eventId: event.id,
           userId: user.id,
-          status: 'APPROVED',
           statusUpdatedAt: now
-        });
-        await this.updateCapacity(events, event, approved + 1);
+        };
+        participation =
+          mode === 'REQUEST'
+            ? await events.saveParticipation({ ...entry, status: 'PENDING', applicationMessage })
+            : await this.approve(events, event, entry);
       }
 
       const conflict = await events.hasScheduleConflict(
@@ -84,6 +94,102 @@ export class ManageParticipationUseCase {
       }
       return saved;
     });
+  }
+
+  decide(
+    user: AuthUser,
+    eventId: string,
+    participationId: string,
+    decision: 'APPROVED' | 'REJECTED',
+    reason?: string
+  ) {
+    return this.withEvent(eventId, async (events, event, now, tx) => {
+      this.ensureOwner(event, user);
+      const participation = await this.findManagedParticipation(events, event, participationId);
+      if (participation.status === decision) return participation;
+
+      this.ensureOpen(event, now);
+      if (participation.status !== 'PENDING') {
+        throw new AppError('The application is no longer pending', 409);
+      }
+      if (decision === 'REJECTED') {
+        return events.saveParticipation({
+          ...participation,
+          status: decision,
+          statusUpdatedAt: now,
+          removalReason: this.normalizeText(reason)
+        });
+      }
+
+      const applicant = await this.users.findById(participation.userId, tx);
+      if (
+        event.isHiddenByAdmin ||
+        !applicant ||
+        !this.access.canJoinEvent(applicant, event.ageRestriction, now) ||
+        (await this.blocks.listRelatedUserIds(applicant.id, tx)).includes(event.organizerId)
+      ) {
+        throw new AppError('The applicant is no longer eligible to join', 409);
+      }
+      return this.approve(events, event, { ...participation, statusUpdatedAt: now });
+    });
+  }
+
+  remove(user: AuthUser, eventId: string, participationId: string, reason?: string) {
+    return this.withEvent(eventId, async (events, event, now) => {
+      this.ensureOwner(event, user);
+      const participation = await this.findManagedParticipation(events, event, participationId);
+      if (participation.status === 'REMOVED_BY_ORGANIZER') return participation;
+
+      this.ensureOpen(event, now);
+      if (participation.status !== 'APPROVED') {
+        throw new AppError('Only approved participants can be removed', 409);
+      }
+      const saved = await events.saveParticipation({
+        ...participation,
+        status: 'REMOVED_BY_ORGANIZER',
+        statusUpdatedAt: now,
+        removalReason: this.normalizeText(reason)
+      });
+      await this.updateCapacity(events, event, await events.countApproved(event));
+      return saved;
+    });
+  }
+
+  private async approve(
+    events: EventParticipationRepository,
+    event: Event,
+    entry: Pick<EventParticipation, 'eventId' | 'userId' | 'statusUpdatedAt'> & { id?: string }
+  ): Promise<EventParticipation> {
+    const approved = await events.countApproved(event);
+    if (event.capacityLimit !== null && approved >= event.capacityLimit) {
+      throw new AppError('The event has no available places', 409);
+    }
+    const participation = await events.saveParticipation({ ...entry, status: 'APPROVED' });
+    await this.updateCapacity(events, event, approved + 1);
+    return participation;
+  }
+
+  private ensureOwner(event: Event, user: AuthUser): void {
+    if (event.organizerId !== user.id) throw new AppError('Event not found', 404);
+  }
+
+  private async findManagedParticipation(
+    events: EventParticipationRepository,
+    event: Event,
+    id: string
+  ): Promise<EventParticipation> {
+    const participation = await events.findParticipationById(event.id, id);
+    if (!participation || participation.userId === event.organizerId) {
+      throw new AppError('Participation not found', 404);
+    }
+    return participation;
+  }
+
+  private normalizeText(value?: string): string | null {
+    const text = value?.trim() || null;
+    if (text && text.length > 300)
+      throw new AppError('Participation text exceeds 300 characters', 422);
+    return text;
   }
 
   private ensureOpen(

@@ -11,6 +11,13 @@ import {
 
 import { cancelEventSchema, updateEventSchema } from './manage-event.schema.js';
 
+import {
+  participationBodySchema,
+  participationPageSchema,
+  participationParamsSchema,
+  participationReasonSchema
+} from './participation.schema.js';
+
 interface EventsRouterDependencies {
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
@@ -43,7 +50,41 @@ export function createEventsRouter({
     validate({ params: getEventByIdParamsSchema, body: updateEventSchema }),
     controller.update
   );
-  router.post('/:id/participations', requireAuth, validateId, controller.join);
+  router.post(
+    '/:id/participations',
+    requireAuth,
+    validate({ params: getEventByIdParamsSchema, body: participationBodySchema }),
+    controller.join
+  );
+  const validatePage = validate({
+    params: getEventByIdParamsSchema,
+    query: participationPageSchema
+  });
+  const validateParticipation = validate({ params: participationParamsSchema });
+  const validateReason = validate({
+    params: participationParamsSchema,
+    body: participationReasonSchema
+  });
+  router.get('/:id/applications', requireAuth, validatePage, controller.listApplications);
+  router.post(
+    '/:id/applications/:participationId/approve',
+    requireAuth,
+    validateParticipation,
+    controller.approveApplication
+  );
+  router.post(
+    '/:id/applications/:participationId/reject',
+    requireAuth,
+    validateReason,
+    controller.rejectApplication
+  );
+  router.get('/:id/participants', requireAuth, validatePage, controller.listParticipants);
+  router.delete(
+    '/:id/participants/:participationId',
+    requireAuth,
+    validateReason,
+    controller.removeParticipant
+  );
   router.delete('/:id/participations/me', requireAuth, validateId, controller.cancelParticipation);
   router.post('/:id/publish', requireAuth, validateId, controller.publish);
   router.post(

@@ -412,15 +412,24 @@
 /api/v1/events/{id}/participations:
   post:
     tags: [Events]
-    summary: Join a free-entry event
+    summary: Join an event or submit an application
     description: >
-      Approves participation immediately for events with participation mode FREE.
-      A repeated request returns the existing approval. Schedule overlaps are returned as warnings.
+      FREE approves immediately. REQUEST creates a pending application even when all places are
+      occupied. Repeating an approved or pending request returns that participation.
+      Schedule overlaps are returned as warnings.
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              message: { type: string, maxLength: 300, description: For REQUEST events only. }
     responses:
       '200':
-        description: Approved participation
+        description: Approved participation or pending application
         content:
           application/json:
             schema:
@@ -451,7 +460,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
       '409':
-        description: Event is closed or full, requires an application, or participation cannot be reopened
+        description: Event is closed or full for free entry, or participation cannot be reopened
         content:
           application/json:
             schema:
@@ -489,3 +498,139 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications:
+  get:
+    tags: [Events]
+    summary: List pending applications as the organizer
+    security: *eventOwnerSecurity
+    parameters: &eventParticipationPageParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: cursor
+        in: query
+        schema: { type: string, format: uuid }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    responses:
+      '200':
+        description: Pending applications with their application messages
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data: &eventParticipationItems
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EventParticipationListItem'
+                pagination: &eventParticipationPagination
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'], format: uuid }
+                    hasMore: { type: boolean }
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': &eventParticipationNotFound
+        description: Event or participation is unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications/{participationId}/approve:
+  post:
+    tags: [Events]
+    summary: Approve a pending application as the organizer
+    security: *eventOwnerSecurity
+    parameters: &eventParticipationIdParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: participationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses: &eventParticipationDecisionResponses
+      '200':
+        description: Updated participation
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/OwnEventParticipation'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventParticipationNotFound
+      '409':
+        description: Event is closed or full, the participation is ineligible, or the transition is unavailable
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications/{participationId}/reject:
+  post:
+    tags: [Events]
+    summary: Reject a pending application as the organizer
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationIdParameters
+    requestBody: &eventParticipationReason
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              reason: { type: string, maxLength: 300 }
+    responses: *eventParticipationDecisionResponses
+
+/api/v1/events/{id}/participants:
+  get:
+    tags: [Events]
+    summary: List approved participants and the organizer
+    description: Available to the organizer, approved participants and active administrators.
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationPageParameters
+    responses:
+      '200':
+        description: Participant profiles and the organizer profile
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, organizer, pagination]
+              properties:
+                data: *eventParticipationItems
+                organizer:
+                  $ref: '#/components/schemas/EventParticipantProfile'
+                pagination: *eventParticipationPagination
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403':
+        description: Account is inactive or approved participation is required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404': *eventParticipationNotFound
+
+/api/v1/events/{id}/participants/{participationId}:
+  delete:
+    tags: [Events]
+    summary: Remove an approved participant as the organizer before the event starts
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationIdParameters
+    requestBody: *eventParticipationReason
+    responses: *eventParticipationDecisionResponses

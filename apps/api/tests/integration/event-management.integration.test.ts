@@ -9,6 +9,8 @@ import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
 import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
+import { ListEventParticipationUseCase } from '../../src/modules/events/application/use-cases/list-event-participation.use-case.js';
+import { toOwnParticipationView } from '../../src/modules/events/presentation/http/participation.view.js';
 import { ManageParticipationUseCase } from '../../src/modules/events/application/use-cases/manage-participation.use-case.js';
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
@@ -26,6 +28,7 @@ describe('event management and feed with PostgreSQL', () => {
   let lvivId: string;
   const locationIds: string[] = [];
 
+  let listParticipation: ListEventParticipationUseCase;
   let manageParticipation: ManageParticipationUseCase;
   let manageEvent: ManageEventUseCase;
   let categoryId: string;
@@ -35,9 +38,17 @@ describe('event management and feed with PostgreSQL', () => {
     await dataSource.initialize();
     const { categories, cities, countries } = createDictionariesModule({ dataSource });
     const users = createUsersModule({ dataSource });
+    listParticipation = new ListEventParticipationUseCase(
+      new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
+      users.access,
+      users.blocks,
+      users.profiles,
+      () => now
+    );
     manageParticipation = new ManageParticipationUseCase(
       new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
       new TypeOrmUnitOfWork(dataSource),
+      users.authUsers,
       users.access,
       users.blocks,
       () => now
@@ -92,6 +103,11 @@ describe('event management and feed with PostgreSQL', () => {
     const repo = new UserRepositoryAdapter(dataSource.getRepository(UserEntity));
     const user = await repo.create({ email: `${randomUUID()}@example.com`, name: 'Event test' });
     userIds.push(user.id);
+    await dataSource.getRepository(UserEntity).update(user.id, {
+      birthDate: new Date('2000-01-01T00:00:00Z'),
+      emailVerified: true,
+      onboardingCompleted: true
+    });
     return {
       id: user.id,
       email: user.email,
@@ -495,8 +511,9 @@ describe('event management and feed with PostgreSQL', () => {
     await blocks.delete({ blockerId: viewer.id, blockedId: owner.id });
 
     const request = await publishForFeed(owner, { participationMode: 'REQUEST' });
-    await expect(manageParticipation.join(viewer, request.id))
-      .rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageParticipation.join(viewer, request.id)).resolves.toMatchObject({
+      participation: { status: 'PENDING' }
+    });
 
     const overlap = await publishForFeed(owner, {});
     await expect(manageParticipation.join(viewer, overlap.id)).resolves.toMatchObject({
@@ -512,5 +529,85 @@ describe('event management and feed with PostgreSQL', () => {
       .rejects.toMatchObject({ statusCode: 409 });
     await expect(manageParticipation.join(await createUser(), restricted.id))
       .rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('serializes approvals, keeps pending requests outside capacity and releases a removed place', async () => {
+    const owner = await createUser();
+    const first = await createUser();
+    const second = await createUser();
+    const third = await createUser();
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST', capacityLimit: 1 });
+    const a = (await manageParticipation.join(first, event.id, 'First message')).participation;
+    const b = (await manageParticipation.join(second, event.id)).participation;
+    expect(a.status).toBe('PENDING');
+    expect(b.status).toBe('PENDING');
+    const events = dataSource.getRepository(EventEntity);
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({ status: 'PUBLISHED' });
+    await expect(manageParticipation.decide(first, event.id, b.id, 'APPROVED'))
+      .rejects.toMatchObject({ statusCode: 404 });
+    await expect(listParticipation.execute(first, event.id, 'APPLICATIONS', { limit: 10 }))
+      .rejects.toMatchObject({ statusCode: 404 });
+
+    const page = await listParticipation.execute(owner, event.id, 'APPLICATIONS', { limit: 1 });
+    const next = await listParticipation.execute(owner, event.id, 'APPLICATIONS', {
+      limit: 1,
+      cursor: page.nextCursor ?? undefined
+    });
+    expect([...page.items, ...next.items].map(({ participation }) => participation.id))
+      .toEqual([a.id, b.id].sort());
+
+    const outcomes = await Promise.allSettled([
+      manageParticipation.decide(owner, event.id, a.id, 'APPROVED'),
+      manageParticipation.decide(owner, event.id, b.id, 'APPROVED')
+    ]);
+    expect(outcomes.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+    const winner = outcomes[0].status === 'fulfilled' ? a : b;
+    const loser = winner.id === a.id ? b : a;
+    const winnerUser = winner.id === a.id ? first : second;
+    const loserUser = winner.id === a.id ? second : first;
+
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({ status: 'FULL' });
+    await expect(manageParticipation.join(third, event.id)).resolves.toMatchObject({
+      participation: { status: 'PENDING' }
+    });
+    await expect(listParticipation.execute(loserUser, event.id, 'PARTICIPANTS', { limit: 10 }))
+      .rejects.toMatchObject({ statusCode: 403 });
+    const roster = await listParticipation.execute(winnerUser, event.id, 'PARTICIPANTS', {
+      limit: 10
+    });
+    expect(roster.organizer).toMatchObject({ id: owner.id });
+    expect(roster.items.map(({ profile }) => profile.id)).toEqual([winner.userId]);
+    expect(roster.items[0].profile).not.toHaveProperty('email');
+
+    const removed = await manageParticipation.remove(owner, event.id, winner.id, 'Private reason');
+    expect(toOwnParticipationView(removed)).not.toHaveProperty('removalReason');
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({ status: 'PUBLISHED' });
+    await expect(manageParticipation.decide(owner, event.id, loser.id, 'APPROVED'))
+      .resolves.toMatchObject({ status: 'APPROVED' });
+  });
+
+  it('keeps rejection reasons private and forbids reapplying after rejection', async () => {
+    const owner = await createUser();
+    const applicant = await createUser();
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const { participation } = await manageParticipation.join(applicant, event.id, 'Hello');
+    const blocks = dataSource.getRepository(UserBlockEntity);
+    await blocks.insert({ blockerId: applicant.id, blockedId: owner.id });
+    await expect(manageParticipation.decide(owner, event.id, participation.id, 'APPROVED'))
+      .rejects.toMatchObject({ statusCode: 409 });
+
+    const rejected = await manageParticipation.decide(
+      owner,
+      event.id,
+      participation.id,
+      'REJECTED',
+      'Private reason'
+    );
+    expect(rejected).toMatchObject({ status: 'REJECTED', removalReason: 'Private reason' });
+    expect(toOwnParticipationView(rejected)).not.toHaveProperty('removalReason');
+    await blocks.delete({ blockerId: applicant.id, blockedId: owner.id });
+    await expect(manageParticipation.join(applicant, event.id)).rejects.toMatchObject({
+      statusCode: 409
+    });
   });
 });

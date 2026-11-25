@@ -6,10 +6,19 @@ import type {
 } from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
-import { toEventView, toFeedEventView, toPublicEventView } from './event.view.js';
+import { toEventView, toFeedEventView, toMapEventView, toPublicEventView } from './event.view.js';
 import type { GetEventsQuery } from '../../application/index.js';
 
 import type { ManageParticipationUseCase } from '../../application/use-cases/manage-participation.use-case.js';
+import type {
+  ListEventParticipationUseCase,
+  ParticipationPageQuery
+} from '../../application/use-cases/list-event-participation.use-case.js';
+import type {
+  ParticipationBody,
+  ParticipationParams,
+  ParticipationReason
+} from './participation.schema.js';
 import { toOwnParticipationView } from './participation.view.js';
 import type { ManageEventUseCase } from '../../application/use-cases/manage-event.use-case.js';
 import type { CancelEventBody, UpdateEventBody } from './manage-event.schema.js';
@@ -20,6 +29,7 @@ function eventId(req: Request): string {
 
 interface EventsControllerDependencies {
   manageParticipation: ManageParticipationUseCase;
+  listParticipation: ListEventParticipationUseCase;
   manageEvent: ManageEventUseCase;
   createEvent: CreateEventUseCase;
   getEvents: GetEventsUseCase;
@@ -27,6 +37,7 @@ interface EventsControllerDependencies {
 }
 
 export function createEventsController({
+  listParticipation,
   manageParticipation,
   manageEvent,
   createEvent,
@@ -41,11 +52,49 @@ export function createEventsController({
       res.set('Cache-Control', 'private, no-store');
 
       res.status(200).json({
-        data: result.items.map(view),
+        data: result.items.map((event) => view(event)),
         pagination: {
           nextCursor: result.nextCursor,
           hasMore: result.nextCursor !== null
         }
+      });
+    };
+
+  const decide =
+    (decision: 'APPROVED' | 'REJECTED') =>
+    async (req: Request, res: Response): Promise<void> => {
+      const { id, participationId } = req.params as ParticipationParams;
+      const reason = (req.body as ParticipationReason | undefined)?.reason;
+      const participation = await manageParticipation.decide(
+        toEventContext(req).user,
+        id,
+        participationId,
+        decision,
+        reason
+      );
+      res.status(200).json({ data: toOwnParticipationView(participation) });
+    };
+
+  const list =
+    (kind: 'APPLICATIONS' | 'PARTICIPANTS') =>
+    async (req: Request, res: Response): Promise<void> => {
+      const query = req.query as unknown as ParticipationPageQuery;
+      const result = await listParticipation.execute(
+        toEventContext(req).user,
+        eventId(req),
+        kind,
+        query
+      );
+      res.set('Cache-Control', 'private, no-store');
+      res.status(200).json({
+        data: result.items.map(({ participation, profile }) => ({
+          ...toOwnParticipationView(participation),
+          user: profile,
+          applicationMessage:
+            kind === 'APPLICATIONS' ? (participation.applicationMessage ?? null) : undefined
+        })),
+        organizer: result.organizer ?? undefined,
+        pagination: { nextCursor: result.nextCursor, hasMore: result.nextCursor !== null }
       });
     };
 
@@ -89,7 +138,12 @@ export function createEventsController({
     },
 
     async join(req: Request, res: Response): Promise<void> {
-      const result = await manageParticipation.join(toEventContext(req).user, eventId(req));
+      const { message } = req.body as ParticipationBody;
+      const result = await manageParticipation.join(
+        toEventContext(req).user,
+        eventId(req),
+        message
+      );
       res.status(200).json({
         data: {
           participation: toOwnParticipationView(result.participation),
@@ -102,6 +156,23 @@ export function createEventsController({
       const participation = await manageParticipation.cancel(
         toEventContext(req).user,
         eventId(req)
+      );
+      res.status(200).json({ data: toOwnParticipationView(participation) });
+    },
+
+    approveApplication: decide('APPROVED'),
+    rejectApplication: decide('REJECTED'),
+    listApplications: list('APPLICATIONS'),
+    listParticipants: list('PARTICIPANTS'),
+
+    async removeParticipant(req: Request, res: Response): Promise<void> {
+      const { id, participationId } = req.params as ParticipationParams;
+      const { reason } = req.body as ParticipationReason;
+      const participation = await manageParticipation.remove(
+        toEventContext(req).user,
+        id,
+        participationId,
+        reason
       );
       res.status(200).json({ data: toOwnParticipationView(participation) });
     },
