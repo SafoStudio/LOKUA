@@ -408,3 +408,84 @@
                 - $ref: '#/components/schemas/ErrorResponse'
       '401': *eventUnauthorized
       '403': *eventForbidden
+
+/api/v1/events/{id}/participations:
+  post:
+    tags: [Events]
+    summary: Join a free-entry event
+    description: >
+      Approves participation immediately for events with participation mode FREE.
+      A repeated request returns the existing approval. Schedule overlaps are returned as warnings.
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '200':
+        description: Approved participation
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [participation, warnings]
+                  properties:
+                    participation:
+                      $ref: '#/components/schemas/OwnEventParticipation'
+                    warnings:
+                      type: array
+                      items: { type: string, enum: [SCHEDULE_CONFLICT] }
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403':
+        description: Account is ineligible to join
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404':
+        description: Event is missing or unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Event is closed or full, requires an application, or participation cannot be reopened
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/participations/me:
+  delete:
+    tags: [Events]
+    summary: Cancel your participation before the event starts
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '200':
+        description: Cancelled participation
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/OwnEventParticipation'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404':
+        description: Event or participation not found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Event is closed or participation cannot be cancelled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

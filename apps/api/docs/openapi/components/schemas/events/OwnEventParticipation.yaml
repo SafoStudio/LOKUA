@@ -1,0 +1,7 @@
+type: object
+required: [id, eventId, status, statusUpdatedAt]
+properties:
+  id: { type: string, format: uuid }
+  eventId: { type: string, format: uuid }
+  status: { type: string, enum: [APPROVED, CANCELLED_BY_USER] }
+  statusUpdatedAt: { type: string, format: date-time }

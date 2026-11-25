@@ -1,3 +1,5 @@
+import type { TransactionContext } from '../../../../common/index.js';
+
 export interface UserBlockProvider {
-  listRelatedUserIds(userId: string): Promise<string[]>;
+  listRelatedUserIds(userId: string, tx?: TransactionContext): Promise<string[]>;
 }

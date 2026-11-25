@@ -4,6 +4,7 @@ import { TypeOrmUnitOfWork } from '../../common/index.js';
 import type { CategoryProvider, CityProvider } from '../dictionaries/index.js';
 import type { LocationProvider } from '../geolocation/index.js';
 import { ManageEventUseCase } from './application/use-cases/manage-event.use-case.js';
+import { ManageParticipationUseCase } from './application/use-cases/manage-participation.use-case.js';
 import type { AccessService, UserBlockProvider, UserProfileProvider } from '../users/index.js';
 import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
@@ -35,26 +36,29 @@ export function createEventsModule({
 }: CreateEventsModuleDependencies) {
   const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
 
+  const unitOfWork = new TypeOrmUnitOfWork(dataSource);
+  const clock = () => new Date();
+  const manageParticipation = new ManageParticipationUseCase(
+    eventRepository,
+    unitOfWork,
+    access,
+    blocks,
+    clock
+  );
   const manageEvent = new ManageEventUseCase(
     eventRepository,
-    new TypeOrmUnitOfWork(dataSource),
+    unitOfWork,
     access,
     categories,
     locations,
-    () => new Date()
+    clock
   );
   const createEvent = new CreateEventUseCase(manageEvent);
-  const getEvents = new GetEventsUseCase(
-    eventRepository,
-    access,
-    cities,
-    profiles,
-    blocks,
-    () => new Date()
-  );
+  const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);
   const getEventById = new GetEventByIdUseCase(eventRepository, access, manageEvent);
 
   const controller = createEventsController({
+    manageParticipation,
     manageEvent,
     createEvent,
     getEvents,

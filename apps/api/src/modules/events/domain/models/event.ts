@@ -21,6 +21,7 @@ export interface Event {
   hideExactAddress: boolean;
 
   capacityLimit: number | null;
+  hasApprovedParticipants: boolean;
   participationMode: ParticipationMode;
   ageRestriction: AgeRestriction;
 

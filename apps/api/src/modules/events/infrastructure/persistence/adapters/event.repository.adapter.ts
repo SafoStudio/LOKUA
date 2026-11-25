@@ -3,6 +3,8 @@ import { In } from 'typeorm';
 import type { TransactionContext } from '../../../../../common/index.js';
 import { obfuscateCoordinates } from '../../../../geolocation/index.js';
 import type { Location } from '../../../../geolocation/index.js';
+import type { EventParticipationRepository } from '../../../application/ports/event-participation.repository.js';
+import type { EventParticipation } from '../../../domain/models/event-participation.js';
 import type { EventManagementRepository } from '../../../application/ports/event-management.repository.js';
 import { AppError, toEntityManager } from '../../../../../common/index.js';
 import type { Event, EventStatus, OccurrenceStatus } from '../../../domain/index.js';
@@ -47,7 +49,9 @@ const statusByEventStatus: Record<EventStatus, OccurrenceStatus> = {
   CANCELLED: 'CANCELLED'
 };
 
-export class EventRepositoryAdapter implements EventRepository, EventManagementRepository {
+export class EventRepositoryAdapter
+  implements EventRepository, EventManagementRepository, EventParticipationRepository
+{
   constructor(private readonly repository: Repository<EventEntity>) {}
 
   async create(organizerId: string, data: CreateEventData): Promise<Event> {
@@ -101,6 +105,43 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
     return entity ? this.toDomain(entity) : null;
   }
 
+  async lockEvent(id: string): Promise<Event | null> {
+    const entity = await this.repository.findOne({
+      where: { id },
+      lock: { mode: 'pessimistic_write' }
+    });
+    return entity ? this.toDomain(entity) : null;
+  }
+
+  findParticipation(eventId: string, userId: string): Promise<EventParticipation | null> {
+    return this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .findOneBy({ eventId, userId });
+  }
+
+  saveParticipation(
+    participation: Omit<EventParticipation, 'id'> & { id?: string }
+  ): Promise<EventParticipation> {
+    const repository = this.repository.manager.getRepository(EventParticipationEntity);
+    return repository.save(repository.create(participation));
+  }
+
+  hasScheduleConflict(userId: string, eventId: string, start: Date, end: Date): Promise<boolean> {
+    return this.repository
+      .createQueryBuilder('event')
+      .where('event.id <> :eventId', { eventId })
+      .andWhere("event.status IN ('PUBLISHED', 'FULL')")
+      .andWhere('event.first_starts_at < :end AND event.first_ends_at > :start', { start, end })
+      .andWhere(
+        `(event.organizer_id = :userId OR EXISTS (
+          SELECT 1 FROM event_participations p
+          WHERE p.event_id = event.id AND p.user_id = :userId AND p.status = 'APPROVED'
+        ))`,
+        { userId }
+      )
+      .getExists();
+  }
+
   countUpcoming(organizerId: string, now: Date): Promise<number> {
     return this.repository
       .createQueryBuilder('event')
@@ -123,6 +164,8 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
   }
 
   hasParticipantHistory(event: Event): Promise<boolean> {
+    if (event.hasApprovedParticipants) return Promise.resolve(true);
+
     return this.repository.manager
       .getRepository(EventParticipationEntity)
       .createQueryBuilder('p')
@@ -453,6 +496,7 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
       onlineUrl: entity.onlineUrl,
       hideExactAddress: entity.hideExactAddress,
       capacityLimit: entity.capacityLimit,
+      hasApprovedParticipants: entity.hasApprovedParticipants,
       participationMode: entity.participationMode,
       ageRestriction: entity.ageRestriction,
       isFree: entity.isFree,

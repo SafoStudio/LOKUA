@@ -73,6 +73,9 @@ export class EventEntity {
   @Column({ type: 'integer', name: 'capacity_limit', nullable: true })
   capacityLimit!: number | null;
 
+  @Column({ type: 'boolean', name: 'has_approved_participants', default: false })
+  hasApprovedParticipants!: boolean;
+
   @Column({ type: 'varchar', length: 20, name: 'participation_mode' })
   participationMode!: ParticipationMode;
 

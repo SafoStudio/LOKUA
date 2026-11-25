@@ -9,6 +9,7 @@ import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
 import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
+import { ManageParticipationUseCase } from '../../src/modules/events/application/use-cases/manage-participation.use-case.js';
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
 import { EventEntity, EventRepositoryAdapter } from '../../src/modules/events/infrastructure/index.js';
@@ -25,6 +26,7 @@ describe('event management and feed with PostgreSQL', () => {
   let lvivId: string;
   const locationIds: string[] = [];
 
+  let manageParticipation: ManageParticipationUseCase;
   let manageEvent: ManageEventUseCase;
   let categoryId: string;
   const userIds: string[] = [];
@@ -33,6 +35,13 @@ describe('event management and feed with PostgreSQL', () => {
     await dataSource.initialize();
     const { categories, cities, countries } = createDictionariesModule({ dataSource });
     const users = createUsersModule({ dataSource });
+    manageParticipation = new ManageParticipationUseCase(
+      new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
+      new TypeOrmUnitOfWork(dataSource),
+      users.access,
+      users.blocks,
+      () => now
+    );
     const kyiv = await cities.findBySlug('kyiv');
     const lviv = await cities.findBySlug('lviv');
     if (!kyiv || !lviv) throw new Error('Test cities are missing');
@@ -412,5 +421,96 @@ describe('event management and feed with PostgreSQL', () => {
       ...mapQuery,
       cursor: firstDistance.nextCursor ?? undefined
     }, null)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('serializes free joins, releases a place, and remembers the first approval', async () => {
+    const owner = await createUser();
+    const first = await createUser();
+    const second = await createUser();
+    const event = await publishForFeed(owner, { capacityLimit: 1 });
+    const [firstResult, secondResult] = await Promise.allSettled([
+      manageParticipation.join(first, event.id),
+      manageParticipation.join(second, event.id)
+    ]);
+    expect([firstResult.status, secondResult.status].sort()).toEqual(['fulfilled', 'rejected']);
+    const winner = firstResult.status === 'fulfilled' ? first : second;
+    const other = winner === first ? second : first;
+    const failed = winner === first ? secondResult : firstResult;
+    expect(failed).toMatchObject({ status: 'rejected', reason: { statusCode: 409 } });
+
+    const events = dataSource.getRepository(EventEntity);
+    const occurrences = dataSource.getRepository(EventOccurrenceEntity);
+    const participations = dataSource.getRepository(EventParticipationEntity);
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({
+      status: 'FULL', hasApprovedParticipants: true
+    });
+    expect(await occurrences.findOneByOrFail({ eventId: event.id })).toMatchObject({
+      status: 'FULL'
+    });
+    const approved = await participations.findOneByOrFail({ eventId: event.id, userId: winner.id });
+    await expect(manageParticipation.join(winner, event.id)).resolves.toMatchObject({
+      participation: { id: approved.id, status: 'APPROVED' }
+    });
+    expect(await participations.countBy({ eventId: event.id })).toBe(1);
+
+    await expect(manageParticipation.cancel(winner, event.id)).resolves.toMatchObject({
+      status: 'CANCELLED_BY_USER'
+    });
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({
+      status: 'PUBLISHED', hasApprovedParticipants: true
+    });
+    expect(await occurrences.findOneByOrFail({ eventId: event.id })).toMatchObject({
+      status: 'SCHEDULED'
+    });
+    await expect(manageEvent.delete(owner, event.id)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageEvent.update(owner, event.id, { ageRestriction: 'EIGHTEEN_PLUS' }))
+      .rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageParticipation.join(winner, event.id))
+      .rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageParticipation.join(other, event.id)).resolves.toMatchObject({
+      participation: { status: 'APPROVED' }
+    });
+  });
+
+  it('applies age, block and event access before joining and warns about schedule conflicts', async () => {
+    const owner = await createUser();
+    const viewer = await createUser();
+    const teen = { ...viewer, birthDate: new Date('2009-01-01T00:00:00Z') };
+    const restricted = await publishForFeed(owner, { ageRestriction: 'EIGHTEEN_PLUS' });
+    await expect(manageParticipation.join(teen, restricted.id))
+      .rejects.toMatchObject({ statusCode: 404 });
+    await expect(manageParticipation.join(owner, restricted.id))
+      .rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageParticipation.join({ ...viewer, emailVerified: false }, restricted.id))
+      .rejects.toMatchObject({ statusCode: 403 });
+
+    const blocks = dataSource.getRepository(UserBlockEntity);
+    await blocks.insert({ blockerId: owner.id, blockedId: viewer.id });
+    await expect(manageParticipation.join(viewer, restricted.id))
+      .rejects.toMatchObject({ statusCode: 404 });
+    await blocks.delete({ blockerId: owner.id, blockedId: viewer.id });
+    await blocks.insert({ blockerId: viewer.id, blockedId: owner.id });
+    await expect(manageParticipation.join(viewer, restricted.id))
+      .rejects.toMatchObject({ statusCode: 404 });
+    await blocks.delete({ blockerId: viewer.id, blockedId: owner.id });
+
+    const request = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    await expect(manageParticipation.join(viewer, request.id))
+      .rejects.toMatchObject({ statusCode: 409 });
+
+    const overlap = await publishForFeed(owner, {});
+    await expect(manageParticipation.join(viewer, overlap.id)).resolves.toMatchObject({
+      warnings: []
+    });
+    await expect(manageParticipation.join(viewer, restricted.id)).resolves.toMatchObject({
+      warnings: ['SCHEDULE_CONFLICT']
+    });
+
+    const events = dataSource.getRepository(EventEntity);
+    await events.update(restricted.id, { firstStartsAt: now });
+    await expect(manageParticipation.cancel(viewer, restricted.id))
+      .rejects.toMatchObject({ statusCode: 409 });
+    await expect(manageParticipation.join(await createUser(), restricted.id))
+      .rejects.toMatchObject({ statusCode: 409 });
   });
 });

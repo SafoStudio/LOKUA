@@ -9,6 +9,8 @@ import { toEventContext } from './event-context.js';
 import { toEventView, toFeedEventView, toPublicEventView } from './event.view.js';
 import type { GetEventsQuery } from '../../application/index.js';
 
+import type { ManageParticipationUseCase } from '../../application/use-cases/manage-participation.use-case.js';
+import { toOwnParticipationView } from './participation.view.js';
 import type { ManageEventUseCase } from '../../application/use-cases/manage-event.use-case.js';
 import type { CancelEventBody, UpdateEventBody } from './manage-event.schema.js';
 
@@ -17,6 +19,7 @@ function eventId(req: Request): string {
 }
 
 interface EventsControllerDependencies {
+  manageParticipation: ManageParticipationUseCase;
   manageEvent: ManageEventUseCase;
   createEvent: CreateEventUseCase;
   getEvents: GetEventsUseCase;
@@ -24,6 +27,7 @@ interface EventsControllerDependencies {
 }
 
 export function createEventsController({
+  manageParticipation,
   manageEvent,
   createEvent,
   getEvents,
@@ -82,6 +86,24 @@ export function createEventsController({
     async duplicate(req: Request, res: Response): Promise<void> {
       const event = await manageEvent.duplicate(toEventContext(req).user, eventId(req));
       res.status(201).json({ data: toEventView(event) });
+    },
+
+    async join(req: Request, res: Response): Promise<void> {
+      const result = await manageParticipation.join(toEventContext(req).user, eventId(req));
+      res.status(200).json({
+        data: {
+          participation: toOwnParticipationView(result.participation),
+          warnings: result.warnings
+        }
+      });
+    },
+
+    async cancelParticipation(req: Request, res: Response): Promise<void> {
+      const participation = await manageParticipation.cancel(
+        toEventContext(req).user,
+        eventId(req)
+      );
+      res.status(200).json({ data: toOwnParticipationView(participation) });
     },
 
     getAll: getPage(toFeedEventView),

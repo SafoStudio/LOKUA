@@ -43,6 +43,8 @@ export function createEventsRouter({
     validate({ params: getEventByIdParamsSchema, body: updateEventSchema }),
     controller.update
   );
+  router.post('/:id/participations', requireAuth, validateId, controller.join);
+  router.delete('/:id/participations/me', requireAuth, validateId, controller.cancelParticipation);
   router.post('/:id/publish', requireAuth, validateId, controller.publish);
   router.post(
     '/:id/cancel',
