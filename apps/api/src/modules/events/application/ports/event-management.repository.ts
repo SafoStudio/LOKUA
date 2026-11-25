@@ -12,6 +12,7 @@ export interface EventManagementRepository {
   countUpcoming(organizerId: string, now: Date): Promise<number>;
   countApproved(event: Event): Promise<number>;
   hasParticipantHistory(event: Event): Promise<boolean>;
+  hasPendingApplications(eventId: string): Promise<boolean>;
   save(event: Event): Promise<Event>;
   delete(id: string): Promise<void>;
   readTags(id: string): Promise<string[]>;

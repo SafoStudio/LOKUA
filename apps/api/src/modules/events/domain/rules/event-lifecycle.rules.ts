@@ -2,9 +2,9 @@ import { AppError } from '../../../../common/index.js';
 import type { Event } from '../models/event.js';
 
 export function validateEventTags(tags: string[]): string[] {
-  const names = tags.map((tag) => tag.trim());
-  if (names.length > 10 || names.some((tag) => !tag || tag.length > 50)) {
-    throw new AppError('An event can have up to 10 tags of 1 to 50 characters', 422);
+  const names = tags.map((tag) => tag.trim().toLowerCase());
+  if (names.length > 10 || names.some((tag) => !tag || tag.length > 30)) {
+    throw new AppError('An event can have up to 10 tags of 1 to 30 characters', 422);
   }
   return [...new Set(names)];
 }

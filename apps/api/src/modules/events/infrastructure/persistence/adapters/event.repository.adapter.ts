@@ -218,6 +218,13 @@ export class EventRepositoryAdapter
       .getExists();
   }
 
+  hasPendingApplications(eventId: string): Promise<boolean> {
+    return this.repository.manager.getRepository(EventParticipationEntity).existsBy({
+      eventId,
+      status: 'PENDING'
+    });
+  }
+
   async save(event: Event): Promise<Event> {
     const entity = this.repository.create(event);
     return this.toDomain(await this.repository.save(entity));

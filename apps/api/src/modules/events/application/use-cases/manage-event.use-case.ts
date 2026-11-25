@@ -118,9 +118,8 @@ export class ManageEventUseCase {
   cancel(user: AuthUser, id: string, reason: string): Promise<Event> {
     return this.change(user, id, async (events, event, now) => {
       if (
-        event.status === 'CANCELLED' ||
-        event.status === 'COMPLETED' ||
-        (event.status !== 'DRAFT' && event.firstEndsAt && event.firstEndsAt <= now)
+        (event.status !== 'PUBLISHED' && event.status !== 'FULL') ||
+        (event.firstEndsAt && event.firstEndsAt <= now)
       ) {
         throw new AppError('Event cannot be cancelled in its current status', 409);
       }
@@ -129,15 +128,24 @@ export class ManageEventUseCase {
         throw new AppError('A cancellation reason of 1 to 300 characters is required', 422);
       }
       const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
-      if (event.status !== 'DRAFT') await events.syncSchedule(saved, event.firstStartsAt);
+      await events.syncSchedule(saved, event.firstStartsAt);
       return { ...saved, tags: await events.readTags(id) };
     });
   }
 
   delete(user: AuthUser, id: string): Promise<void> {
-    return this.change(user, id, async (events, event) => {
+    return this.change(user, id, async (events, event, now) => {
+      if (
+        (event.status !== 'DRAFT' && event.status !== 'PUBLISHED') ||
+        (event.status === 'PUBLISHED' && event.firstEndsAt && event.firstEndsAt <= now)
+      ) {
+        throw new AppError('Event cannot be deleted in its current status', 409);
+      }
       if (await events.hasParticipantHistory(event)) {
         throw new AppError('Events with participant history cannot be deleted', 409);
+      }
+      if (await events.hasPendingApplications(id)) {
+        throw new AppError('Events with pending applications cannot be deleted', 409);
       }
       await events.delete(id);
     });
@@ -145,7 +153,7 @@ export class ManageEventUseCase {
 
   duplicate(user: AuthUser, id: string): Promise<Event> {
     return this.change(user, id, async (events, event) => {
-      const tags = await events.readTags(id);
+      const tags = validateEventTags(await events.readTags(id));
       const data = { ...event, firstStartsAt: null, firstEndsAt: null, tags };
       await this.validate(user, data);
       const draft = await events.create(user.id, data);

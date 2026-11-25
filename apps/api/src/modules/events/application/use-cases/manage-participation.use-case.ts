@@ -100,8 +100,7 @@ export class ManageParticipationUseCase {
     user: AuthUser,
     eventId: string,
     participationId: string,
-    decision: 'APPROVED' | 'REJECTED',
-    reason?: string
+    decision: 'APPROVED' | 'REJECTED'
   ) {
     return this.withEvent(eventId, async (events, event, now, tx) => {
       this.ensureOwner(event, user);
@@ -117,7 +116,7 @@ export class ManageParticipationUseCase {
           ...participation,
           status: decision,
           statusUpdatedAt: now,
-          removalReason: this.normalizeText(reason)
+          removalReason: null
         });
       }
 

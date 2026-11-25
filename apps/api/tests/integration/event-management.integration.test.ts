@@ -238,7 +238,7 @@ describe('event management and feed with PostgreSQL', () => {
     });
     await expect(manageEvent.update(owner, draft.id, { ageRestriction: 'EIGHTEEN_PLUS' }))
       .rejects.toThrow('Event format or age restriction');
-    await expect(manageEvent.delete(owner, draft.id)).rejects.toThrow('participant history');
+    await expect(manageEvent.delete(owner, draft.id)).rejects.toThrow('current status');
     await expect(manageEvent.cancel(owner, draft.id, 'Cancelled')).resolves.toMatchObject({
       status: 'CANCELLED'
     });
@@ -262,7 +262,7 @@ describe('event management and feed with PostgreSQL', () => {
       { blockerId: blockingViewer.id, blockedId: viewer.id }
     ]);
 
-    const tag = randomUUID();
+    const tag = randomUUID().replaceAll('-', '').slice(0, 30);
     const base = { tags: [tag], participationMode: 'REQUEST' as const };
     const open = await publishForFeed(owner, base);
     const full = await publishForFeed(owner, { ...base, capacityLimit: 1 });
@@ -309,7 +309,7 @@ describe('event management and feed with PostgreSQL', () => {
 
   it('prefers the selected city and applies relative dates in its timezone', async () => {
     const owner = await createUser();
-    const tag = randomUUID();
+    const tag = randomUUID().replaceAll('-', '').slice(0, 30);
     const exactCoordinates = { latitude: 50.450123, longitude: 30.523456 };
     const location = await locations.create({
       name: 'Private venue',
@@ -358,7 +358,7 @@ describe('event management and feed with PostgreSQL', () => {
 
   it('uses the same public point for map bounds, marker and distance, including ties', async () => {
     const owner = await createUser();
-    const tag = randomUUID();
+    const tag = randomUUID().replaceAll('-', '').slice(0, 30);
     const exactCoordinates = { latitude: 50.454321, longitude: 30.524321 };
     const origin = obfuscateCoordinates(exactCoordinates);
     const location = await locations.create({
@@ -586,7 +586,7 @@ describe('event management and feed with PostgreSQL', () => {
       .resolves.toMatchObject({ status: 'APPROVED' });
   });
 
-  it('keeps rejection reasons private and forbids reapplying after rejection', async () => {
+  it('rejects without storing a reason and forbids reapplying', async () => {
     const owner = await createUser();
     const applicant = await createUser();
     const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
@@ -600,14 +600,33 @@ describe('event management and feed with PostgreSQL', () => {
       owner,
       event.id,
       participation.id,
-      'REJECTED',
-      'Private reason'
+      'REJECTED'
     );
-    expect(rejected).toMatchObject({ status: 'REJECTED', removalReason: 'Private reason' });
+    expect(rejected).toMatchObject({ status: 'REJECTED', removalReason: null });
     expect(toOwnParticipationView(rejected)).not.toHaveProperty('removalReason');
     await blocks.delete({ blockerId: applicant.id, blockedId: owner.id });
     await expect(manageParticipation.join(applicant, event.id)).rejects.toMatchObject({
       statusCode: 409
     });
+  });
+
+  it('keeps a published event with pending applications and restricts cancellation and deletion by status', async () => {
+    const owner = await createUser();
+    const applicant = await createUser();
+    const draft = await manageEvent.create(owner, eventData({ tags: [' Meetup ', 'MEETUP'] }));
+    expect(draft.tags).toEqual(['meetup']);
+    await expect(manageEvent.cancel(owner, draft.id, 'Venue closed')).rejects.toMatchObject({
+      statusCode: 409
+    });
+
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    await manageParticipation.join(applicant, event.id);
+    await expect(manageEvent.delete(owner, event.id)).rejects.toThrow('pending applications');
+    await manageParticipation.cancel(applicant, event.id);
+    await expect(manageEvent.delete(owner, event.id)).resolves.toBeUndefined();
+
+    const cancelled = await publishForFeed(owner, {});
+    await manageEvent.cancel(owner, cancelled.id, 'Venue closed');
+    await expect(manageEvent.delete(owner, cancelled.id)).rejects.toThrow('current status');
   });
 });

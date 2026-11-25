@@ -15,7 +15,8 @@ import {
   participationBodySchema,
   participationPageSchema,
   participationParamsSchema,
-  participationReasonSchema
+  participationReasonSchema,
+  rejectApplicationBodySchema
 } from './participation.schema.js';
 
 interface EventsRouterDependencies {
@@ -75,7 +76,7 @@ export function createEventsRouter({
   router.post(
     '/:id/applications/:participationId/reject',
     requireAuth,
-    validateReason,
+    validate({ params: participationParamsSchema, body: rejectApplicationBodySchema }),
     controller.rejectApplication
   );
   router.get('/:id/participants', requireAuth, validatePage, controller.listParticipants);

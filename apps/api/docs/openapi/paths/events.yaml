@@ -239,7 +239,7 @@
               $ref: '#/components/schemas/ErrorResponse'
   delete:
     tags: [Events]
-    summary: Delete your event if it has no participant history
+    summary: Delete your draft or active published event without pending applications or participant history
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
     responses:
@@ -586,14 +586,6 @@
     summary: Reject a pending application as the organizer
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters
-    requestBody: &eventParticipationReason
-      content:
-        application/json:
-          schema:
-            type: object
-            additionalProperties: false
-            properties:
-              reason: { type: string, maxLength: 300 }
     responses: *eventParticipationDecisionResponses
 
 /api/v1/events/{id}/participants:
@@ -632,5 +624,12 @@
     summary: Remove an approved participant as the organizer before the event starts
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters
-    requestBody: *eventParticipationReason
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              reason: { type: string, maxLength: 300 }
     responses: *eventParticipationDecisionResponses

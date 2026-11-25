@@ -7,7 +7,8 @@ properties:
   tags:
     type: array
     maxItems: 10
-    items: { type: string, minLength: 1, maxLength: 50 }
+    items: { type: string, minLength: 1, maxLength: 30 }
+    description: Tags are trimmed, lowercased, and deduplicated.
   description: { type: string, minLength: 1 }
   coverUrl: { type: [string, 'null'] }
   mediaUrls:

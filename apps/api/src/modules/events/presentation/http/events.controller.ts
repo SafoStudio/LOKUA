@@ -64,13 +64,11 @@ export function createEventsController({
     (decision: 'APPROVED' | 'REJECTED') =>
     async (req: Request, res: Response): Promise<void> => {
       const { id, participationId } = req.params as ParticipationParams;
-      const reason = (req.body as ParticipationReason | undefined)?.reason;
       const participation = await manageParticipation.decide(
         toEventContext(req).user,
         id,
         participationId,
-        decision,
-        reason
+        decision
       );
       res.status(200).json({ data: toOwnParticipationView(participation) });
     };

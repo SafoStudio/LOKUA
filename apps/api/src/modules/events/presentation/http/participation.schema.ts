@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const rejectApplicationBodySchema = z.strictObject({}).default({});
+
 export const participationBodySchema = z
   .object({
     message: z.string().trim().max(300).optional()

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validatePublicationDates } from '../../../src/modules/events/domain/rules/event-lifecycle.rules.js';
+import {
+  validateEventTags,
+  validatePublicationDates
+} from '../../../src/modules/events/domain/rules/event-lifecycle.rules.js';
+import { rejectApplicationBodySchema } from '../../../src/modules/events/presentation/http/participation.schema.js';
 
 describe('publication window', () => {
   const now = new Date('2026-08-31T12:00:00Z');
@@ -23,5 +27,22 @@ describe('publication window', () => {
     expect(() =>
       validatePublicationDates({ firstStartsAt: null, firstEndsAt: null }, now)
     ).toThrow();
+  });
+});
+
+describe('event tags', () => {
+  it('normalizes before deduplication and caps each tag at 30 characters', () => {
+    expect(validateEventTags([' Київ ', 'КИЇВ', 'A'.repeat(30)])).toEqual([
+      'київ',
+      'a'.repeat(30)
+    ]);
+    expect(() => validateEventTags(['a'.repeat(31)])).toThrow();
+  });
+});
+
+describe('application rejection body', () => {
+  it('accepts an absent body and rejects a reason', () => {
+    expect(rejectApplicationBodySchema.safeParse(undefined).success).toBe(true);
+    expect(rejectApplicationBodySchema.safeParse({ reason: 'Private' }).success).toBe(false);
   });
 });
