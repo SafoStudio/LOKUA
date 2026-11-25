@@ -111,7 +111,7 @@
 /api/v1/events/{id}:
   get:
     tags: [Events]
-    summary: Get a published event
+    summary: Get a visible event or your own draft
     security:
       - {}
       - CookieAuth: []
@@ -123,7 +123,7 @@
         schema: { type: string, format: uuid }
     responses:
       '200':
-        description: Published event visible to the visitor
+        description: Published event visible to the visitor or a draft owned by the caller
         content:
           application/json:
             schema:
@@ -131,7 +131,9 @@
               required: [data]
               properties:
                 data:
-                  $ref: '#/components/schemas/PublicEvent'
+                  anyOf:
+                    - $ref: '#/components/schemas/EventDraft'
+                    - $ref: '#/components/schemas/PublicEvent'
       '400': *eventValidation
       '401': *eventUnauthorized
       '403': *eventForbidden
@@ -141,3 +143,128 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+
+  patch:
+    tags: [Events]
+    summary: Update your draft or active published event
+    security: &eventOwnerSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters: &eventIdParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateEventRequest'
+    responses:
+      '200': &eventManaged
+        description: Updated event
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/ManagedEvent'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': &eventNotOwned
+        description: Event is missing or unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409': &eventConflict
+        description: Event state or participation conflicts with the operation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422': &eventDomainError
+        description: Event violates a domain rule
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  delete:
+    tags: [Events]
+    summary: Delete your event if it has no participant history
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '204':
+        description: Event deleted
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+
+/api/v1/events/{id}/publish:
+  post:
+    tags: [Events]
+    summary: Publish your draft
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '200': *eventManaged
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+      '422': *eventDomainError
+
+/api/v1/events/{id}/cancel:
+  post:
+    tags: [Events]
+    summary: Cancel your event
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reason]
+            properties:
+              reason: { type: string, minLength: 1, maxLength: 300 }
+    responses:
+      '200': *eventManaged
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+
+/api/v1/events/{id}/duplicate:
+  post:
+    tags: [Events]
+    summary: Duplicate your event as a draft without dates
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '201':
+        description: Draft created
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/EventDraft'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '422': *eventDomainError

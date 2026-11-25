@@ -4,6 +4,7 @@ export function toEventView(event: Event) {
   return {
     id: event.id,
     organizerId: event.organizerId,
+    tags: event.tags ?? [],
     title: event.title,
     categoryId: event.categoryId,
     description: event.description,

@@ -1,21 +1,4 @@
 allOf:
-  - $ref: '#/components/schemas/PublicEvent'
-  - type: object
-    required:
-      - organizerId
-      - primaryLocationId
-      - onlineUrl
-      - hideExactAddress
-      - status
-      - cancellationReason
-      - isHiddenByAdmin
-      - updatedAt
-    properties:
-      organizerId: { type: string, format: uuid }
-      primaryLocationId: { type: [string, 'null'], format: uuid }
-      onlineUrl: { type: [string, 'null'] }
-      hideExactAddress: { type: boolean }
+  - $ref: '#/components/schemas/ManagedEvent'
+  - properties:
       status: { const: DRAFT }
-      cancellationReason: { type: [string, 'null'] }
-      isHiddenByAdmin: { type: boolean }
-      updatedAt: { type: string, format: date-time }

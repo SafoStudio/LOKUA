@@ -5,6 +5,8 @@ import { createEventSchema } from './create-event.schema.js';
 import type { EventsController } from './events.controller.js';
 import { getEventsQuerySchema, getEventByIdParamsSchema } from './get-events.schema.js';
 
+import { cancelEventSchema, updateEventSchema } from './manage-event.schema.js';
+
 interface EventsRouterDependencies {
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
@@ -28,6 +30,23 @@ export function createEventsRouter({
   );
 
   router.post('/', requireAuth, validate({ body: createEventSchema }), controller.create);
+
+  const validateId = validate({ params: getEventByIdParamsSchema });
+  router.patch(
+    '/:id',
+    requireAuth,
+    validate({ params: getEventByIdParamsSchema, body: updateEventSchema }),
+    controller.update
+  );
+  router.post('/:id/publish', requireAuth, validateId, controller.publish);
+  router.post(
+    '/:id/cancel',
+    requireAuth,
+    validate({ params: getEventByIdParamsSchema, body: cancelEventSchema }),
+    controller.cancel
+  );
+  router.delete('/:id', requireAuth, validateId, controller.remove);
+  router.post('/:id/duplicate', requireAuth, validateId, controller.duplicate);
 
   return router;
 }
