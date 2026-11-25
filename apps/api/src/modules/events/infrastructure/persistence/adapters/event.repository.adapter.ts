@@ -207,60 +207,144 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
   }
 
   async findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult> {
-    const queryBuilder = this.repository
-      .createQueryBuilder('event')
-      .where('event.status = :status', { status: 'PUBLISHED' })
-      .andWhere('event.isHiddenByAdmin = :isHidden', { isHidden: false })
-      .andWhere('event.ageRestriction IN (:...ageRestrictions)', {
-        ageRestrictions: query.ageRestrictions
-      });
-
-    if (query.categoryId) {
-      queryBuilder.andWhere('event.categoryId = :categoryId', {
-        categoryId: query.categoryId
-      });
-    }
-
-    if (query.format) {
-      queryBuilder.andWhere('event.format = :format', {
-        format: query.format
-      });
-    }
-
+    let cursor: EventCursor | undefined;
     if (query.cursor) {
-      let cursor: EventCursor;
-
       try {
         cursor = decodeEventCursor(query.cursor);
       } catch {
         throw new AppError('Invalid cursor', 400);
       }
-
-      this.applyCursor(queryBuilder, cursor);
+    }
+    if (!query.ageRestrictions.length || cursor?.firstStartsAt === null) {
+      return { items: [], nextCursor: null };
     }
 
-    const entities = await queryBuilder
-      .orderBy('event.firstStartsAt', 'ASC', 'NULLS LAST')
+    const availability = `(
+      event.status = 'PUBLISHED' AND (
+        event.capacityLimit IS NULL OR event.capacityLimit > (
+          SELECT COUNT(*) FROM event_participations p
+          WHERE p.event_id = event.id AND p.status = 'APPROVED'
+            AND p.user_id <> event.organizerId
+        )
+      )
+    )`;
+    const builder = this.repository
+      .createQueryBuilder('event')
+      .where("event.status IN ('PUBLISHED', 'FULL')")
+      .andWhere('event.firstStartsAt > :feedNow', { feedNow: query.now })
+      .andWhere('event.isHiddenByAdmin = false')
+      .andWhere('event.ageRestriction IN (:...ageRestrictions)', {
+        ageRestrictions: query.ageRestrictions
+      })
+      .addSelect(availability, 'feed_available')
+      .addSelect(
+        `to_char(event.firstStartsAt AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        'feed_start'
+      )
+      .orderBy('event.firstStartsAt', 'ASC')
       .addOrderBy('event.id', 'ASC')
-      .take(query.limit + 1)
-      .getMany();
+      .take(query.limit + 1);
 
-    const hasMore = entities.length > query.limit;
-    const pageEntities = hasMore ? entities.slice(0, query.limit) : entities;
+    if (query.blockedOrganizerIds.length) {
+      builder.andWhere('event.organizerId NOT IN (:...blockedOrganizerIds)', {
+        blockedOrganizerIds: query.blockedOrganizerIds
+      });
+    }
+    if (query.categoryId) {
+      builder.andWhere('event.categoryId = :categoryId', { categoryId: query.categoryId });
+    }
+    if (query.format) {
+      builder.andWhere('event.format = :format', { format: query.format });
+    }
+    if (query.participationMode) {
+      builder.andWhere('event.participationMode = :participationMode', {
+        participationMode: query.participationMode
+      });
+    }
+    if (query.freeOnly) builder.andWhere('event.isFree = true');
+    if (query.availableOnly) builder.andWhere(availability);
+    if (query.from) builder.andWhere('event.firstStartsAt >= :from', { from: query.from });
+    if (query.to) builder.andWhere('event.firstStartsAt < :to', { to: query.to });
+    if (query.period) this.applyFeedPeriod(builder, query);
+    if (query.search) {
+      builder.andWhere(
+        `(
+          strpos(lower(event.title), lower(:search)) > 0 OR
+          strpos(lower(event.description), lower(:search)) > 0 OR EXISTS (
+            SELECT 1 FROM event_tags link JOIN tags tag ON tag.id = link.tag_id
+            WHERE link.event_id = event.id AND strpos(lower(tag.name), lower(:search)) > 0
+          )
+        )`,
+        { search: query.search }
+      );
+    }
+    if (cursor) {
+      builder.andWhere('(event.firstStartsAt, event.id) > (:cursorStart, :cursorId)', {
+        cursorStart: cursor.firstStartsAt,
+        cursorId: cursor.id
+      });
+    }
 
-    const items = pageEntities.map((entity) => this.toDomain(entity));
-    const lastItem = items.at(-1);
+    const run = (source: 'CITY' | 'ONLINE') => {
+      const scoped = builder.clone();
+      if (source === 'CITY') {
+        scoped.andWhere(
+          `event.format = 'OFFLINE' AND EXISTS (
+            SELECT 1 FROM event_location_snapshot snapshot
+            WHERE snapshot.event_id = event.id AND snapshot.city_id = :cityId
+          )`,
+          { cityId: query.cityId }
+        );
+      } else {
+        scoped.andWhere("event.format = 'ONLINE'");
+      }
+      return scoped.getRawAndEntities<{ feed_available: boolean; feed_start: string }>();
+    };
 
+    let source: 'CITY' | 'ONLINE' =
+      query.format === 'ONLINE' ? 'ONLINE' : (cursor?.source ?? 'CITY');
+    let page = await run(source);
+    if (!cursor && !query.format && !page.entities.length) {
+      source = 'ONLINE';
+      page = await run(source);
+    }
+
+    const items = page.entities.slice(0, query.limit).map((entity, index) => ({
+      ...this.toDomain(entity),
+      hasAvailablePlaces: page.raw[index].feed_available
+    }));
+    const last = items.at(-1);
     return {
       items,
       nextCursor:
-        hasMore && lastItem
+        last && page.entities.length > query.limit
           ? encodeEventCursor({
-              id: lastItem.id,
-              firstStartsAt: lastItem.firstStartsAt?.toISOString() ?? null
+              id: last.id,
+              firstStartsAt: page.raw[items.length - 1].feed_start,
+              source
             })
           : null
     };
+  }
+
+  private applyFeedPeriod(
+    builder: SelectQueryBuilder<EventEntity>,
+    query: FindPublishedEventsQuery
+  ): void {
+    const today =
+      'CAST(timezone(CAST(:feedTimezone AS text), CAST(:feedNow AS timestamptz)) AS date)';
+    const eventDay = 'CAST(timezone(CAST(:feedTimezone AS text), event.firstStartsAt) AS date)';
+    builder.setParameter('feedTimezone', query.timezone);
+    if (query.period === 'WEEKEND') {
+      const weekday = `CAST(EXTRACT(ISODOW FROM ${today}) AS integer)`;
+      const saturday = `(${today} + 6 - ${weekday})`;
+      builder.andWhere(`${eventDay} BETWEEN ${saturday} AND (${saturday} + 1)`);
+    } else {
+      const offset = query.period === 'TOMORROW' ? 1 : 0;
+      builder.andWhere(`${eventDay} = (${today} + CAST(:dayOffset AS integer))`, {
+        dayOffset: offset
+      });
+    }
   }
 
   async findPublishedById(id: string): Promise<Event | null> {
@@ -273,31 +357,6 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
     });
 
     return entity ? this.toDomain(entity) : null;
-  }
-
-  private applyCursor(queryBuilder: SelectQueryBuilder<EventEntity>, cursor: EventCursor): void {
-    if (cursor.firstStartsAt === null) {
-      queryBuilder.andWhere('event.firstStartsAt IS NULL AND event.id > :cursorId', {
-        cursorId: cursor.id
-      });
-
-      return;
-    }
-
-    queryBuilder.andWhere(
-      `(
-        event.firstStartsAt > :cursorDate
-        OR (
-          event.firstStartsAt = :cursorDate
-          AND event.id > :cursorId
-        )
-        OR event.firstStartsAt IS NULL
-      )`,
-      {
-        cursorDate: new Date(cursor.firstStartsAt),
-        cursorId: cursor.id
-      }
-    );
   }
 
   private toDomain(entity: EventEntity): Event {

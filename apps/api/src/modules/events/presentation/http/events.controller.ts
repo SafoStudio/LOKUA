@@ -6,7 +6,7 @@ import type {
 } from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
-import { toEventView, toPublicEventView } from './event.view.js';
+import { toEventView, toFeedEventView, toPublicEventView } from './event.view.js';
 import type { GetEventsQuery } from '../../application/index.js';
 
 import type { ManageEventUseCase } from '../../application/use-cases/manage-event.use-case.js';
@@ -71,9 +71,10 @@ export function createEventsController({
     async getAll(req: Request, res: Response): Promise<void> {
       const query = req.query as unknown as GetEventsQuery;
       const result = await getEvents.execute(query, req.user ?? null);
+      res.set('Cache-Control', 'private, no-store');
 
       res.status(200).json({
-        data: result.items.map(toPublicEventView),
+        data: result.items.map(toFeedEventView),
         pagination: {
           nextCursor: result.nextCursor,
           hasMore: result.nextCursor !== null

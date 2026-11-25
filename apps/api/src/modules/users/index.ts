@@ -11,3 +11,4 @@ export type { AgeRestriction } from '../../common/index.js';
 export type { UserOnboardingProvider } from './application/index.js';
 
 export type { UserProfile, UserProfileProvider } from './application/index.js';
+export type { UserBlockProvider } from './application/ports/user-block.provider.js';

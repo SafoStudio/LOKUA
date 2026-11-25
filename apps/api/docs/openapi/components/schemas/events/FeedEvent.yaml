@@ -1,0 +1,7 @@
+allOf:
+  - $ref: '#/components/schemas/PublicEvent'
+  - type: object
+    required: [status, hasAvailablePlaces]
+    properties:
+      status: { type: string, enum: [PUBLISHED, FULL] }
+      hasAvailablePlaces: { type: boolean }

@@ -2,10 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TypeOrmUnitOfWork } from '../../src/common/index.js';
 import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
+import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
-import { AccessService } from '../../src/modules/users/index.js';
+import { AccessService, createUsersModule } from '../../src/modules/users/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
-import { UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
+import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
+import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
+import { toFeedEventView } from '../../src/modules/events/presentation/http/event.view.js';
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
 import { EventEntity, EventRepositoryAdapter } from '../../src/modules/events/infrastructure/index.js';
@@ -13,14 +16,14 @@ import { EventOccurrenceEntity } from '../../src/modules/events/infrastructure/p
 import { EventParticipationEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-participation.entity.js';
 import { createTestDataSource } from './helpers/test-db.js';
 
-describe('event management with PostgreSQL', () => {
+describe('event management and feed with PostgreSQL', () => {
   const dataSource = createTestDataSource();
   const now = new Date('2026-11-25T12:00:00Z');
-  const locations: LocationProvider = {
-    findById: async () => null,
-    findPublicById: async () => null,
-    create: async () => { throw new Error('Unexpected location creation'); }
-  };
+  let locations: LocationProvider;
+  let getEvents: GetEventsUseCase;
+  let kyivId: string;
+  let lvivId: string;
+  const locationIds: string[] = [];
 
   let manageEvent: ManageEventUseCase;
   let categoryId: string;
@@ -28,7 +31,28 @@ describe('event management with PostgreSQL', () => {
 
   beforeAll(async () => {
     await dataSource.initialize();
-    const { categories } = createDictionariesModule({ dataSource });
+    const { categories, cities, countries } = createDictionariesModule({ dataSource });
+    const users = createUsersModule({ dataSource });
+    const kyiv = await cities.findBySlug('kyiv');
+    const lviv = await cities.findBySlug('lviv');
+    if (!kyiv || !lviv) throw new Error('Test cities are missing');
+    kyivId = kyiv.id;
+    lvivId = lviv.id;
+    locations = createGeolocationModule({
+      dataSource,
+      cities,
+      countries,
+      users: users.users,
+      requireAuth: (_req, _res, next) => next()
+    }).locations;
+    getEvents = new GetEventsUseCase(
+      new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
+      users.access,
+      cities,
+      users.profiles,
+      users.blocks,
+      () => now
+    );
     categoryId = (await categories.listActive())[0].id;
     manageEvent = new ManageEventUseCase(
       new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
@@ -46,6 +70,9 @@ describe('event management with PostgreSQL', () => {
       if (userIds.length) {
         await dataSource.query('DELETE FROM events WHERE organizer_id = ANY($1::uuid[])', [userIds]);
         await dataSource.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [userIds]);
+      }
+      if (locationIds.length) {
+        await dataSource.query('DELETE FROM locations WHERE id = ANY($1::uuid[])', [locationIds]);
       }
     } finally {
       await dataSource.destroy();
@@ -191,5 +218,116 @@ describe('event management with PostgreSQL', () => {
       status: 'CANCELLED'
     });
   });
-});
 
+  async function publishForFeed(owner: AuthUser, patch: Partial<CreateEventData>) {
+    const draft = await manageEvent.create(owner, eventData(patch));
+    return manageEvent.publish(owner, draft.id);
+  }
+
+  it('filters before pagination and keeps the online fallback stable across equal dates', async () => {
+    const owner = await createUser();
+    const blockedByViewer = await createUser();
+    const blockingViewer = await createUser();
+    const viewer = {
+      ...await createUser(),
+      birthDate: new Date('2011-01-01T00:00:00Z')
+    };
+    await dataSource.getRepository(UserBlockEntity).insert([
+      { blockerId: viewer.id, blockedId: blockedByViewer.id },
+      { blockerId: blockingViewer.id, blockedId: viewer.id }
+    ]);
+
+    const tag = randomUUID();
+    const base = { tags: [tag], participationMode: 'REQUEST' as const };
+    const open = await publishForFeed(owner, base);
+    const full = await publishForFeed(owner, { ...base, capacityLimit: 1 });
+    const restricted = await publishForFeed(owner, { ...base, ageRestriction: 'SIXTEEN_PLUS' });
+    const hidden = await publishForFeed(owner, base);
+    const past = await publishForFeed(owner, base);
+    const paid = await publishForFeed(owner, { ...base, isFree: false, priceText: '10 UAH' });
+    await publishForFeed(blockedByViewer, base);
+    await publishForFeed(blockingViewer, base);
+
+    const events = dataSource.getRepository(EventEntity);
+    await events.update(hidden.id, { isHiddenByAdmin: true });
+    await events.update(past.id, {
+      firstStartsAt: new Date('2026-11-24T12:00:00Z'),
+      firstEndsAt: new Date('2026-11-24T14:00:00Z')
+    });
+    await events.update(full.id, { status: 'FULL' });
+
+    const query = {
+      limit: 1,
+      search: tag.toUpperCase(),
+      freeOnly: true,
+      participationMode: 'REQUEST' as const,
+      categoryId,
+      period: 'TOMORROW' as const
+    };
+    const firstPage = await getEvents.execute(query, viewer);
+    expect(firstPage.nextCursor).not.toBeNull();
+    const secondPage = await getEvents.execute(
+      { ...query, cursor: firstPage.nextCursor ?? undefined },
+      viewer
+    );
+    const items = [...firstPage.items, ...secondPage.items];
+    expect(items.map((event) => event.id)).toEqual([open.id, full.id].sort());
+    expect(secondPage.nextCursor).toBeNull();
+    expect(items.find((event) => event.id === full.id)?.hasAvailablePlaces).toBe(false);
+    expect(toFeedEventView(items[0])).not.toHaveProperty('onlineUrl');
+
+    const onlyAvailable = await getEvents.execute({ ...query, availableOnly: true }, viewer);
+    expect(onlyAvailable.items.map((event) => event.id)).toEqual([open.id]);
+    expect(items.map((event) => event.id)).not.toContain(restricted.id);
+    expect(items.map((event) => event.id)).not.toContain(paid.id);
+  });
+
+  it('prefers the selected city and applies relative dates in its timezone', async () => {
+    const owner = await createUser();
+    const tag = randomUUID();
+    const exactCoordinates = { latitude: 50.450123, longitude: 30.523456 };
+    const location = await locations.create({
+      name: 'Private venue',
+      address: 'Private venue address',
+      cityId: kyivId,
+      districtId: null,
+      countryCode: 'UA',
+      exactCoordinates,
+      publicCoordinates: obfuscateCoordinates(exactCoordinates),
+      provider: 'manual',
+      providerPlaceId: null,
+      createdBy: null
+    });
+    locationIds.push(location.id);
+
+    const schedule = {
+      firstStartsAt: new Date('2026-11-27T22:30:00Z'),
+      firstEndsAt: new Date('2026-11-28T01:00:00Z')
+    };
+    const local = await publishForFeed(owner, {
+      ...schedule,
+      tags: [tag],
+      format: 'OFFLINE',
+      primaryLocationId: location.id,
+      onlineUrl: null,
+      hideExactAddress: true
+    });
+    const online = await publishForFeed(owner, { ...schedule, tags: [tag] });
+    const query = { limit: 10, search: tag, period: 'WEEKEND' as const };
+    const kyiv = await getEvents.execute(query, null);
+    expect(kyiv.items.map((event) => event.id)).toEqual([local.id]);
+    expect(toFeedEventView(kyiv.items[0])).not.toHaveProperty('primaryLocationId');
+    expect(toFeedEventView(kyiv.items[0])).not.toHaveProperty('address');
+
+    const lviv = await getEvents.execute({ ...query, cityId: lvivId }, null);
+    expect(lviv.items.map((event) => event.id)).toEqual([online.id]);
+    const viewer = await createUser();
+    await dataSource.getRepository(UserEntity).update(viewer.id, { cityId: lvivId });
+    expect((await getEvents.execute(query, viewer)).items.map((event) => event.id))
+      .toEqual([online.id]);
+    expect((await getEvents.execute({ ...query, cityId: kyivId }, viewer)).items
+      .map((event) => event.id)).toEqual([local.id]);
+    expect((await getEvents.execute({ ...query, to: schedule.firstStartsAt }, null)).items)
+      .toEqual([]);
+  });
+});

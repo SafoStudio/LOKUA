@@ -1,8 +1,11 @@
 /api/v1/events:
   get:
     tags: [Events]
-    summary: List published events
-    description: Anonymous visitors see unrestricted events. Signed-in visitors also see events allowed by their age.
+    summary: List upcoming events by start time
+    description: >
+      Lists future published and full events in ascending start-time order. The first page
+      falls back to online events when no city events match and format is unspecified.
+      Use the same filters on subsequent pages. Visibility depends on age, moderation and user blocks.
     security:
       - {}
       - CookieAuth: []
@@ -14,6 +17,35 @@
       - name: cursor
         in: query
         schema: { type: string, minLength: 1 }
+      - name: cityId
+        in: query
+        description: Defaults to the signed-in user's profile city or Kyiv.
+        schema: { type: string, format: uuid }
+      - name: from
+        in: query
+        description: Inclusive start instant.
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        description: Exclusive end instant.
+        schema: { type: string, format: date-time }
+      - name: period
+        in: query
+        description: Calendar dates in the selected city's timezone. Weekend includes Saturday and Sunday.
+        schema: { type: string, enum: [TODAY, TOMORROW, WEEKEND] }
+      - name: freeOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: participationMode
+        in: query
+        schema: { type: string, enum: [FREE, REQUEST] }
+      - name: availableOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: search
+        in: query
+        description: Case-insensitive substring of the title, description, or a tag.
+        schema: { type: string, minLength: 1, maxLength: 200 }
       - name: categoryId
         in: query
         schema: { type: string, format: uuid }
@@ -22,7 +54,7 @@
         schema: { type: string, enum: [OFFLINE, ONLINE] }
     responses:
       '200':
-        description: Page of published events
+        description: Page of upcoming events
         content:
           application/json:
             schema:
@@ -32,7 +64,7 @@
                 data:
                   type: array
                   items:
-                    $ref: '#/components/schemas/PublicEvent'
+                    $ref: '#/components/schemas/FeedEvent'
                 pagination:
                   type: object
                   required: [nextCursor, hasMore]

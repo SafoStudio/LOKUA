@@ -1,3 +1,4 @@
+import type { FeedEvent } from '../../application/index.js';
 import type { Event } from '../../domain/index.js';
 
 export function toEventView(event: Event) {
@@ -52,5 +53,13 @@ export function toPublicEventView(event: Event) {
     timezone: event.timezone,
     publishedAt: event.publishedAt,
     createdAt: event.createdAt
+  };
+}
+
+export function toFeedEventView(event: FeedEvent) {
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    hasAvailablePlaces: event.hasAvailablePlaces
   };
 }

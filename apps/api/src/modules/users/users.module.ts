@@ -8,6 +8,8 @@ import type {
 import { AccessService } from './application/index.js';
 import {
   UserEntity,
+  UserBlockEntity,
+  UserBlockProviderAdapter,
   UserRepositoryAdapter,
   UserProviderAdapter,
   AuthUserProviderAdapter,
@@ -28,6 +30,7 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
   const profiles: UserProfileProvider = new UserProfileProviderAdapter(
     dataSource.getRepository(UserEntity)
   );
+  const blocks = new UserBlockProviderAdapter(dataSource.getRepository(UserBlockEntity));
   const access = new AccessService();
 
   return {
@@ -35,6 +38,7 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
     authUsers,
     onboarding,
     profiles,
+    blocks,
     access
   };
 }
