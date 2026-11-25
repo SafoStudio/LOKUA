@@ -31,7 +31,7 @@ interface FeedRow {
 
 // Older snapshots can contain full precision in public_coordinates.
 const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
-const publicPoint = `CASE WHEN event.hideExactAddress THEN ST_SetSRID(ST_MakePoint(
+const publicPoint = `CASE WHEN event.hide_exact_address THEN ST_SetSRID(ST_MakePoint(
   CAST(ROUND(CAST(ST_X(${publicSnapshot}) AS numeric), 2) AS double precision),
   CAST(ROUND(CAST(ST_Y(${publicSnapshot}) AS numeric), 2) AS double precision)
 ), 4326) ELSE CAST(snapshot.coordinates AS geometry) END`;
@@ -247,24 +247,24 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
 
     const availability = `(
       event.status = 'PUBLISHED' AND (
-        event.capacityLimit IS NULL OR event.capacityLimit > (
+        event.capacity_limit IS NULL OR event.capacity_limit > (
           SELECT COUNT(*) FROM event_participations p
           WHERE p.event_id = event.id AND p.status = 'APPROVED'
-            AND p.user_id <> event.organizerId
+            AND p.user_id <> event.organizer_id
         )
       )
     )`;
     const builder = this.repository
       .createQueryBuilder('event')
       .where("event.status IN ('PUBLISHED', 'FULL')")
-      .andWhere('event.firstStartsAt > :feedNow', { feedNow: query.now })
-      .andWhere('event.isHiddenByAdmin = false')
-      .andWhere('event.ageRestriction IN (:...ageRestrictions)', {
+      .andWhere('event.first_starts_at > :feedNow', { feedNow: query.now })
+      .andWhere('event.is_hidden_by_admin = false')
+      .andWhere('event.age_restriction IN (:...ageRestrictions)', {
         ageRestrictions: query.ageRestrictions
       })
       .addSelect(availability, 'feed_available')
       .addSelect(
-        `to_char(event.firstStartsAt AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        `to_char(event.first_starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
         'feed_start'
       )
       .orderBy('event.firstStartsAt', 'ASC')
@@ -272,25 +272,25 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
       .limit(query.limit + 1);
 
     if (query.blockedOrganizerIds.length) {
-      builder.andWhere('event.organizerId NOT IN (:...blockedOrganizerIds)', {
+      builder.andWhere('event.organizer_id NOT IN (:...blockedOrganizerIds)', {
         blockedOrganizerIds: query.blockedOrganizerIds
       });
     }
     if (query.categoryId) {
-      builder.andWhere('event.categoryId = :categoryId', { categoryId: query.categoryId });
+      builder.andWhere('event.category_id = :categoryId', { categoryId: query.categoryId });
     }
     if (query.format) {
       builder.andWhere('event.format = :format', { format: query.format });
     }
     if (query.participationMode) {
-      builder.andWhere('event.participationMode = :participationMode', {
+      builder.andWhere('event.participation_mode = :participationMode', {
         participationMode: query.participationMode
       });
     }
-    if (query.freeOnly) builder.andWhere('event.isFree = true');
+    if (query.freeOnly) builder.andWhere('event.is_free = true');
     if (query.availableOnly) builder.andWhere(availability);
-    if (query.from) builder.andWhere('event.firstStartsAt >= :from', { from: query.from });
-    if (query.to) builder.andWhere('event.firstStartsAt < :to', { to: query.to });
+    if (query.from) builder.andWhere('event.first_starts_at >= :from', { from: query.from });
+    if (query.to) builder.andWhere('event.first_starts_at < :to', { to: query.to });
     if (query.period) this.applyFeedPeriod(builder, query);
     if (query.search) {
       builder.andWhere(
@@ -305,7 +305,7 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
       );
     }
     if (cursor && !query.origin) {
-      builder.andWhere('(event.firstStartsAt, event.id) > (:cursorStart, :cursorId)', {
+      builder.andWhere('(event.first_starts_at, event.id) > (:cursorStart, :cursorId)', {
         cursorStart: cursor.firstStartsAt,
         cursorId: cursor.id
       });
@@ -317,10 +317,10 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
         scoped.andWhere("event.format = 'ONLINE'");
       } else if (query.bounds || query.origin) {
         scoped
-          .innerJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.eventId = event.id')
+          .innerJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
           .andWhere("event.format = 'OFFLINE'");
         if (query.cityId) {
-          scoped.andWhere('snapshot.cityId = :cityId', { cityId: query.cityId });
+          scoped.andWhere('snapshot.city_id = :cityId', { cityId: query.cityId });
         }
         if (query.bounds) this.applyMapBounds(scoped, query.bounds);
         if (query.origin) {
@@ -335,7 +335,7 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
             .addOrderBy('event.id', 'ASC');
           if (cursor) {
             scoped.andWhere(
-              `(${feedDistance}, event.firstStartsAt, event.id) >
+              `(${feedDistance}, event.first_starts_at, event.id) >
                 (:cursorDistance, :cursorStart, :cursorId)`,
               {
                 cursorDistance: cursor.distanceMeters,
@@ -413,7 +413,7 @@ export class EventRepositoryAdapter implements EventRepository, EventManagementR
   ): void {
     const today =
       'CAST(timezone(CAST(:feedTimezone AS text), CAST(:feedNow AS timestamptz)) AS date)';
-    const eventDay = 'CAST(timezone(CAST(:feedTimezone AS text), event.firstStartsAt) AS date)';
+    const eventDay = 'CAST(timezone(CAST(:feedTimezone AS text), event.first_starts_at) AS date)';
     builder.setParameter('feedTimezone', query.timezone);
     if (query.period === 'WEEKEND') {
       const weekday = `CAST(EXTRACT(ISODOW FROM ${today}) AS integer)`;

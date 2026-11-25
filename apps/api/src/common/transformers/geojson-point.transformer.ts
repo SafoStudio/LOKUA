@@ -1,19 +1,16 @@
-import type { ValueTransformer } from 'typeorm';
+import type { Point, ValueTransformer } from 'typeorm';
 import type { Coordinates } from '../types/coordinates.js';
 
 export const geojsonPointTransformer: ValueTransformer = {
-  to(value: Coordinates | null | undefined): string | null {
-    if (value === null || value === undefined) return null;
-    return `POINT(${value.longitude} ${value.latitude})`;
+  to(value: Coordinates | null | undefined): Point | null {
+    if (value == null) return null;
+    return { type: 'Point', coordinates: [value.longitude, value.latitude] };
   },
 
-  from(value: string | null | undefined): Coordinates | null {
-    if (value === null || value === undefined) return null;
-    const match = value.match(/^POINT\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)$/i);
-    if (!match) return null;
-    return {
-      longitude: Number.parseFloat(match[1]),
-      latitude: Number.parseFloat(match[2])
-    };
+  from(value: Point | null | undefined): Coordinates | null {
+    if (value?.type !== 'Point') return null;
+
+    const [longitude, latitude] = value.coordinates;
+    return { longitude, latitude };
   }
 };
