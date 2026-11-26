@@ -3,6 +3,13 @@ import type { RequestHandler } from 'express';
 import { validate } from '../../../../middlewares/index.js';
 import { createEventSchema } from './create-event.schema.js';
 import type { EventsController } from './events.controller.js';
+import type { DiscussionController } from './discussion.controller.js';
+import {
+  commentParamsSchema,
+  createCommentSchema,
+  discussionQuerySchema,
+  editCommentSchema
+} from './discussion.schema.js';
 import { myEventsQuerySchema } from './my-events.schema.js';
 import {
   getEventsQuerySchema,
@@ -24,12 +31,14 @@ interface EventsRouterDependencies {
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
   controller: EventsController;
+  discussion: DiscussionController;
 }
 
 export function createEventsRouter({
   requireAuth,
   optionalAuth,
-  controller
+  controller,
+  discussion
 }: EventsRouterDependencies) {
   const router = Router();
 
@@ -47,6 +56,30 @@ export function createEventsRouter({
   router.post('/', requireAuth, validate({ body: createEventSchema }), controller.create);
 
   const validateId = validate({ params: getEventByIdParamsSchema });
+  router.get(
+    '/:id/comments',
+    optionalAuth,
+    validate({ params: getEventByIdParamsSchema, query: discussionQuerySchema }),
+    discussion.list
+  );
+  router.post(
+    '/:id/comments',
+    requireAuth,
+    validate({ params: getEventByIdParamsSchema, body: createCommentSchema }),
+    discussion.create
+  );
+  router.patch(
+    '/:id/comments/:commentId',
+    requireAuth,
+    validate({ params: commentParamsSchema, body: editCommentSchema }),
+    discussion.edit
+  );
+  router.delete(
+    '/:id/comments/:commentId',
+    requireAuth,
+    validate({ params: commentParamsSchema }),
+    discussion.remove
+  );
   router.patch(
     '/:id',
     requireAuth,

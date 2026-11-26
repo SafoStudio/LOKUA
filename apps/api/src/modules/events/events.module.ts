@@ -8,17 +8,24 @@ import { ManageParticipationUseCase } from './application/use-cases/manage-parti
 import { ListEventParticipationUseCase } from './application/use-cases/list-event-participation.use-case.js';
 import { GetMyEventsUseCase } from './application/use-cases/get-my-events.use-case.js';
 import { AdvanceEventLifecycleUseCase } from './application/use-cases/advance-event-lifecycle.use-case.js';
+import { EventDiscussionUseCase } from './application/use-cases/event-discussion.use-case.js';
 import { startEventLifecycleWorker } from './infrastructure/event-lifecycle.worker.js';
 import { EventLifecycleRepositoryAdapter } from './infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
+import { DiscussionCommentRepositoryAdapter } from './infrastructure/persistence/adapters/discussion-comment.repository.adapter.js';
 import type {
   AccessService,
   AuthUserProvider,
   UserBlockProvider,
   UserProfileProvider
 } from '../users/index.js';
-import { EventEntity, EventRepositoryAdapter } from './infrastructure/index.js';
+import {
+  DiscussionCommentEntity,
+  EventEntity,
+  EventRepositoryAdapter
+} from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
 import { createEventsController } from './presentation/http/events.controller.js';
+import { createDiscussionController } from './presentation/http/discussion.controller.js';
 import { createEventsRouter } from './presentation/http/events.routes.js';
 
 export interface CreateEventsModuleDependencies {
@@ -50,6 +57,15 @@ export function createEventsModule({
 
   const unitOfWork = new TypeOrmUnitOfWork(dataSource);
   const clock = () => new Date();
+  const discussion = new EventDiscussionUseCase(
+    eventRepository,
+    new DiscussionCommentRepositoryAdapter(dataSource.getRepository(DiscussionCommentEntity)),
+    unitOfWork,
+    access,
+    blocks,
+    profiles,
+    clock
+  );
   const advanceEventLifecycle = new AdvanceEventLifecycleUseCase(
     new EventLifecycleRepositoryAdapter(),
     unitOfWork,
@@ -103,7 +119,8 @@ export function createEventsModule({
   const router = createEventsRouter({
     requireAuth,
     optionalAuth,
-    controller
+    controller,
+    discussion: createDiscussionController(discussion)
   });
 
   return {

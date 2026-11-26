@@ -20,7 +20,12 @@ import { ManageParticipationUseCase } from '../../src/modules/events/application
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
 import { AdvanceEventLifecycleUseCase } from '../../src/modules/events/application/use-cases/advance-event-lifecycle.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
-import { EventEntity, EventRepositoryAdapter } from '../../src/modules/events/infrastructure/index.js';
+import {
+  DiscussionCommentEntity,
+  DiscussionCommentQuotaEntity,
+  EventEntity,
+  EventRepositoryAdapter
+} from '../../src/modules/events/infrastructure/index.js';
 import { EventLifecycleRepositoryAdapter } from '../../src/modules/events/infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import { EventOccurrenceEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-occurrence.entity.js';
 import { EventParticipationEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-participation.entity.js';
@@ -180,6 +185,7 @@ describe('event management and feed with PostgreSQL', () => {
       requireAuth
     });
     const app = express();
+    app.use(express.json());
     app.use('/events', events.router);
     app.use('/geo', geo.router);
     app.use(errorHandler);
@@ -1106,5 +1112,129 @@ describe('event management and feed with PostgreSQL', () => {
     expect(await applications.findOneByOrFail({ id: participation.id })).toMatchObject({
       status: 'NOT_CONSIDERED'
     });
+  });
+
+  it('serves one level of replies, enforces comment permissions and archives discussions', async () => {
+    const [owner, participant, outsider, adminUser] = await Promise.all([
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser()
+    ]);
+    const admin: AuthUser = { ...adminUser, role: 'ADMIN' };
+    const event = await publishForFeed(owner, {});
+    const otherEvent = await publishForFeed(owner, {});
+    await manageParticipation.join(participant, event.id);
+    const openUntil = new Date(Date.now() + 60 * 60 * 1000);
+    const events = dataSource.getRepository(EventEntity);
+    await events.update([event.id, otherEvent.id], {
+      firstStartsAt: new Date(openUntil.getTime() - 30 * 60 * 1000),
+      firstEndsAt: openUntil
+    });
+    const api = createEventsTestApi([owner, participant, outsider, admin]);
+    const path = `/events/${event.id}/comments`;
+    const list = (user?: AuthUser) => api.get(path).set('X-Test-User', user?.id ?? '');
+    const post = (user: AuthUser, text: string, parentId?: string) =>
+      api.post(path).set('X-Test-User', user.id).send({ text, parentId });
+
+    await api.post(path).send({ text: 'Guest comment' }).expect(401);
+    await post(outsider, 'This should be forbidden').expect(403);
+    await post(owner, '  ').expect(400);
+    const root = (await post(owner, '  First comment  ').expect(201)).body.data;
+    expect(root).toMatchObject({ text: 'First comment', parentId: null, author: { id: owner.id } });
+    expect(root.author).not.toHaveProperty('email');
+    const reply = (await post(participant, 'A reply', root.id).expect(201)).body.data;
+    await post(owner, 'A nested reply', reply.id).expect(422);
+    await api
+      .post(`/events/${otherEvent.id}/comments`)
+      .set('X-Test-User', owner.id)
+      .send({ text: 'Wrong event', parentId: root.id })
+      .expect(404);
+
+    const secondRoot = (await post(participant, 'Another comment').expect(201)).body.data;
+    const firstPage = await list().query({ limit: 1 }).expect(200);
+    expect(firstPage.body.pagination).toEqual({ nextCursor: root.id, hasMore: true });
+    const secondPage = await list().query({ cursor: root.id, limit: 1 }).expect(200);
+    expect(secondPage.body.data).toMatchObject([{ id: secondRoot.id }]);
+    expect(secondPage.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    const thread = await list().query({ parentId: root.id }).expect(200);
+    expect(thread.body.data).toMatchObject([{ id: reply.id, parentId: root.id }]);
+    const blocks = dataSource.getRepository(UserBlockEntity);
+    await blocks.insert({ blockerId: outsider.id, blockedId: participant.id });
+    const filteredThread = await list(outsider).query({ parentId: root.id }).expect(200);
+    expect(filteredThread.body.data).toEqual([]);
+
+    const replyPath = `${path}/${reply.id}`;
+    await api.delete(`${path}/${root.id}`).set('X-Test-User', outsider.id).expect(403);
+    await api.patch(replyPath).set('X-Test-User', owner.id).send({ text: 'Changed' }).expect(403);
+    const edited = await api
+      .patch(replyPath)
+      .set('X-Test-User', participant.id)
+      .send({ text: 'Updated reply' })
+      .expect(200);
+    expect(edited.body.data).toMatchObject({ text: 'Updated reply', isEdited: true });
+    await api.delete(replyPath).set('X-Test-User', outsider.id).expect(404);
+    await api.delete(replyPath).set('X-Test-User', owner.id).expect(204);
+    await api.delete(`${path}/${secondRoot.id}`).set('X-Test-User', participant.id).expect(204);
+    await api.patch(replyPath).set('X-Test-User', participant.id).send({ text: 'Changed' }).expect(404);
+    const afterRemoval = await list().query({ parentId: root.id }).expect(200);
+    expect(afterRemoval.body.data).toEqual([]);
+    await list(admin).query({ archive: true }).expect(404);
+
+    const end = new Date(Date.now() - 1);
+    const start = new Date(end.getTime() - 60 * 60 * 1000);
+    await events.update(event.id, { firstStartsAt: start, firstEndsAt: end });
+    await dataSource.getRepository(EventOccurrenceEntity).update(
+      { eventId: event.id },
+      { startsAt: start, endsAt: end }
+    );
+    await list().expect(404);
+    await post(owner, 'The discussion has closed').expect(404);
+    const lifecycle = new AdvanceEventLifecycleUseCase(
+      new EventLifecycleRepositoryAdapter(),
+      new TypeOrmUnitOfWork(dataSource),
+      () => end
+    );
+    await lifecycle.execute();
+    await list().query({ archive: true }).expect(401);
+    await list(owner).query({ archive: true }).expect(403);
+    const archivedRoots = await list(admin).query({ archive: true }).expect(200);
+    expect(archivedRoots.body.data).toMatchObject([
+      { id: root.id, isArchived: true },
+      { id: secondRoot.id, isArchived: true }
+    ]);
+    const archivedThread = await list(admin).query({ archive: true, parentId: root.id }).expect(200);
+    expect(archivedThread.body.data).toMatchObject([
+      { id: reply.id, isArchived: true, text: 'Updated reply' }
+    ]);
+  });
+
+  it('enforces the rolling comment quota across events and concurrent requests', async () => {
+    const owner = await createUser();
+    const first = await publishForFeed(owner, {});
+    const second = await publishForFeed(owner, {});
+    const now = Date.now();
+    await dataSource.getRepository(EventEntity).update([first.id, second.id], {
+      firstStartsAt: new Date(now + 30 * 60 * 1000),
+      firstEndsAt: new Date(now + 60 * 60 * 1000)
+    });
+    const api = createEventsTestApi([owner]);
+    const post = (id: string) =>
+      api.post(`/events/${id}/comments`).set('X-Test-User', owner.id).send({ text: 'New comment' });
+    await post(first.id).expect(201);
+    await api.delete(`/events/${first.id}`).set('X-Test-User', owner.id).expect(204);
+    expect(await dataSource.getRepository(DiscussionCommentEntity).countBy({ eventId: first.id }))
+      .toBe(0);
+    const responses = await Promise.all(Array.from({ length: 20 }, () => post(second.id)));
+    expect(responses.filter(({ status }) => status === 201)).toHaveLength(19);
+    expect(responses.filter(({ status }) => status === 429)).toHaveLength(1);
+
+    const quotas = dataSource.getRepository(DiscussionCommentQuotaEntity);
+    const { postedAt } = await quotas.findOneByOrFail({ authorId: owner.id });
+    await quotas.update(owner.id, {
+      postedAt: [new Date(now - 60 * 60 * 1000), ...postedAt.slice(1)]
+    });
+    await post(second.id).expect(201);
+    await post(second.id).expect(429);
   });
 });

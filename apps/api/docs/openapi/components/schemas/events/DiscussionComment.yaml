@@ -1,0 +1,18 @@
+type: object
+required: [id, parentId, author, text, isEdited, isArchived, isHiddenByAdmin, createdAt, updatedAt]
+properties:
+  id: { type: string, format: uuid }
+  parentId: { type: [string, 'null'], format: uuid }
+  author:
+    type: [object, 'null']
+    required: [id, name, avatarUrl]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: [string, 'null'] }
+      avatarUrl: { type: [string, 'null'] }
+  text: { type: string, minLength: 1, maxLength: 1000 }
+  isEdited: { type: boolean }
+  isArchived: { type: boolean }
+  isHiddenByAdmin: { type: boolean }
+  createdAt: { type: string, format: date-time }
+  updatedAt: { type: string, format: date-time }

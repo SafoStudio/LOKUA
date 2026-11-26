@@ -38,6 +38,11 @@ export class EventLifecycleRepositoryAdapter implements EventLifecycleRepository
          SET status = 'COMPLETED', updated_at = $2
          WHERE id = ANY($1::uuid[]) AND first_ends_at <= $2
          RETURNING id, primary_location_id, first_starts_at, first_ends_at, timezone
+       ), archived AS (
+         UPDATE discussion_comments comment
+         SET is_archived = true, updated_at = $2
+         FROM completed
+         WHERE comment.event_id = completed.id AND NOT comment.is_archived
        )
        INSERT INTO event_occurrences (
          event_id, location_id, starts_at, ends_at, timezone, status, created_at, updated_at
