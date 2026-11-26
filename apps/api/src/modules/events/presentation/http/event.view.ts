@@ -1,4 +1,5 @@
 import type { FeedEvent, GetEventByIdUseCase } from '../../application/index.js';
+import type { MyEventItem } from '../../application/ports/my-events.repository.js';
 import type { Event } from '../../domain/index.js';
 
 export function toEventView(event: Event) {
@@ -62,6 +63,24 @@ export function toFeedEventView(event: FeedEvent) {
     status: event.status,
     hasAvailablePlaces: event.hasAvailablePlaces,
     distanceMeters: event.distanceMeters
+  };
+}
+
+export function toMyEventView({
+  event,
+  isOrganizer,
+  participationStatus,
+  participationStatusUpdatedAt
+}: MyEventItem) {
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    updatedAt: event.updatedAt,
+    isOrganizer,
+    isHiddenByAdmin: event.isHiddenByAdmin,
+    cancellationReason: event.cancellationReason,
+    participationStatus,
+    participationStatusUpdatedAt
   };
 }
 

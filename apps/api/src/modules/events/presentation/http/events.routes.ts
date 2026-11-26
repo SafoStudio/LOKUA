@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import { validate } from '../../../../middlewares/index.js';
 import { createEventSchema } from './create-event.schema.js';
 import type { EventsController } from './events.controller.js';
+import { myEventsQuerySchema } from './my-events.schema.js';
 import {
   getEventsQuerySchema,
   getEventsMapQuerySchema,
@@ -34,6 +35,7 @@ export function createEventsRouter({
 
   router.get('/', optionalAuth, validate({ query: getEventsQuerySchema }), controller.getAll);
   router.get('/map', optionalAuth, validate({ query: getEventsMapQuerySchema }), controller.getMap);
+  router.get('/me', requireAuth, validate({ query: myEventsQuerySchema }), controller.getMine);
 
   router.get(
     '/:id',

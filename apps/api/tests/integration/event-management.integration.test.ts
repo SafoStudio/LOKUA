@@ -141,18 +141,9 @@ describe('event management and feed with PostgreSQL', () => {
     };
   }
 
-  it('serves event details and protects private fields across event and geolocation routes', async () => {
-    const [owner, applicant, participant, other, adminUser] = await Promise.all([
-      createUser(),
-      createUser(),
-      createUser(),
-      createUser(),
-      createUser()
-    ]);
-    const admin: AuthUser = { ...adminUser, role: 'ADMIN' };
-    const minor: AuthUser = { ...other, birthDate: new Date('2025-01-01T00:00:00Z') };
+  function createEventsTestApi(testUsers: AuthUser[]) {
     const viewers = new Map<string, AuthUser>(
-      [owner, applicant, participant, minor, admin].map((user) => [user.id, user])
+      testUsers.map((user) => [user.id, user])
     );
     const optionalAuth: RequestHandler = (req, _res, next) => {
       const user = viewers.get(req.get('X-Test-User') ?? '');
@@ -190,7 +181,20 @@ describe('event management and feed with PostgreSQL', () => {
     app.use('/events', events.router);
     app.use('/geo', geo.router);
     app.use(errorHandler);
-    const api = request(app);
+    return request(app);
+  }
+
+  it('serves event details and protects private fields across event and geolocation routes', async () => {
+    const [owner, applicant, participant, other, adminUser] = await Promise.all([
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser()
+    ]);
+    const admin: AuthUser = { ...adminUser, role: 'ADMIN' };
+    const minor: AuthUser = { ...other, birthDate: new Date('2025-01-01T00:00:00Z') };
+    const api = createEventsTestApi([owner, applicant, participant, minor, admin]);
     const get = (id: string, viewer?: AuthUser) =>
       api.get(`/events/${id}`).set('X-Test-User', viewer?.id ?? '');
 
@@ -338,6 +342,147 @@ describe('event management and feed with PostgreSQL', () => {
     expect(bbox.body.data).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: location.id })])
     );
+  });
+
+  it('lists personal events by tab with private, stable cursor pagination', async () => {
+    const [viewer, host, blockedHost] = await Promise.all([createUser(), createUser(), createUser()]);
+    const minor: AuthUser = { ...viewer, birthDate: new Date(Date.now() - 10 * 365 * 86_400_000) };
+    const api = createEventsTestApi([minor, host]);
+    const mine = (tab: string, limit = 20, cursor?: string) =>
+      api
+        .get('/events/me')
+        .set('X-Test-User', viewer.id)
+        .query({ tab, limit, ...(cursor ? { cursor } : {}) });
+
+    await api.get('/events/me').query({ tab: 'GOING' }).expect(401);
+    await mine('UNKNOWN').expect(400);
+    await mine('GOING', 0).expect(400);
+    await mine('GOING', 20, 'invalid').expect(400);
+
+    const draft = await manageEvent.create(
+      viewer,
+      eventData({ firstStartsAt: null, firstEndsAt: null })
+    );
+    await manageEvent.create(host, eventData());
+    const organizing = await publishForFeed(viewer, {});
+    const cancelled = await publishForFeed(viewer, {});
+    const first = await publishForFeed(host, {});
+    const second = await publishForFeed(host, {});
+    const hidden = await publishForFeed(host, {});
+    const blocked = await publishForFeed(blockedHost, {});
+    const restricted = await publishForFeed(host, { ageRestriction: 'EIGHTEEN_PLUS' });
+    const pending = await publishForFeed(host, { participationMode: 'REQUEST' });
+    const rejected = await publishForFeed(host, { participationMode: 'REQUEST' });
+    const notConsidered = await publishForFeed(host, { participationMode: 'REQUEST' });
+    const ended = await publishForFeed(host, {});
+    const completed = await publishForFeed(viewer, {});
+
+    const currentTime = Date.now();
+    const hour = 60 * 60 * 1000;
+    const schedule = {
+      firstStartsAt: new Date(currentTime - hour),
+      firstEndsAt: new Date(currentTime + hour)
+    };
+    const events = dataSource.getRepository(EventEntity);
+    await events.update(
+      [first.id, second.id, hidden.id, blocked.id, restricted.id, organizing.id],
+      schedule
+    );
+    await events.update(second.id, { status: 'FULL' });
+    await events.update([organizing.id, hidden.id], { isHiddenByAdmin: true });
+    await events.update(cancelled.id, {
+      ...schedule,
+      status: 'CANCELLED',
+      cancellationReason: 'Weather'
+    });
+    await events.update(ended.id, {
+      firstStartsAt: new Date(currentTime - 2 * hour),
+      firstEndsAt: new Date(currentTime - hour)
+    });
+    await events.update(completed.id, {
+      status: 'COMPLETED',
+      firstStartsAt: new Date(currentTime - 3 * hour),
+      firstEndsAt: new Date(currentTime - 2 * hour)
+    });
+    await dataSource.getRepository(UserBlockEntity).insert({
+      blockerId: blockedHost.id,
+      blockedId: viewer.id
+    });
+    const participations = dataSource.getRepository(EventParticipationEntity);
+    await participations.save([
+      ...[first, second, hidden, blocked, restricted, ended, organizing].map(({ id }) => ({
+        eventId: id,
+        userId: viewer.id,
+        status: 'APPROVED' as const
+      })),
+      {
+        eventId: pending.id,
+        userId: viewer.id,
+        status: 'PENDING',
+        statusUpdatedAt: new Date(currentTime)
+      },
+      {
+        eventId: rejected.id,
+        userId: viewer.id,
+        status: 'REJECTED',
+        statusUpdatedAt: new Date(currentTime - hour)
+      },
+      {
+        eventId: notConsidered.id,
+        userId: viewer.id,
+        status: 'NOT_CONSIDERED',
+        statusUpdatedAt: new Date(currentTime - 2 * hour)
+      },
+      { eventId: first.id, userId: blockedHost.id, status: 'PENDING' }
+    ]);
+
+    const [firstId, secondId] = [first.id, second.id].sort();
+    const page = await mine('GOING', 1).expect(200).expect('Cache-Control', 'private, no-store');
+    expect(page.body.data).toMatchObject([
+      { id: firstId, isOrganizer: false, participationStatus: 'APPROVED' }
+    ]);
+    expect(page.body.data).toHaveLength(1);
+    expect(page.body.data[0]).not.toHaveProperty('onlineUrl');
+    expect(page.body.data[0]).not.toHaveProperty('primaryLocationId');
+    expect(page.body.pagination).toMatchObject({ nextCursor: expect.any(String), hasMore: true });
+    const next = await mine('GOING', 1, page.body.pagination.nextCursor).expect(200);
+    expect(next.body.data).toMatchObject([{ id: secondId }]);
+    expect(next.body.data).toHaveLength(1);
+    expect(next.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    await mine('DRAFTS', 1, page.body.pagination.nextCursor).expect(400);
+
+    const applications = await mine('APPLICATIONS', 2).expect(200);
+    expect(applications.body.data).toMatchObject([
+      { id: pending.id, participationStatus: 'PENDING' },
+      { id: rejected.id, participationStatus: 'REJECTED' }
+    ]);
+    expect(applications.body.pagination).toMatchObject({
+      nextCursor: expect.any(String),
+      hasMore: true
+    });
+    const moreApplications = await mine('APPLICATIONS', 2, applications.body.pagination.nextCursor)
+      .expect(200);
+    expect(moreApplications.body.data).toMatchObject([
+      { id: notConsidered.id, participationStatus: 'NOT_CONSIDERED' }
+    ]);
+    expect(moreApplications.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+
+    const hosted = await mine('ORGANIZING').expect(200);
+    expect(hosted.body.data).toMatchObject([
+      { id: organizing.id, isOrganizer: true, isHiddenByAdmin: true, participationStatus: null }
+    ]);
+    const drafts = await mine('DRAFTS').expect(200);
+    expect(drafts.body.data).toMatchObject([{ id: draft.id, status: 'DRAFT', firstStartsAt: null }]);
+    const past = await mine('PAST', 1).expect(200);
+    expect(past.body.data).toMatchObject([
+      { id: cancelled.id, status: 'CANCELLED', cancellationReason: 'Weather', isOrganizer: true }
+    ]);
+    const morePast = await mine('PAST', 2, past.body.pagination.nextCursor).expect(200);
+    expect(morePast.body.data).toMatchObject([
+      { id: ended.id, status: 'PUBLISHED', participationStatus: 'APPROVED', isOrganizer: false },
+      { id: completed.id, status: 'COMPLETED', isOrganizer: true }
+    ]);
+    expect(morePast.body.pagination).toEqual({ nextCursor: null, hasMore: false });
   });
 
   it('guards ownership, publishes and reschedules one occurrence, then duplicates and cancels', async () => {

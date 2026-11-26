@@ -6,8 +6,16 @@ import type {
 } from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
-import { toEventDetailView, toEventView, toFeedEventView, toMapEventView } from './event.view.js';
+import {
+  toEventDetailView,
+  toEventView,
+  toFeedEventView,
+  toMapEventView,
+  toMyEventView
+} from './event.view.js';
 import type { GetEventsQuery } from '../../application/index.js';
+import type { MyEventsQuery } from '../../application/ports/my-events.repository.js';
+import type { GetMyEventsUseCase } from '../../application/use-cases/get-my-events.use-case.js';
 
 import type { ManageParticipationUseCase } from '../../application/use-cases/manage-participation.use-case.js';
 import type {
@@ -33,6 +41,7 @@ interface EventsControllerDependencies {
   manageEvent: ManageEventUseCase;
   createEvent: CreateEventUseCase;
   getEvents: GetEventsUseCase;
+  getMyEvents: GetMyEventsUseCase;
   getEventById: GetEventByIdUseCase;
 }
 
@@ -42,6 +51,7 @@ export function createEventsController({
   manageEvent,
   createEvent,
   getEvents,
+  getMyEvents,
   getEventById
 }: EventsControllerDependencies) {
   const getPage =
@@ -177,6 +187,16 @@ export function createEventsController({
 
     getAll: getPage(toFeedEventView),
     getMap: getPage(toMapEventView),
+
+    async getMine(req: Request, res: Response): Promise<void> {
+      const query = req.query as unknown as MyEventsQuery;
+      res.set('Cache-Control', 'private, no-store');
+      const { items, nextCursor } = await getMyEvents.execute(toEventContext(req).user, query);
+      res.status(200).json({
+        data: items.map(toMyEventView),
+        pagination: { nextCursor, hasMore: nextCursor !== null }
+      });
+    },
 
     async getById(req: Request, res: Response): Promise<void> {
       const { id } = req.params as { id: string };

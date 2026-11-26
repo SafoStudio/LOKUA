@@ -4,6 +4,7 @@ import type { TransactionContext } from '../../../../../common/index.js';
 import { obfuscateCoordinates } from '../../../../geolocation/index.js';
 import type { Location } from '../../../../geolocation/index.js';
 import type { EventParticipationRepository } from '../../../application/ports/event-participation.repository.js';
+import type { MyEventsRepository } from '../../../application/ports/my-events.repository.js';
 import type { EventParticipation } from '../../../domain/models/event-participation.js';
 import type { EventManagementRepository } from '../../../application/ports/event-management.repository.js';
 import { AppError, toEntityManager } from '../../../../../common/index.js';
@@ -19,7 +20,12 @@ import type {
   FindPublishedEventsResult
 } from '../../../application/index.js';
 import type { CreateEventData } from '../../../application/index.js';
-import { decodeEventCursor, encodeEventCursor } from '../event-cursor.js';
+import {
+  decodeEventCursor,
+  decodeMyEventsCursor,
+  encodeEventCursor,
+  encodeMyEventsCursor
+} from '../event-cursor.js';
 import type { EventCursor } from '../event-cursor.js';
 import { EventParticipationEntity } from '../entities/event-participation.entity.js';
 import { EventOccurrenceEntity } from '../entities/event-occurrence.entity.js';
@@ -35,6 +41,44 @@ interface FeedRow {
   feed_latitude?: number;
   feed_longitude?: number;
 }
+
+interface MyEventRow {
+  my_sort_at: string;
+  my_participation_status: ParticipationStatus | null;
+  my_participation_updated_at: Date | null;
+}
+
+const ongoingEvent = "event.status IN ('PUBLISHED', 'FULL') AND event.first_ends_at > :now";
+const myEventViews = {
+  GOING: {
+    filter: `${ongoingEvent} AND event.organizer_id <> :userId AND participation.status = 'APPROVED'`,
+    sort: 'event.first_starts_at',
+    direction: 'ASC'
+  },
+  APPLICATIONS: {
+    filter: `event.status <> 'DRAFT' AND event.organizer_id <> :userId
+      AND participation.status IN ('PENDING', 'REJECTED', 'NOT_CONSIDERED')`,
+    sort: 'participation.status_updated_at',
+    direction: 'DESC'
+  },
+  ORGANIZING: {
+    filter: `${ongoingEvent} AND event.organizer_id = :userId`,
+    sort: 'event.first_starts_at',
+    direction: 'ASC'
+  },
+  DRAFTS: {
+    filter: "event.status = 'DRAFT' AND event.organizer_id = :userId",
+    sort: 'event.updated_at',
+    direction: 'DESC'
+  },
+  PAST: {
+    filter: `(event.status IN ('COMPLETED', 'CANCELLED')
+      OR (event.status IN ('PUBLISHED', 'FULL') AND event.first_ends_at <= :now))
+      AND (event.organizer_id = :userId OR participation.status = 'APPROVED')`,
+    sort: 'COALESCE(event.first_ends_at, event.updated_at)',
+    direction: 'DESC'
+  }
+} as const;
 
 // Older snapshots can contain full precision in public_coordinates.
 const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
@@ -63,7 +107,11 @@ const statusByEventStatus: Record<EventStatus, OccurrenceStatus> = {
 };
 
 export class EventRepositoryAdapter
-  implements EventRepository, EventManagementRepository, EventParticipationRepository
+  implements
+    EventRepository,
+    EventManagementRepository,
+    EventParticipationRepository,
+    MyEventsRepository
 {
   constructor(private readonly repository: Repository<EventEntity>) {}
 
@@ -332,6 +380,74 @@ export class EventRepositoryAdapter
         snapshotAt: new Date()
       })
     );
+  }
+
+  async findMyEvents(query: Parameters<MyEventsRepository['findMyEvents']>[0]) {
+    const { tab, userId, now, ageRestrictions, blockedOrganizerIds, limit } = query;
+    const { filter, sort, direction } = myEventViews[tab];
+    const builder = this.repository
+      .createQueryBuilder('event')
+      .leftJoin(
+        EventParticipationEntity,
+        'participation',
+        'participation.event_id = event.id AND participation.user_id = :userId'
+      )
+      .where(filter, { userId, now })
+      .addSelect('participation.status', 'my_participation_status')
+      .addSelect('participation.status_updated_at', 'my_participation_updated_at')
+      .addSelect(
+        `to_char(${sort} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+        'my_sort_at'
+      )
+      .orderBy(sort, direction)
+      .addOrderBy('event.id', direction)
+      .limit(limit + 1);
+
+    if (tab !== 'ORGANIZING' && tab !== 'DRAFTS') {
+      const conditions = ['event.is_hidden_by_admin = false'];
+      if (ageRestrictions.length) {
+        conditions.push('event.age_restriction IN (:...ageRestrictions)');
+      } else {
+        conditions.push('false');
+      }
+      if (blockedOrganizerIds.length) {
+        conditions.push('event.organizer_id NOT IN (:...blockedOrganizerIds)');
+      }
+      builder.andWhere(`(event.organizer_id = :userId OR (${conditions.join(' AND ')}))`, {
+        ageRestrictions,
+        blockedOrganizerIds
+      });
+    }
+    if (query.cursor) {
+      try {
+        const cursor = decodeMyEventsCursor(query.cursor, tab);
+        const comparison = direction === 'ASC' ? '>' : '<';
+        builder.andWhere(`(${sort}, event.id) ${comparison} (:cursorSortAt, :cursorId)`, {
+          cursorSortAt: cursor.sortAt,
+          cursorId: cursor.id
+        });
+      } catch {
+        throw new AppError('Invalid cursor for the requested event view', 400);
+      }
+    }
+
+    const { entities, raw } = await builder.getRawAndEntities<MyEventRow>();
+    const items = entities.slice(0, limit).map((entity, index) => ({
+      event: this.toDomain(entity),
+      isOrganizer: entity.organizerId === userId,
+      participationStatus:
+        entity.organizerId === userId ? null : raw[index].my_participation_status,
+      participationStatusUpdatedAt:
+        entity.organizerId === userId ? null : raw[index].my_participation_updated_at
+    }));
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor:
+        last && entities.length > limit
+          ? encodeMyEventsCursor({ tab, sortAt: raw[limit - 1].my_sort_at, id: last.event.id })
+          : null
+    };
   }
 
   async findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult> {

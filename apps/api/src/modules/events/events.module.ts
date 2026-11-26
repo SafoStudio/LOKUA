@@ -6,6 +6,7 @@ import type { LocationProvider } from '../geolocation/index.js';
 import { ManageEventUseCase } from './application/use-cases/manage-event.use-case.js';
 import { ManageParticipationUseCase } from './application/use-cases/manage-participation.use-case.js';
 import { ListEventParticipationUseCase } from './application/use-cases/list-event-participation.use-case.js';
+import { GetMyEventsUseCase } from './application/use-cases/get-my-events.use-case.js';
 import type {
   AccessService,
   AuthUserProvider,
@@ -64,6 +65,7 @@ export function createEventsModule({
   );
   const createEvent = new CreateEventUseCase(manageEvent);
   const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);
+  const getMyEvents = new GetMyEventsUseCase(eventRepository, access, blocks, clock);
   const getEventById = new GetEventByIdUseCase(
     eventRepository,
     access,
@@ -86,6 +88,7 @@ export function createEventsModule({
     manageEvent,
     createEvent,
     getEvents,
+    getMyEvents,
     getEventById
   });
 
