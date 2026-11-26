@@ -24,6 +24,7 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
       await m.getRepository(UserEntity).update({ id: userId }, { name: data.name });
 
       const photos = m.getRepository(UserPhotoEntity);
+      const primary = await photos.findOne({ where: { userId, isPrimary: true } });
       await photos.update({ userId }, { isPrimary: false });
       const existing = await photos.findOne({
         where: { userId, url: data.mainPhotoUrl }
@@ -31,6 +32,11 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
 
       if (existing) {
         await photos.update({ id: existing.id }, { isPrimary: true, orderNum: 0 });
+      } else if (primary) {
+        await photos.update(
+          { id: primary.id },
+          { url: data.mainPhotoUrl, isPrimary: true, orderNum: 0 }
+        );
       } else {
         await photos.insert({
           userId,

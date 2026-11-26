@@ -1,6 +1,6 @@
 import type { DataSource } from 'typeorm';
 import { createDictionariesModule } from '../modules/dictionaries/index.js';
-import { createUsersModule } from '../modules/users/index.js';
+import { createProfilePhotosRouter, createUsersModule } from '../modules/users/index.js';
 import { createAuthModule } from '../modules/auth/index.js';
 import { createStorageModule } from '../modules/storage/index.js';
 import { createGeolocationModule } from '../modules/geolocation/index.js';
@@ -21,6 +21,12 @@ export function createModules(dataSource: DataSource) {
   });
 
   const storageModule = createStorageModule();
+  const imageMedia = storageModule.createImageMedia(authModule.requireAuth);
+  const profilePhotosRouter = createProfilePhotosRouter(
+    authModule.requireAuth,
+    usersModule.photos,
+    imageMedia.images
+  );
 
   const notificationsModule = createNotificationsModule({
     dataSource,
@@ -45,7 +51,8 @@ export function createModules(dataSource: DataSource) {
     cities: dictionariesModule.cities,
     interests: dictionariesModule.interests,
     audit: moderationModule.audit,
-    requireAuth: authModule.requireAuth
+    requireAuth: authModule.requireAuth,
+    images: imageMedia.images
   });
 
   const geolocationModule = createGeolocationModule({
@@ -67,14 +74,16 @@ export function createModules(dataSource: DataSource) {
     access: usersModule.access,
     optionalAuth: authModule.optionalAuth,
     requireAuth: authModule.requireAuth,
-    notifications: notificationsModule.publisher
+    notifications: notificationsModule.publisher,
+    images: imageMedia.images
   });
 
   return {
     dictionaries: dictionariesModule,
     users: usersModule,
     auth: authModule,
-    storage: storageModule,
+    storage: { ...storageModule, imageMediaRouter: imageMedia.router },
+    profilePhotosRouter,
     moderation: moderationModule,
     onboarding: onboardingModule,
     geolocation: geolocationModule,

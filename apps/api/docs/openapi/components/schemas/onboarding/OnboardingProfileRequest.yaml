@@ -12,4 +12,4 @@ properties:
     type: string
     format: uri
     maxLength: 2048
-    example: 'https://cdn.example.com/photos/abc.jpg'
+    description: URL returned by a PROFILE image upload by the current user.

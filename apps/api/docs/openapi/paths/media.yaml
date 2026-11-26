@@ -1,0 +1,123 @@
+/api/v1/media/images:
+  post:
+    tags: [Media]
+    summary: Upload and process an image
+    description: |
+      Send the file as the raw request body. The byte limit is 5 MiB or the configured server
+      limit, whichever is lower. PNG, JPEG and WebP are decoded with a pixel limit and converted
+      to WebP without metadata. The returned URL belongs to the current user and selected scope.
+    security: &imageSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: scope
+        in: query
+        required: true
+        schema: { type: string, enum: [PROFILE, EVENT] }
+    requestBody:
+      required: true
+      content:
+        image/jpeg: &imageBinary
+          schema: { type: string, format: binary }
+        image/png: *imageBinary
+        image/webp: *imageBinary
+    responses:
+      '201':
+        description: Processed image uploaded
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [url, contentType]
+                  properties:
+                    url: { type: string, format: uri }
+                    contentType: { const: image/webp }
+      '400':
+        description: Missing body or invalid scope
+      '401':
+        description: Authentication required
+      '403':
+        description: Inactive account
+      '413':
+        description: Image exceeds the byte limit
+      '415':
+        description: Unsupported, animated, invalid or oversized-in-pixels image
+
+/api/v1/media/images/{token}:
+  get:
+    tags: [Media]
+    summary: Open a processed image by its signed URL
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      '302':
+        description: Temporary redirect to the signed object storage URL
+        headers:
+          Location:
+            schema: { type: string, format: uri }
+      '404':
+        description: Invalid image URL
+
+/api/v1/users/me/photos:
+  get:
+    tags: [Media]
+    summary: List the current user's profile photos
+    security: *imageSecurity
+    responses:
+      '200': &profilePhotosResponse
+        description: Profile photos in display order, with the main photo first
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [photoUrls]
+                  properties:
+                    photoUrls:
+                      type: array
+                      maxItems: 3
+                      items: { type: string, format: uri }
+      '401':
+        description: Authentication required
+      '403':
+        description: Inactive account
+  put:
+    tags: [Media]
+    summary: Replace or reorder profile photos after onboarding
+    description: The first URL is the main photo. Newly attached URLs must come from a PROFILE upload by the current user.
+    security: *imageSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [photoUrls]
+            properties:
+              photoUrls:
+                type: array
+                minItems: 1
+                maxItems: 3
+                uniqueItems: true
+                items: { type: string, format: uri, maxLength: 2048 }
+    responses:
+      '200': *profilePhotosResponse
+      '400':
+        description: Invalid photo list
+      '401':
+        description: Authentication required
+      '403':
+        description: Inactive account or onboarding incomplete
+      '422':
+        description: A new URL does not belong to the current user's PROFILE uploads

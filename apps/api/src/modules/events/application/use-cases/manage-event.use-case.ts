@@ -2,6 +2,7 @@ import { AppError } from '../../../../common/index.js';
 import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
 import type { CategoryProvider } from '../../../dictionaries/index.js';
 import type { LocationProvider } from '../../../geolocation/index.js';
+import type { ImageOwnership } from '../../../storage/index.js';
 import type { AccessService, AuthUser } from '../../../users/index.js';
 import type { Event } from '../../domain/index.js';
 import { validateCreateEvent } from '../../domain/index.js';
@@ -25,7 +26,8 @@ export class ManageEventUseCase {
     private readonly categories: CategoryProvider,
     private readonly locations: LocationProvider,
     private readonly clock: () => Date,
-    private readonly notifications?: NotificationPublisher
+    private readonly notifications?: NotificationPublisher,
+    private readonly images?: ImageOwnership
   ) {}
 
   async getDraft(user: AuthUser, id: string): Promise<Event | null> {
@@ -35,6 +37,7 @@ export class ManageEventUseCase {
   }
 
   async create(user: AuthUser, data: CreateEventData): Promise<Event> {
+    this.assertNewImages(user.id, data);
     await this.validate(user, data);
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
@@ -53,6 +56,7 @@ export class ManageEventUseCase {
       }
 
       const next = { ...event, ...patch };
+      this.assertNewImages(user.id, patch, event);
       const published = event.status !== 'DRAFT';
       if (patch.isFree && patch.priceText === undefined) next.priceText = null;
       const location = await this.validate(user, { ...next, mediaUrls: patch.mediaUrls });
@@ -222,6 +226,14 @@ export class ManageEventUseCase {
   ): Promise<void> {
     if (locationId && (await events.hasForeignPrivateLocation(locationId, organizerId))) {
       throw new AppError('Event location not found', 422);
+    }
+  }
+
+  private assertNewImages(ownerId: string, patch: Partial<CreateEventData>, previous?: Event) {
+    if (!this.images) return;
+    const oldUrls = new Set([previous?.coverUrl, ...(previous?.mediaUrls ?? [])]);
+    for (const url of [patch.coverUrl, ...(patch.mediaUrls ?? [])]) {
+      if (url && !oldUrls.has(url)) this.images.assertOwnedUrl(url, ownerId, 'EVENT');
     }
   }
 

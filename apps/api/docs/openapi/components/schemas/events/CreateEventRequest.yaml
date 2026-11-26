@@ -10,10 +10,13 @@ properties:
     items: { type: string, minLength: 1, maxLength: 30 }
     description: Tags are trimmed, lowercased, and deduplicated.
   description: { type: string, minLength: 1 }
-  coverUrl: { type: [string, 'null'] }
+  coverUrl:
+    type: [string, 'null']
+    description: URL from an EVENT image upload by the current user.
   mediaUrls:
     type: array
     maxItems: 5
+    description: URLs from EVENT image uploads by the current user.
     items: { type: string, format: uri }
   format: { type: string, enum: [OFFLINE, ONLINE] }
   primaryLocationId: { type: [string, 'null'], format: uuid }

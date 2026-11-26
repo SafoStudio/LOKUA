@@ -10,6 +10,7 @@ interface UserProfileRow {
   onboardingCompleted: boolean;
   createdAt: Date;
   avatarUrl: string | null;
+  photoUrls: string[];
   interestIds: string[] | null;
 }
 
@@ -21,15 +22,16 @@ const SQL = `
     u.city_id AS "cityId",
     u.onboarding_completed AS "onboardingCompleted",
     u.created_at AS "createdAt",
-    photo.url AS "avatarUrl",
+    photo.urls[1] AS "avatarUrl",
+    photo.urls AS "photoUrls",
     interests.ids AS "interestIds"
   FROM users u
   LEFT JOIN LATERAL (
-    SELECT p.url
-    FROM user_photos p
-    WHERE p.user_id = u.id
-    ORDER BY p.is_primary DESC, p.order_num ASC, p.created_at ASC
-    LIMIT 1
+    SELECT ARRAY(
+      SELECT p.url FROM user_photos p WHERE p.user_id = u.id
+      ORDER BY p.is_primary DESC, p.order_num ASC, p.created_at ASC, p.id ASC
+      LIMIT 3
+    ) AS urls
   ) photo ON TRUE
   LEFT JOIN LATERAL (
     SELECT array_agg(ui.interest_id) AS ids
@@ -52,6 +54,7 @@ export class UserProfileProviderAdapter implements UserProfileProvider {
       email: row.email,
       name: row.name,
       avatarUrl: row.avatarUrl,
+      photoUrls: row.photoUrls,
       cityId: row.cityId,
       interestIds: row.interestIds ?? [],
       onboardingCompleted: row.onboardingCompleted,

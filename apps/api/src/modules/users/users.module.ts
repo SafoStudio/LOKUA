@@ -6,6 +6,7 @@ import type {
   UserProfileProvider
 } from './application/index.js';
 import { AccessService } from './application/index.js';
+import { UserPhotoProviderAdapter } from './infrastructure/persistence/adapters/user-photo.provider.adapter.js';
 import {
   UserEntity,
   UserBlockEntity,
@@ -38,6 +39,7 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
     authUsers,
     onboarding,
     profiles,
+    photos: new UserPhotoProviderAdapter(dataSource),
     blocks,
     access
   };

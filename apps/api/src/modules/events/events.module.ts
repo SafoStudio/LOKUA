@@ -4,6 +4,7 @@ import { TypeOrmUnitOfWork } from '../../common/index.js';
 import type { CategoryProvider, CityProvider } from '../dictionaries/index.js';
 import type { LocationProvider } from '../geolocation/index.js';
 import type { NotificationPublisher } from '../notifications/index.js';
+import type { ImageOwnership } from '../storage/index.js';
 import { ManageEventUseCase } from './application/use-cases/manage-event.use-case.js';
 import { ManageParticipationUseCase } from './application/use-cases/manage-participation.use-case.js';
 import { ListEventParticipationUseCase } from './application/use-cases/list-event-participation.use-case.js';
@@ -46,6 +47,7 @@ export interface CreateEventsModuleDependencies {
   optionalAuth: RequestHandler;
   requireAuth: RequestHandler;
   notifications?: NotificationPublisher;
+  images?: ImageOwnership;
 }
 
 export function createEventsModule({
@@ -59,7 +61,8 @@ export function createEventsModule({
   authUsers,
   optionalAuth,
   requireAuth,
-  notifications
+  notifications,
+  images
 }: CreateEventsModuleDependencies) {
   const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
 
@@ -106,7 +109,8 @@ export function createEventsModule({
     categories,
     locations,
     clock,
-    notifications
+    notifications,
+    images
   );
   const createEvent = new CreateEventUseCase(manageEvent);
   const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);

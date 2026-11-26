@@ -32,6 +32,7 @@ export function createEventReviewController(reviews: EventReviewsUseCase) {
           id: profile.id,
           name: profile.name,
           avatarUrl: profile.avatarUrl,
+          photoUrls: profile.photoUrls ?? (profile.avatarUrl ? [profile.avatarUrl] : []),
           ...rating,
           reviews: toReviewPageView(page)
         }

@@ -2,6 +2,7 @@ import type { UserProvider, UserOnboardingProvider } from '../../../users/index.
 import { AppError, assertString } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
+import type { ImageOwnership } from '../../../storage/index.js';
 import type { OnboardingStateRepository } from '../ports/onboarding-state.repository.js';
 import type { OnboardingContext } from '../types/context.js';
 import type { OnboardingState } from '../../domain/index.js';
@@ -17,7 +18,8 @@ export class SetProfileUseCase {
     private readonly stateRepository: OnboardingStateRepository,
     private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
-    private readonly audit: AuditLogger
+    private readonly audit: AuditLogger,
+    private readonly images?: ImageOwnership
   ) {}
 
   async execute(
@@ -43,6 +45,9 @@ export class SetProfileUseCase {
 
       if (!state.completedSteps.includes('DATE_OF_BIRTH')) {
         throw new OnboardingStepOutOfOrderError('DATE_OF_BIRTH', state.currentStep);
+      }
+      if (mainPhotoUrl !== state.mainPhotoUrl) {
+        this.images?.assertOwnedUrl(mainPhotoUrl, context.user.id, 'PROFILE');
       }
 
       await this.onboardingUsers.applyProfile(context.user.id, { name, mainPhotoUrl }, tx);

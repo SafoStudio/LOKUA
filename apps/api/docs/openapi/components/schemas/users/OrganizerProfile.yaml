@@ -1,11 +1,16 @@
 allOf:
   - $ref: '#/components/schemas/OrganizerRating'
   - type: object
-    required: [id, name, avatarUrl, reviews]
+    required: [id, name, avatarUrl, photoUrls, reviews]
     properties:
       id: { type: string, format: uuid }
       name: { type: string }
       avatarUrl: { type: [string, 'null'] }
+      photoUrls:
+        type: array
+        maxItems: 3
+        description: Profile photos in display order, with the main photo first.
+        items: { type: string, format: uri }
       reviews:
         $ref: '#/components/schemas/EventReviewPage'
         description: First three visible reviews. Continue on the organizer reviews endpoint.

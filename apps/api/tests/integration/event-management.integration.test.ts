@@ -3,12 +3,17 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { TypeOrmUnitOfWork } from '../../src/common/index.js';
+import { AppError, TypeOrmUnitOfWork } from '../../src/common/index.js';
 import { errorHandler } from '../../src/middlewares/index.js';
 import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
 import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
-import { AccessService, createUsersModule } from '../../src/modules/users/index.js';
+import {
+  AccessService,
+  createProfilePhotosRouter,
+  createUsersModule
+} from '../../src/modules/users/index.js';
+import type { ImageOwnership } from '../../src/modules/storage/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
@@ -161,7 +166,8 @@ describe('event management and feed with PostgreSQL', () => {
 
   function createEventsTestContext(
     testUsers: AuthUser[],
-    sendEmail?: CreateNotificationsModuleDependencies['sendEmail']
+    sendEmail?: CreateNotificationsModuleDependencies['sendEmail'],
+    images?: ImageOwnership
   ) {
     const viewers = new Map<string, AuthUser>(
       testUsers.map((user) => [user.id, user])
@@ -214,12 +220,14 @@ describe('event management and feed with PostgreSQL', () => {
       locations: geo.locations,
       optionalAuth,
       requireAuth,
-      notifications: sendEmail ? notifications.publisher : undefined
+      notifications: sendEmail ? notifications.publisher : undefined,
+      images
     });
     const app = express();
     app.use(express.json());
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
+    if (images) app.use('/users/me/photos', createProfilePhotosRouter(requireAuth, users.photos, images));
     app.use('/notifications', notifications.router);
     app.use('/admin', moderation.adminUsersRouter);
     app.use('/reports', moderation.reportsRouter);
@@ -1610,5 +1618,39 @@ describe('event management and feed with PostgreSQL', () => {
       'REPORT_STARTED', 'REPORT_TARGET_VIEWED', 'REPORT_RESOLVED',
       'CONTENT_HIDDEN', 'CONTENT_RESTORED', 'USER_BLOCKED'
     ]));
+  });
+
+  it('attaches only scoped uploads and makes the first profile photo the primary one', async () => {
+    const [owner, other] = await Promise.all([createUser(), createUser()]);
+    const images: ImageOwnership = {
+      assertOwnedUrl(url, userId, scope) {
+        if (!url.startsWith(`https://media.example.com/${userId}/${scope}/`)) {
+          throw new AppError('Image does not belong to the current upload scope', 422);
+        }
+      }
+    };
+    const { api } = createEventsTestContext([owner, other], undefined, images);
+    const putPhotos = (photoUrls: string[]) =>
+      api.put('/users/me/photos').set('X-Test-User', owner.id).send({ photoUrls });
+    const photoUrls = ['a.webp', 'b.webp', 'c.webp']
+      .map((name) => `https://media.example.com/${owner.id}/PROFILE/${name}`);
+    const coverUrl = `https://media.example.com/${owner.id}/EVENT/cover.webp`;
+    await putPhotos([]).expect(400);
+    await putPhotos([...photoUrls, coverUrl]).expect(400);
+    await putPhotos([photoUrls[0], photoUrls[0]]).expect(400);
+    await putPhotos([coverUrl]).expect(422);
+    await putPhotos([`https://media.example.com/${other.id}/PROFILE/other.webp`]).expect(422);
+    await putPhotos(photoUrls).expect(200);
+    const reversed = [...photoUrls].reverse();
+    await putPhotos(reversed).expect(200);
+    const profile = await api.get(`/users/${owner.id}`).expect(200);
+    expect(profile.body.data).toMatchObject({ avatarUrl: reversed[0], photoUrls: reversed });
+
+    const draft = await manageEvent.create(owner, eventData({ coverUrl: 'https://legacy.example.com/cover.jpg' }));
+    const update = (patch: Record<string, unknown>) =>
+      api.patch(`/events/${draft.id}`).set('X-Test-User', owner.id).send(patch);
+    await update({ title: 'An updated event' }).expect(200);
+    await update({ coverUrl: photoUrls[0] }).expect(422);
+    await update({ coverUrl }).expect(200);
   });
 });
