@@ -21,9 +21,14 @@ try {
     logger.info(`API running at http://localhost:${env.PORT}`);
     logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
   });
+  const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
+  let shuttingDown = false;
 
   const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info({ signal }, 'Shutting down');
+    const lifecycleStopped = stopEventLifecycleWorker();
 
     server.close(async (closeErr) => {
       if (closeErr) {
@@ -31,6 +36,7 @@ try {
       }
 
       try {
+        await lifecycleStopped;
         await AppDataSource.destroy();
         logger.info('Database connection closed');
         process.exit(closeErr ? 1 : 0);

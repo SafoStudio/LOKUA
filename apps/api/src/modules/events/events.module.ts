@@ -7,6 +7,9 @@ import { ManageEventUseCase } from './application/use-cases/manage-event.use-cas
 import { ManageParticipationUseCase } from './application/use-cases/manage-participation.use-case.js';
 import { ListEventParticipationUseCase } from './application/use-cases/list-event-participation.use-case.js';
 import { GetMyEventsUseCase } from './application/use-cases/get-my-events.use-case.js';
+import { AdvanceEventLifecycleUseCase } from './application/use-cases/advance-event-lifecycle.use-case.js';
+import { startEventLifecycleWorker } from './infrastructure/event-lifecycle.worker.js';
+import { EventLifecycleRepositoryAdapter } from './infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import type {
   AccessService,
   AuthUserProvider,
@@ -47,6 +50,11 @@ export function createEventsModule({
 
   const unitOfWork = new TypeOrmUnitOfWork(dataSource);
   const clock = () => new Date();
+  const advanceEventLifecycle = new AdvanceEventLifecycleUseCase(
+    new EventLifecycleRepositoryAdapter(),
+    unitOfWork,
+    clock
+  );
   const manageParticipation = new ManageParticipationUseCase(
     eventRepository,
     unitOfWork,
@@ -102,6 +110,7 @@ export function createEventsModule({
     createEvent,
     getEvents,
     getEventById,
+    startLifecycleWorker: () => startEventLifecycleWorker(() => advanceEventLifecycle.execute()),
     router
   };
 }

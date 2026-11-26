@@ -18,8 +18,10 @@ import { ListEventParticipationUseCase } from '../../src/modules/events/applicat
 import { toOwnParticipationView } from '../../src/modules/events/presentation/http/participation.view.js';
 import { ManageParticipationUseCase } from '../../src/modules/events/application/use-cases/manage-participation.use-case.js';
 import { ManageEventUseCase } from '../../src/modules/events/application/use-cases/manage-event.use-case.js';
+import { AdvanceEventLifecycleUseCase } from '../../src/modules/events/application/use-cases/advance-event-lifecycle.use-case.js';
 import type { CreateEventData } from '../../src/modules/events/application/index.js';
 import { EventEntity, EventRepositoryAdapter } from '../../src/modules/events/infrastructure/index.js';
+import { EventLifecycleRepositoryAdapter } from '../../src/modules/events/infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import { EventOccurrenceEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-occurrence.entity.js';
 import { EventParticipationEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-participation.entity.js';
 import { createTestDataSource } from './helpers/test-db.js';
@@ -977,5 +979,132 @@ describe('event management and feed with PostgreSQL', () => {
     const cancelled = await publishForFeed(owner, {});
     await manageEvent.cancel(owner, cancelled.id, 'Venue closed');
     await expect(manageEvent.delete(owner, cancelled.id)).rejects.toThrow('current status');
+  });
+
+  it('expires pending applications at the start and completes events and occurrences at the end', async () => {
+    const [owner, applicant, approvedUser, rejectedUser] = await Promise.all([
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser()
+    ]);
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST', capacityLimit: 1 });
+    const { participation: pending } = await manageParticipation.join(applicant, event.id, 'Hello');
+    const { participation: approved } = await manageParticipation.join(approvedUser, event.id);
+    const { participation: rejected } = await manageParticipation.join(rejectedUser, event.id);
+    await manageParticipation.decide(owner, event.id, approved.id, 'APPROVED');
+    await manageParticipation.decide(owner, event.id, rejected.id, 'REJECTED');
+    const draft = await manageEvent.create(owner, eventData());
+    const cancelled = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const cancelledApplication = await manageParticipation.join(applicant, cancelled.id);
+    await manageEvent.cancel(owner, cancelled.id, 'Venue closed');
+
+    const start = new Date('2026-11-26T12:00:00Z');
+    const end = new Date('2026-11-26T14:00:00Z');
+    let cutoff = new Date(start.getTime() - 1);
+    const lifecycle = new AdvanceEventLifecycleUseCase(
+      new EventLifecycleRepositoryAdapter(),
+      new TypeOrmUnitOfWork(dataSource),
+      () => cutoff
+    );
+    const events = dataSource.getRepository(EventEntity);
+    const occurrences = dataSource.getRepository(EventOccurrenceEntity);
+    const applications = dataSource.getRepository(EventParticipationEntity);
+    const readApplication = (id: string) => applications.findOneByOrFail({ id });
+
+    await lifecycle.execute();
+    expect(await readApplication(pending.id)).toMatchObject({ status: 'PENDING' });
+
+    cutoff = start;
+    await lifecycle.execute();
+    expect(await readApplication(pending.id)).toMatchObject({
+      status: 'NOT_CONSIDERED',
+      statusUpdatedAt: start,
+      applicationMessage: 'Hello'
+    });
+    expect(await readApplication(approved.id)).toMatchObject({ status: 'APPROVED' });
+    expect(await readApplication(rejected.id)).toMatchObject({ status: 'REJECTED' });
+    expect(await readApplication(cancelledApplication.participation.id)).toMatchObject({
+      status: 'PENDING'
+    });
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({ status: 'FULL' });
+    const occurrence = await occurrences.findOneByOrFail({ eventId: event.id });
+    expect(occurrence.status).toBe('FULL');
+
+    cutoff = end;
+    await lifecycle.execute();
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({
+      status: 'COMPLETED',
+      updatedAt: end
+    });
+    expect(await occurrences.findOneByOrFail({ id: occurrence.id })).toMatchObject({
+      status: 'COMPLETED',
+      updatedAt: end
+    });
+    expect(await events.findOneByOrFail({ id: draft.id })).toMatchObject({ status: 'DRAFT' });
+    expect(await events.findOneByOrFail({ id: cancelled.id })).toMatchObject({ status: 'CANCELLED' });
+    expect(await occurrences.findOneByOrFail({ eventId: cancelled.id })).toMatchObject({
+      status: 'CANCELLED'
+    });
+
+    cutoff = new Date(end.getTime() + 60_000);
+    await lifecycle.execute();
+    expect(await readApplication(pending.id)).toMatchObject({ statusUpdatedAt: start });
+    expect(await events.findOneByOrFail({ id: event.id })).toMatchObject({ updatedAt: end });
+    expect(await occurrences.findOneByOrFail({ id: occurrence.id })).toMatchObject({ updatedAt: end });
+  });
+
+  it('skips locked events and rolls back all lifecycle writes if a batch fails', async () => {
+    const [owner, applicant] = await Promise.all([createUser(), createUser()]);
+    const locked = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const due = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const { participation } = await manageParticipation.join(applicant, locked.id);
+    const { participation: dueApplication } = await manageParticipation.join(applicant, due.id);
+    const cutoff = new Date('2026-11-26T14:00:00Z');
+    const unitOfWork = new TypeOrmUnitOfWork(dataSource);
+    const repository = new EventLifecycleRepositoryAdapter();
+    const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
+    const lifecycle = new AdvanceEventLifecycleUseCase(repository, unitOfWork, () => cutoff);
+    const events = dataSource.getRepository(EventEntity);
+    const occurrences = dataSource.getRepository(EventOccurrenceEntity);
+    const applications = dataSource.getRepository(EventParticipationEntity);
+
+    await occurrences.delete({ eventId: due.id });
+    await unitOfWork.run(async (tx) => {
+      await eventRepository.inTransaction(tx).lockEvent(locked.id);
+      await lifecycle.execute();
+      expect(await events.findOneByOrFail({ id: locked.id })).toMatchObject({ status: 'PUBLISHED' });
+      expect(await events.findOneByOrFail({ id: due.id })).toMatchObject({ status: 'COMPLETED' });
+      expect(await occurrences.findOneByOrFail({ eventId: due.id })).toMatchObject({
+        status: 'COMPLETED'
+      });
+      expect(await applications.findOneByOrFail({ id: dueApplication.id })).toMatchObject({
+        status: 'NOT_CONSIDERED'
+      });
+    });
+
+    const failure = new Error('Abort lifecycle transaction');
+    await expect(
+      unitOfWork.run(async (tx) => {
+        await repository.advanceDueEvents(cutoff, 100, tx);
+        throw failure;
+      })
+    ).rejects.toBe(failure);
+    expect(await events.findOneByOrFail({ id: locked.id })).toMatchObject({ status: 'PUBLISHED' });
+    expect(await occurrences.findOneByOrFail({ eventId: locked.id })).toMatchObject({
+      status: 'SCHEDULED'
+    });
+    expect(await applications.findOneByOrFail({ id: participation.id })).toMatchObject({
+      status: 'PENDING'
+    });
+
+    await lifecycle.execute();
+    expect(await events.findOneByOrFail({ id: locked.id })).toMatchObject({ status: 'COMPLETED' });
+    expect(await occurrences.findOneByOrFail({ eventId: locked.id })).toMatchObject({
+      status: 'COMPLETED'
+    });
+    expect(await applications.findOneByOrFail({ id: participation.id })).toMatchObject({
+      status: 'NOT_CONSIDERED'
+    });
   });
 });
