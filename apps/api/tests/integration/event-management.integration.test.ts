@@ -24,7 +24,8 @@ import {
   DiscussionCommentEntity,
   DiscussionCommentQuotaEntity,
   EventEntity,
-  EventRepositoryAdapter
+  EventRepositoryAdapter,
+  EventReviewEntity
 } from '../../src/modules/events/infrastructure/index.js';
 import { EventLifecycleRepositoryAdapter } from '../../src/modules/events/infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import { EventOccurrenceEntity } from '../../src/modules/events/infrastructure/persistence/entities/event-occurrence.entity.js';
@@ -187,6 +188,7 @@ describe('event management and feed with PostgreSQL', () => {
     const app = express();
     app.use(express.json());
     app.use('/events', events.router);
+    app.use('/users', events.profilesRouter);
     app.use('/geo', geo.router);
     app.use(errorHandler);
     return request(app);
@@ -264,7 +266,7 @@ describe('event management and feed with PostgreSQL', () => {
     await rows.update(onlineDraft.id, { isHiddenByAdmin: false, status: 'COMPLETED' });
     await get(onlineDraft.id).expect(200);
     const completed = await get(onlineDraft.id, participant).expect(200);
-    expect(completed.body.data.actions).toEqual({
+    expect(completed.body.data.actions).toMatchObject({
       canJoin: false,
       canApply: false,
       canCancelParticipation: false
@@ -1236,5 +1238,142 @@ describe('event management and feed with PostgreSQL', () => {
     });
     await post(second.id).expect(201);
     await post(second.id).expect(429);
+  });
+
+  it('publishes one review per approved attendee and includes visible ratings in public views', async () => {
+    const [owner, first, second, third, outsider] = await Promise.all([
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser()
+    ]);
+    const event = await publishForFeed(owner, {});
+    const other = await publishForFeed(owner, {});
+    const overdue = await publishForFeed(owner, {});
+    for (const [viewer, eventId] of [
+      [first, event.id],
+      [second, event.id],
+      [third, other.id],
+      [first, other.id],
+      [first, overdue.id]
+    ] as const) {
+      await manageParticipation.join(viewer, eventId);
+    }
+
+    const api = createEventsTestApi([owner, first, second, third, outsider]);
+    const submit = (eventId: string, author: AuthUser, rating: number, text?: string) =>
+      api.post(`/events/${eventId}/reviews`).set('X-Test-User', author.id).send({ rating, text });
+    const profilePath = `/users/${owner.id}`;
+    await submit(event.id, first, 5).expect(404);
+
+    const events = dataSource.getRepository(EventEntity);
+    const hour = 60 * 60 * 1000;
+    const recentEnd = Date.now() - hour;
+    await events.update([event.id, other.id], {
+      status: 'COMPLETED',
+      firstStartsAt: new Date(recentEnd - hour),
+      firstEndsAt: new Date(recentEnd)
+    });
+    await events.update(overdue.id, {
+      status: 'COMPLETED',
+      firstStartsAt: new Date(recentEnd - 8 * 24 * hour),
+      firstEndsAt: new Date(recentEnd - 7 * 24 * hour)
+    });
+
+    await api.post(`/events/${event.id}/reviews`).send({ rating: 5 }).expect(401);
+    await submit(event.id, outsider, 5).expect(403);
+    await submit(event.id, owner, 5).expect(403);
+    await submit(event.id, first, 6).expect(400);
+    await submit(overdue.id, first, 5).expect(409);
+    const eligible = await api.get(`/events/${event.id}`).set('X-Test-User', first.id).expect(200);
+    expect(eligible.body.data.actions.canReview).toBe(true);
+
+    const duplicates = await Promise.all([
+      submit(event.id, first, 5, '  Great event  '),
+      submit(event.id, first, 5, '  Great event  ')
+    ]);
+    expect(duplicates.map(({ status }) => status).sort()).toEqual([201, 409]);
+    const firstReview = duplicates.find(({ status }) => status === 201)?.body.data;
+    expect(firstReview).toMatchObject({
+      rating: 5,
+      text: 'Great event',
+      author: { id: first.id },
+      organizerReply: null,
+      organizerReplyAt: null
+    });
+    expect(firstReview.author).not.toHaveProperty('email');
+    const reviewed = await api.get(`/events/${event.id}`).set('X-Test-User', first.id).expect(200);
+    expect(reviewed.body.data.actions.canReview).toBe(false);
+    const secondReview = (await submit(event.id, second, 4).expect(201)).body.data;
+    const belowThreshold = await api.get(profilePath).expect(200);
+    expect(belowThreshold.body.data).toMatchObject({ rating: null, ratingCount: 2 });
+    expect(belowThreshold.body.data).not.toHaveProperty('email');
+
+    const thirdReview = (await submit(other.id, third, 2).expect(201)).body.data;
+    const threshold = await api.get(profilePath).expect(200);
+    expect(threshold.body.data).toMatchObject({ rating: 3.7, ratingCount: 3 });
+    const fourthReview = (await submit(other.id, first, 1).expect(201)).body.data;
+    const card = await api.get(`/events/${event.id}`).expect(200);
+    expect(card.body.data.organizer).toMatchObject({ rating: 3, ratingCount: 4 });
+    expect(card.body.data.reviews.data.map(({ id }: { id: string }) => id).sort())
+      .toEqual([firstReview.id, secondReview.id].sort());
+
+    const reply = (author: AuthUser) =>
+      api
+        .post(`/events/${event.id}/reviews/${firstReview.id}/reply`)
+        .set('X-Test-User', author.id)
+        .send({ text: 'Thank you' });
+    await reply(first).expect(404);
+    const replied = await reply(owner).expect(200);
+    expect(replied.body.data).toMatchObject({
+      organizerReply: 'Thank you',
+      organizerReplyAt: expect.any(String)
+    });
+    await reply(owner).expect(409);
+
+    const targets = [firstReview, secondReview, thirdReview, fourthReview];
+    const pin = (target: { eventId: string; id: string }, isPinned: boolean) =>
+      api
+        .put(`/events/${target.eventId}/reviews/${target.id}/pin`)
+        .set('X-Test-User', owner.id)
+        .send({ isPinned });
+    const pinned = await Promise.all(targets.map((target) => pin(target, true)));
+    expect(pinned.map(({ status }) => status).sort()).toEqual([200, 200, 200, 409]);
+    const rejectedPin = targets[pinned.findIndex(({ status }) => status === 409)];
+    const acceptedPin = targets[pinned.findIndex(({ status }) => status === 200)];
+    await pin(acceptedPin, false).expect(200);
+    await pin(rejectedPin, true).expect(200);
+    const profile = await api.get(profilePath).expect(200).expect('Cache-Control', 'private, no-store');
+    expect(profile.body.data.reviews.data).toHaveLength(3);
+    expect(profile.body.data.reviews.data.every(({ isPinned }: { isPinned: boolean }) => isPinned))
+      .toBe(true);
+    const nextPage = await api
+      .get(`${profilePath}/reviews`)
+      .query({ cursor: profile.body.data.reviews.pagination.nextCursor })
+      .expect(200);
+    expect(nextPage.body.data).toMatchObject([{ id: acceptedPin.id, isPinned: false }]);
+    expect(nextPage.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+
+    const reviews = dataSource.getRepository(EventReviewEntity);
+    await reviews.update(fourthReview.id, { isHiddenByAdmin: true });
+    const moderated = await api.get(profilePath).expect(200);
+    expect(moderated.body.data).toMatchObject({ rating: 3.7, ratingCount: 3 });
+    expect(moderated.body.data.reviews.data).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: fourthReview.id })])
+    );
+    await dataSource.getRepository(UserBlockEntity).insert({
+      blockerId: outsider.id,
+      blockedId: first.id
+    });
+    const filtered = await api
+      .get(`/events/${event.id}/reviews`)
+      .set('X-Test-User', outsider.id)
+      .expect(200);
+    expect(filtered.body.data).toMatchObject([{ id: secondReview.id }]);
+    await events.update(other.id, { isHiddenByAdmin: true });
+    const hiddenEvent = await api.get(profilePath).expect(200);
+    expect(hiddenEvent.body.data).toMatchObject({ rating: null, ratingCount: 2 });
+    expect(hiddenEvent.body.data.reviews.data).toHaveLength(2);
   });
 });

@@ -7,6 +7,7 @@ allOf:
       - hideExactAddress
       - tags
       - organizer
+      - reviews
       - approvedParticipantCount
       - availablePlaces
       - participantAvatars
@@ -22,12 +23,17 @@ allOf:
         type: array
         items: { type: string }
       organizer:
-        type: object
-        required: [id, name, avatarUrl]
-        properties:
-          id: { type: string, format: uuid }
-          name: { type: [string, 'null'] }
-          avatarUrl: { type: [string, 'null'] }
+        allOf:
+          - $ref: '#/components/schemas/OrganizerRating'
+          - type: object
+            required: [id, name, avatarUrl]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: [string, 'null'] }
+              avatarUrl: { type: [string, 'null'] }
+      reviews:
+        $ref: '#/components/schemas/EventReviewPage'
+        description: First three visible reviews for this event. Empty until the event is completed.
       approvedParticipantCount:
         type: integer
         minimum: 0
@@ -61,11 +67,12 @@ allOf:
         description: Status of the caller's participation record, or null if none exists.
       actions:
         type: object
-        required: [canJoin, canApply, canCancelParticipation]
+        required: [canJoin, canApply, canCancelParticipation, canReview]
         properties:
           canJoin: { type: boolean }
           canApply: { type: boolean }
           canCancelParticipation: { type: boolean }
+          canReview: { type: boolean }
       location:
         $ref: '#/components/schemas/EventDetailLocation'
         description: |

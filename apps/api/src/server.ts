@@ -14,7 +14,8 @@ try {
     onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router,
     adminUsersRouter: modules.moderation.adminUsersRouter,
-    eventsRouter: modules.events.router
+    eventsRouter: modules.events.router,
+    profilesRouter: modules.events.profilesRouter
   });
 
   const server = app.listen(env.PORT, () => {

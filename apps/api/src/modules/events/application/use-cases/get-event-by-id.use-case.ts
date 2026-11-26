@@ -10,6 +10,7 @@ import type {
 import type { EventLocationSnapshot } from '../ports/event.repository.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import type { EventReviewsUseCase } from './event-reviews.use-case.js';
 
 export class GetEventByIdUseCase {
   constructor(
@@ -30,6 +31,7 @@ export class GetEventByIdUseCase {
     private readonly blocks: UserBlockProvider,
     private readonly profiles: UserProfileProvider,
     private readonly locations: Pick<LocationProvider, 'findById'>,
+    private readonly reviews: Pick<EventReviewsUseCase, 'rating' | 'preview' | 'canReview'>,
     private readonly clock: () => Date
   ) {}
 
@@ -88,7 +90,10 @@ export class GetEventByIdUseCase {
       approvedParticipantCount,
       snapshot,
       participants,
-      foreignPrivateLocation
+      foreignPrivateLocation,
+      rating,
+      reviews,
+      canReview
     ] = await Promise.all([
       this.events.readTags(id),
       this.profiles.findByUserId(event.organizerId),
@@ -104,7 +109,12 @@ export class GetEventByIdUseCase {
         : [],
       !admin && locationId
         ? this.events.hasForeignPrivateLocation(locationId, event.organizerId)
-        : false
+        : false,
+      this.reviews.rating(event.organizerId),
+      event.status === 'COMPLETED'
+        ? this.reviews.preview(event.organizerId, blockedIds, id)
+        : { items: [], nextCursor: null },
+      viewer && approved ? this.reviews.canReview(event, viewer.id, now) : false
     ]);
     const exactLocation = !foreignPrivateLocation && (!event.hideExactAddress || canSeeExact);
     const participantAvatars = await Promise.all(
@@ -139,8 +149,10 @@ export class GetEventByIdUseCase {
       organizer: {
         id: event.organizerId,
         name: organizer?.name ?? null,
-        avatarUrl: organizer?.avatarUrl ?? null
+        avatarUrl: organizer?.avatarUrl ?? null,
+        ...rating
       },
+      reviews,
       approvedParticipantCount,
       availablePlaces,
       participantAvatars,
@@ -148,7 +160,8 @@ export class GetEventByIdUseCase {
       actions: {
         canJoin: canJoin && event.participationMode === 'FREE' && availablePlaces !== 0,
         canApply: canJoin && event.participationMode === 'REQUEST',
-        canCancelParticipation: open && (approved || pending)
+        canCancelParticipation: open && (approved || pending),
+        canReview
       },
       location:
         event.format === 'OFFLINE' && snapshot ? this.toLocation(snapshot, exactLocation) : null,

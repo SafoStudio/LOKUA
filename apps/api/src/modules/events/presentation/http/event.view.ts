@@ -1,6 +1,7 @@
 import type { FeedEvent, GetEventByIdUseCase } from '../../application/index.js';
 import type { MyEventItem } from '../../application/ports/my-events.repository.js';
 import type { Event } from '../../domain/index.js';
+import { toReviewPageView } from './event-review.view.js';
 
 export function toEventView(event: Event) {
   return {
@@ -93,6 +94,7 @@ export function toEventDetailView(result: Awaited<ReturnType<GetEventByIdUseCase
     event,
     tags,
     organizer,
+    reviews,
     approvedParticipantCount,
     availablePlaces,
     participantAvatars,
@@ -108,6 +110,7 @@ export function toEventDetailView(result: Awaited<ReturnType<GetEventByIdUseCase
     hideExactAddress: event.hideExactAddress,
     tags,
     organizer,
+    reviews: toReviewPageView(reviews),
     approvedParticipantCount,
     availablePlaces,
     participantAvatars,

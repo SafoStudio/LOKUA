@@ -1,0 +1,11 @@
+allOf:
+  - $ref: '#/components/schemas/OrganizerRating'
+  - type: object
+    required: [id, name, avatarUrl, reviews]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      avatarUrl: { type: [string, 'null'] }
+      reviews:
+        $ref: '#/components/schemas/EventReviewPage'
+        description: First three visible reviews. Continue on the organizer reviews endpoint.

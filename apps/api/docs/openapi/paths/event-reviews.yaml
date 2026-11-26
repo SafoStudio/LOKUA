@@ -1,0 +1,188 @@
+/api/v1/events/{id}/reviews:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [Events]
+    summary: List reviews for a completed event
+    description: Pinned reviews come first, then newest reviews. Event visibility and blocking rules apply.
+    security: &publicReviewSecurity
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters: &reviewPageParameters
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      - name: cursor
+        in: query
+        description: Use the next cursor from the same review list.
+        schema: { type: string, format: uuid }
+    responses:
+      '200': &reviewPageResponse
+        description: Page of visible reviews
+        headers: &privateReviewHeaders
+          Cache-Control:
+            schema: { type: string, const: 'private, no-store' }
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventReviewPage'
+      '400': &reviewValidation
+        description: Invalid request
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401': &reviewUnauthorized
+        description: Missing or invalid credentials
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403': &reviewForbidden
+        description: The caller lacks access
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404': &reviewNotFound
+        description: Event, profile or review unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  post:
+    tags: [Events]
+    summary: Review a completed event
+    description: An approved participant can submit one review during the seven days after the event ends.
+    security: &reviewWriteSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [rating]
+            properties:
+              rating: { type: integer, minimum: 1, maximum: 5 }
+              text: { type: [string, 'null'], minLength: 1, maxLength: 1000 }
+    responses:
+      '201': &singleReviewResponse
+        description: Saved review
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/EventReview'
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound
+      '409': &reviewConflict
+        description: The operation conflicts with the current review state or review window
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/reviews/{reviewId}/reply:
+  parameters: &reviewItemParameters
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: reviewId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [Events]
+    summary: Reply once as the event organizer
+    security: *reviewWriteSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [text]
+            properties:
+              text: { type: string, minLength: 1, maxLength: 1000 }
+    responses: &reviewUpdateResponses
+      '200': *singleReviewResponse
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound
+      '409': *reviewConflict
+
+/api/v1/events/{id}/reviews/{reviewId}/pin:
+  parameters: *reviewItemParameters
+  put:
+    tags: [Events]
+    summary: Pin or unpin a review as the event organizer
+    description: The organizer can have up to three pinned reviews across their events.
+    security: *reviewWriteSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [isPinned]
+            properties:
+              isPinned: { type: boolean }
+    responses: *reviewUpdateResponses
+
+/api/v1/users/{id}:
+  parameters: &reviewOrganizerId
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [Events]
+    summary: Get a public organizer profile with ratings and reviews
+    security: *publicReviewSecurity
+    responses:
+      '200':
+        description: Public profile with rating and review preview
+        headers: *privateReviewHeaders
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/OrganizerProfile'
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound
+
+/api/v1/users/{id}/reviews:
+  parameters: *reviewOrganizerId
+  get:
+    tags: [Events]
+    summary: List visible reviews of the organizer
+    description: Pinned reviews come first. Age, moderation and blocking rules apply to review visibility.
+    security: *publicReviewSecurity
+    parameters: *reviewPageParameters
+    responses:
+      '200': *reviewPageResponse
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound

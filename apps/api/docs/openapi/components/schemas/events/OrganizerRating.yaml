@@ -1,0 +1,14 @@
+type: object
+required: [rating, ratingCount]
+properties:
+  rating:
+    type: [number, 'null']
+    minimum: 1
+    maximum: 5
+    description: Average of individual visible ratings, rounded to one decimal. Null below three ratings.
+  ratingCount:
+    type: integer
+    minimum: 0
+    description: |
+      Count of reviews on completed events after moderation filters. This count is shared
+      across viewers and is independent of the filters on their individual review lists.

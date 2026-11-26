@@ -9,9 +9,11 @@ import { ListEventParticipationUseCase } from './application/use-cases/list-even
 import { GetMyEventsUseCase } from './application/use-cases/get-my-events.use-case.js';
 import { AdvanceEventLifecycleUseCase } from './application/use-cases/advance-event-lifecycle.use-case.js';
 import { EventDiscussionUseCase } from './application/use-cases/event-discussion.use-case.js';
+import { EventReviewsUseCase } from './application/use-cases/event-reviews.use-case.js';
 import { startEventLifecycleWorker } from './infrastructure/event-lifecycle.worker.js';
 import { EventLifecycleRepositoryAdapter } from './infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import { DiscussionCommentRepositoryAdapter } from './infrastructure/persistence/adapters/discussion-comment.repository.adapter.js';
+import { EventReviewRepositoryAdapter } from './infrastructure/persistence/adapters/event-review.repository.adapter.js';
 import type {
   AccessService,
   AuthUserProvider,
@@ -21,12 +23,15 @@ import type {
 import {
   DiscussionCommentEntity,
   EventEntity,
-  EventRepositoryAdapter
+  EventRepositoryAdapter,
+  EventReviewEntity
 } from './infrastructure/index.js';
 import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
 import { createEventsController } from './presentation/http/events.controller.js';
 import { createDiscussionController } from './presentation/http/discussion.controller.js';
+import { createEventReviewController } from './presentation/http/event-review.controller.js';
 import { createEventsRouter } from './presentation/http/events.routes.js';
+import { createOrganizerProfilesRouter } from './presentation/http/organizer-profiles.routes.js';
 
 export interface CreateEventsModuleDependencies {
   dataSource: DataSource;
@@ -57,6 +62,15 @@ export function createEventsModule({
 
   const unitOfWork = new TypeOrmUnitOfWork(dataSource);
   const clock = () => new Date();
+  const reviews = new EventReviewsUseCase(
+    eventRepository,
+    new EventReviewRepositoryAdapter(dataSource.getRepository(EventReviewEntity)),
+    unitOfWork,
+    access,
+    blocks,
+    profiles,
+    clock
+  );
   const discussion = new EventDiscussionUseCase(
     eventRepository,
     new DiscussionCommentRepositoryAdapter(dataSource.getRepository(DiscussionCommentEntity)),
@@ -96,6 +110,7 @@ export function createEventsModule({
     blocks,
     profiles,
     locations,
+    reviews,
     clock
   );
 
@@ -116,11 +131,13 @@ export function createEventsModule({
     getEventById
   });
 
+  const reviewController = createEventReviewController(reviews);
   const router = createEventsRouter({
     requireAuth,
     optionalAuth,
     controller,
-    discussion: createDiscussionController(discussion)
+    discussion: createDiscussionController(discussion),
+    reviews: reviewController
   });
 
   return {
@@ -128,6 +145,7 @@ export function createEventsModule({
     getEvents,
     getEventById,
     startLifecycleWorker: () => startEventLifecycleWorker(() => advanceEventLifecycle.execute()),
+    profilesRouter: createOrganizerProfilesRouter(optionalAuth, reviewController),
     router
   };
 }

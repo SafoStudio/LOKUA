@@ -4,6 +4,14 @@ import { validate } from '../../../../middlewares/index.js';
 import { createEventSchema } from './create-event.schema.js';
 import type { EventsController } from './events.controller.js';
 import type { DiscussionController } from './discussion.controller.js';
+import type { EventReviewController } from './event-review.controller.js';
+import {
+  createReviewSchema,
+  pinReviewSchema,
+  replyToReviewSchema,
+  reviewPageSchema,
+  reviewParamsSchema
+} from './event-review.schema.js';
 import {
   commentParamsSchema,
   createCommentSchema,
@@ -32,13 +40,15 @@ interface EventsRouterDependencies {
   optionalAuth: RequestHandler;
   controller: EventsController;
   discussion: DiscussionController;
+  reviews: EventReviewController;
 }
 
 export function createEventsRouter({
   requireAuth,
   optionalAuth,
   controller,
-  discussion
+  discussion,
+  reviews
 }: EventsRouterDependencies) {
   const router = Router();
 
@@ -56,6 +66,30 @@ export function createEventsRouter({
   router.post('/', requireAuth, validate({ body: createEventSchema }), controller.create);
 
   const validateId = validate({ params: getEventByIdParamsSchema });
+  router.get(
+    '/:id/reviews',
+    optionalAuth,
+    validate({ params: getEventByIdParamsSchema, query: reviewPageSchema }),
+    reviews.listForEvent
+  );
+  router.post(
+    '/:id/reviews',
+    requireAuth,
+    validate({ params: getEventByIdParamsSchema, body: createReviewSchema }),
+    reviews.create
+  );
+  router.post(
+    '/:id/reviews/:reviewId/reply',
+    requireAuth,
+    validate({ params: reviewParamsSchema, body: replyToReviewSchema }),
+    reviews.reply
+  );
+  router.put(
+    '/:id/reviews/:reviewId/pin',
+    requireAuth,
+    validate({ params: reviewParamsSchema, body: pinReviewSchema }),
+    reviews.pin
+  );
   router.get(
     '/:id/comments',
     optionalAuth,
