@@ -1,14 +1,13 @@
 import 'dotenv/config';
+import sharp from 'sharp';
 
-const BASE_URL = process.env.APP_URL!;
+const BASE_URL = process.env.SMOKE_API_URL ?? process.env.APP_URL ?? 'http://localhost:3003';
 const API_PREFIX = '/api/v1';
-const TEST_CITY_ID = process.env.TEST_CITY_ID!;
-const TEST_INTEREST_IDS = process.env.TEST_INTEREST_IDS!.split(',');
 
 const cookieJar = new Map<string, string>();
 
 function setCookiesFromResponse(headers: Headers) {
-    const setCookieHeaders = (headers as any).getSetCookie?.() ?? [];
+    const setCookieHeaders = headers.getSetCookie();
     for (const raw of setCookieHeaders) {
         const [nameValue] = raw.split(';');
         const [name, ...valueParts] = nameValue.split('=');
@@ -24,6 +23,7 @@ function getCookieHeader(): string {
 
 async function api(path: string, options: RequestInit = {}) {
     const res = await fetch(BASE_URL + API_PREFIX + path, {
+        signal: AbortSignal.timeout(15000),
         ...options,
         headers: {
             'Content-Type': 'application/json',
@@ -50,7 +50,17 @@ function assert(label: string, condition: boolean, detail?: any) {
 }
 
 (async () => {
-    console.log('🚀 Starting smoke test...\n');
+    if (process.argv.includes('--help')) {
+        console.log('Usage: pnpm --filter api smoke:onboarding');
+        console.log('Set TEST_CITY_ID and TEST_INTEREST_IDS. Use a local API with test storage and email configuration.');
+        return;
+    }
+    const cityId = process.env.TEST_CITY_ID?.trim();
+    const interestIds = process.env.TEST_INTEREST_IDS?.split(',').map((id) => id.trim()).filter(Boolean) ?? [];
+    if (!cityId || interestIds.length < 3) {
+        throw new Error('TEST_CITY_ID and at least three TEST_INTEREST_IDS are required');
+    }
+    console.log('🚀 Starting onboarding smoke test...\n');
 
     const email = `smoke-${Date.now()}@example.com`;
     const password = 'Str0ng!Pass1';
@@ -69,7 +79,7 @@ function assert(label: string, condition: boolean, detail?: any) {
 
     assert('Registration returns 201', reg.status === 201, reg);
     assert('onboardingCompleted is false', reg.body.user?.onboardingCompleted === false, reg.body);
-    const userId = reg.body.user.id; // Сохраняем ID для возможной будущей очистки
+    const userId = reg.body.user.id;
 
     const me1 = await api('/auth/me');
     assert('/auth/me returns 200', me1.status === 200, me1);
@@ -77,11 +87,23 @@ function assert(label: string, condition: boolean, detail?: any) {
         assert(`Field ${k} exists in /auth/me`, k in me1.body.user, me1.body.user);
     }
 
+    const fixture = await sharp({
+        create: { width: 24, height: 24, channels: 3, background: '#8473a0' },
+    }).png().toBuffer();
+    const upload = await api('/media/images?scope=PROFILE', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png' },
+        body: new Uint8Array(fixture),
+    });
+    assert('Profile image upload returns a WebP URL', upload.status === 201 &&
+        upload.body?.data?.contentType === 'image/webp' && typeof upload.body?.data?.url === 'string');
+    const photoUrl = upload.body.data.url;
+
     const steps = [
         { path: '/onboarding/date-of-birth', body: { birthDate: '1995-06-15' } },
-        { path: '/onboarding/profile', body: { name: 'Alex', mainPhotoUrl: 'https://cdn/a.jpg' } },
-        { path: '/onboarding/city', body: { cityId: TEST_CITY_ID } },
-        { path: '/onboarding/interests', body: { interestIds: TEST_INTEREST_IDS } },
+        { path: '/onboarding/profile', body: { name: 'Alex', mainPhotoUrl: photoUrl } },
+        { path: '/onboarding/city', body: { cityId } },
+        { path: '/onboarding/interests', body: { interestIds } },
         { path: '/onboarding/optional', body: { bio: 'hi', languages: ['en'], socialLinks: { instagram: 'https://instagram.com/alex' } } },
     ];
 
@@ -107,21 +129,19 @@ function assert(label: string, condition: boolean, detail?: any) {
     const me2 = await api('/auth/me');
     assert('onboardingCompleted is true after completion', me2.body.user?.onboardingCompleted === true, me2.body);
     assert('Name is saved', me2.body.user?.name === 'Alex', me2.body);
+    const photos = await api('/users/me/photos');
+    assert('The uploaded photo is saved as the primary photo', photos.status === 200 &&
+        photos.body?.data?.photoUrls?.[0] === photoUrl);
 
     console.log('\n🧹 Cleaning up test session...');
     const logoutRes = await api('/auth/logout', { method: 'POST' });
-    if (logoutRes.status === 200) {
-        console.log('✅ PASS: Session cleared (logout)');
-    } else {
-        console.warn('⚠️ WARN: Logout failed, but test completed.');
-    }
+    assert('Logout returns 200', logoutRes.status === 200);
+    const afterLogout = await api('/auth/me');
+    assert('Logged-out session cannot access the profile', afterLogout.status === 401);
 
     console.log('\n🎉 SMOKE TEST PASSED SUCCESSFULLY!');
-    console.log(`ℹ️ Note: User record (ID: ${userId}) remains in DB. Add DELETE endpoint if full cleanup is needed.`);
+    console.log(`ℹ️ Test account ${userId} and uploaded photo remain in the test environment.`);
 })().catch((err) => {
     console.error('\n💥 Smoke test aborted:', err.message);
     process.exitCode = 1;
 });
-
-// clean test data
-// DELETE FROM users WHERE email LIKE 'smoke-%@example.com';

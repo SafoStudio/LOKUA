@@ -189,6 +189,18 @@ tests/
 └── integration/   # real lokua_test (repositories, transactions, cascades)
 ```
 
+### Quick diagnostics
+
+| Command                               | Checks                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm --filter api check:db`          | Reads `DATABASE_URL`. Checks connectivity, PostGIS, UUID support, applied migrations, and required columns and indexes in a read-only transaction. Add `--test` to check `TEST_DATABASE_URL` or local `lokua_test`.                                                                                                      |
+| `pnpm --filter api check:media`       | Uses local, generated images to check JPEG, PNG and WebP decoding, EXIF orientation, resizing, metadata stripping and invalid input. No object storage is needed.                                                                                                                                                        |
+| `pnpm --filter api smoke:events`      | Runs read-only HTTP checks against a running API. Checks health, published OpenAPI, protected endpoints, invalid query parameters, the feed, map and guest event privacy. Uses `SMOKE_API_URL`, then `APP_URL`, then `http://localhost:3003`. Set `SMOKE_EVENT_ID` to require a particular public event.                 |
+| `pnpm --filter api smoke:onboarding`  | Registers a test account, uploads a generated profile image, completes onboarding, checks the saved main photo and verifies logout. Requires `TEST_CITY_ID`, at least three comma-separated `TEST_INTEREST_IDS`, and a running test API with storage and email configured. Creates a user and an object in test storage. |
+| `pnpm --filter api typecheck:scripts` | Type-checks the scripts with the API's ES2022 and NodeNext settings.                                                                                                                                                                                                                                                     |
+
+Each diagnostic exits with a nonzero status on failure. The HTTP smoke check explicitly reports when it skips event detail because the feed is empty.
+
 - vitest.config.ts uses fileParallelism: false to avoid TRUNCATE deadlocks in parallel integration files.
 - Integration tests apply migrations once via global-setup.ts and refuse to run against the dev database lokua unless ALLOW_UNSAFE_TEST_DB is set. Use lokua_test or another dedicated test database.
 
