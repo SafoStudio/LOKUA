@@ -1,9 +1,13 @@
+import type { FeedEvent, GetEventByIdUseCase } from '../../application/index.js';
+import type { MyEventItem } from '../../application/ports/my-events.repository.js';
 import type { Event } from '../../domain/index.js';
+import { toReviewPageView } from './event-review.view.js';
 
 export function toEventView(event: Event) {
   return {
     id: event.id,
     organizerId: event.organizerId,
+    tags: event.tags ?? [],
     title: event.title,
     categoryId: event.categoryId,
     description: event.description,
@@ -51,5 +55,84 @@ export function toPublicEventView(event: Event) {
     timezone: event.timezone,
     publishedAt: event.publishedAt,
     createdAt: event.createdAt
+  };
+}
+
+export function toFeedEventView(event: FeedEvent) {
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    hasAvailablePlaces: event.hasAvailablePlaces,
+    distanceMeters: event.distanceMeters
+  };
+}
+
+export function toMyEventView({
+  event,
+  isOrganizer,
+  participationStatus,
+  participationStatusUpdatedAt
+}: MyEventItem) {
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    updatedAt: event.updatedAt,
+    isOrganizer,
+    isHiddenByAdmin: event.isHiddenByAdmin,
+    cancellationReason: event.cancellationReason,
+    participationStatus,
+    participationStatusUpdatedAt
+  };
+}
+
+export function toEventDetailView(result: Awaited<ReturnType<GetEventByIdUseCase['execute']>>) {
+  if (result.kind === 'DRAFT') {
+    return { ...toEventView(result.event), location: result.location };
+  }
+
+  const {
+    event,
+    tags,
+    organizer,
+    reviews,
+    eventRating,
+    organizerReviews,
+    approvedParticipantCount,
+    availablePlaces,
+    participantAvatars,
+    participationStatus,
+    actions,
+    location,
+    onlineUrl
+  } = result;
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    cancellationReason: event.cancellationReason,
+    hideExactAddress: event.hideExactAddress,
+    tags,
+    organizer,
+    ...eventRating,
+    reviews: toReviewPageView(reviews),
+    organizerReviews: toReviewPageView(organizerReviews),
+    approvedParticipantCount,
+    availablePlaces,
+    participantAvatars,
+    participationStatus,
+    actions,
+    location,
+    onlineUrl
+  };
+}
+
+export function toMapEventView(event: FeedEvent) {
+  return {
+    id: event.id,
+    title: event.title,
+    categoryId: event.categoryId,
+    firstStartsAt: event.firstStartsAt,
+    status: event.status,
+    hasAvailablePlaces: event.hasAvailablePlaces,
+    coordinates: event.mapCoordinates
   };
 }

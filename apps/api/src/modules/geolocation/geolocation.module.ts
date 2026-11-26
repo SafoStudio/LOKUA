@@ -87,10 +87,13 @@ export function createGeolocationModule({
 
   const reverseGeocode = new ReverseGeocodeUseCase(reverseGeoProvider);
 
+  const discoverableLocations = {
+    findById: (id: string) => locationRepository.findDiscoverableById(id)
+  };
   const controller = createGeolocationController({
     createLocation,
-    findLocationById,
-    findPublicLocationById,
+    findLocationById: new FindLocationByIdUseCase(discoverableLocations),
+    findPublicLocationById: new FindPublicLocationByIdUseCase(discoverableLocations),
     searchNearby,
     searchInBBox,
     geocodeAddress,

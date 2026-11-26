@@ -3,6 +3,7 @@ export interface UserProfile {
   email: string;
   name: string;
   avatarUrl: string | null;
+  photoUrls?: string[];
   cityId: string | null;
   interestIds: string[];
   onboardingCompleted: boolean;

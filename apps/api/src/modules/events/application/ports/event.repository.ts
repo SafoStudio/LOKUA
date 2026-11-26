@@ -1,24 +1,40 @@
+import type { Coordinates } from '../../../../common/index.js';
 import type { Event } from '../../domain/index.js';
 import type { CreateEventData } from '../types/create-event-data.js';
-import type { AgeRestriction, EventFormat } from '../../domain/index.js';
+import type { AgeRestriction } from '../../domain/index.js';
+import type { GetEventsQuery } from '../types/get-events-query.js';
 
-export interface FindPublishedEventsQuery {
-  limit: number;
-  cursor?: string;
-  categoryId?: string;
-  format?: EventFormat;
+export interface FindPublishedEventsQuery extends GetEventsQuery {
+  cityId?: string;
+  timezone: string;
+  now: Date;
+  blockedOrganizerIds: string[];
   ageRestrictions: AgeRestriction[];
 }
 
+export interface FeedEvent extends Event {
+  hasAvailablePlaces: boolean;
+  distanceMeters?: number;
+  mapCoordinates?: Coordinates;
+}
+
 export interface FindPublishedEventsResult {
-  items: Event[];
+  items: FeedEvent[];
   nextCursor: string | null;
+}
+
+export interface EventLocationSnapshot {
+  cityId: string;
+  districtId: string | null;
+  countryCode: string;
+  name: string;
+  address: string;
+  coordinates: Coordinates;
+  publicCoordinates: Coordinates;
 }
 
 export interface EventRepository {
   create(organizerId: string, data: CreateEventData): Promise<Event>;
 
   findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult>;
-
-  findPublishedById(id: string): Promise<Event | null>;
 }

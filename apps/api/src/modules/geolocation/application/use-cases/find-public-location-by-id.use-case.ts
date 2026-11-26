@@ -7,7 +7,7 @@ export interface FindPublicLocationByIdInput {
 }
 
 export class FindPublicLocationByIdUseCase {
-  constructor(private readonly locationRepository: LocationRepository) {}
+  constructor(private readonly locationRepository: Pick<LocationRepository, 'findById'>) {}
 
   async execute(input: FindPublicLocationByIdInput): Promise<PublicLocationView> {
     const location = await this.locationRepository.findById(input.id);

@@ -1,0 +1,6 @@
+type: object
+required: [id, name, avatarUrl]
+properties:
+  id: { type: string, format: uuid }
+  name: { type: [string, 'null'] }
+  avatarUrl: { type: [string, 'null'] }

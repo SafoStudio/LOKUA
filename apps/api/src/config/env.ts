@@ -45,6 +45,7 @@ const envSchema = z.object({
   STORAGE_BUCKET: z.string().min(1),
   STORAGE_ACCESS_KEY_ID: z.string().min(1),
   STORAGE_SECRET_ACCESS_KEY: z.string().min(1),
+  STORAGE_IMAGE_SIGNING_SECRET: z.string().min(32).optional(),
 
   STORAGE_FORCE_PATH_STYLE: z
     .enum(['true', 'false'])

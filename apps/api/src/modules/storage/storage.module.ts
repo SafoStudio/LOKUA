@@ -1,4 +1,5 @@
 import { env } from '../../config/env.js';
+import type { RequestHandler } from 'express';
 import {
   UploadFileUseCase,
   DeleteFileUseCase,
@@ -7,6 +8,9 @@ import {
 } from './application/index.js';
 import type { StorageFacade } from './application/index.js';
 import { S3StorageService } from './infrastructure/index.js';
+import { ImageMediaService, maxImageUploadBytes } from './application/image-media.service.js';
+import { processImage } from './infrastructure/process-image.js';
+import { createImageMediaRouter } from './presentation/http/image-media.routes.js';
 
 export function createStorageModule() {
   const storage = new S3StorageService({
@@ -39,7 +43,20 @@ export function createStorageModule() {
       })
   };
 
-  return { storage: facade };
+  return {
+    storage: facade,
+    createImageMedia(requireAuth: RequestHandler) {
+      const limit = Math.min(maxImageUploadBytes, env.STORAGE_MAX_UPLOAD_BYTES);
+      const images = new ImageMediaService(
+        facade,
+        processImage,
+        env.APP_URL,
+        env.STORAGE_IMAGE_SIGNING_SECRET ?? env.JWT_ACCESS_SECRET,
+        limit
+      );
+      return { images, router: createImageMediaRouter(requireAuth, images, limit) };
+    }
+  };
 }
 
 export type StorageModule = ReturnType<typeof createStorageModule>;

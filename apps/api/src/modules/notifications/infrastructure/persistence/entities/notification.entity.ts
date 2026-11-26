@@ -11,6 +11,8 @@ import type { NotificationType } from '../../../domain/index.js';
 
 @Entity({ name: 'notifications' })
 @Index('idx_notifications_is_read', ['recipientId', 'isRead'])
+@Index('idx_notifications_deduplication', ['deduplicationKey'], { unique: true })
+@Index('idx_notifications_email_due', ['emailDueAt'])
 export class NotificationEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -40,6 +42,15 @@ export class NotificationEntity {
 
   @Column({ type: 'boolean', name: 'is_read', default: false })
   isRead!: boolean;
+
+  @Column({ type: 'varchar', length: 180, name: 'deduplication_key', nullable: true })
+  deduplicationKey!: string | null;
+
+  @Column({ type: 'timestamptz', name: 'email_due_at', nullable: true })
+  emailDueAt!: Date | null;
+
+  @Column({ type: 'integer', name: 'email_attempts', default: 0 })
+  emailAttempts!: number;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;

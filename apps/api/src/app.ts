@@ -14,6 +14,11 @@ interface AppDependencies {
   geolocationRouter?: express.Router;
   adminUsersRouter?: express.Router;
   eventsRouter: express.Router;
+  profilesRouter?: express.Router;
+  notificationsRouter?: express.Router;
+  reportsRouter?: express.Router;
+  imageMediaRouter?: express.Router;
+  profilePhotosRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -23,7 +28,12 @@ export function createApp({
   onboardingRouter,
   geolocationRouter,
   adminUsersRouter,
-  eventsRouter
+  eventsRouter,
+  profilesRouter,
+  notificationsRouter,
+  reportsRouter,
+  imageMediaRouter,
+  profilePhotosRouter
 }: AppDependencies) {
   const app = express();
 
@@ -106,6 +116,15 @@ export function createApp({
   if (eventsRouter) {
     app.use(`${API_PREFIX}/events`, eventsRouter);
   }
+  if (profilesRouter) {
+    app.use(`${API_PREFIX}/users`, profilesRouter);
+  }
+  if (notificationsRouter) {
+    app.use(`${API_PREFIX}/notifications`, notificationsRouter);
+  }
+  if (reportsRouter) app.use(`${API_PREFIX}/reports`, reportsRouter);
+  if (imageMediaRouter) app.use(`${API_PREFIX}/media`, imageMediaRouter);
+  if (profilePhotosRouter) app.use(`${API_PREFIX}/users/me/photos`, profilePhotosRouter);
 
   app.use(notFound);
   app.use(errorHandler);

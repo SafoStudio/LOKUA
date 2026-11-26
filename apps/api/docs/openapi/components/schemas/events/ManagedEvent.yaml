@@ -1,0 +1,25 @@
+allOf:
+  - $ref: '#/components/schemas/PublicEvent'
+  - type: object
+    required:
+      - tags
+      - organizerId
+      - primaryLocationId
+      - onlineUrl
+      - hideExactAddress
+      - status
+      - cancellationReason
+      - isHiddenByAdmin
+      - updatedAt
+    properties:
+      tags:
+        type: array
+        items: { type: string }
+      organizerId: { type: string, format: uuid }
+      primaryLocationId: { type: [string, 'null'], format: uuid }
+      onlineUrl: { type: [string, 'null'] }
+      hideExactAddress: { type: boolean }
+      status: { enum: [DRAFT, PUBLISHED, FULL, COMPLETED, CANCELLED] }
+      cancellationReason: { type: [string, 'null'] }
+      isHiddenByAdmin: { type: boolean }
+      updatedAt: { type: string, format: date-time }

@@ -1,0 +1,28 @@
+type: object
+required: [id, type, targetType, targetId, title, message, isRead, createdAt]
+properties:
+  id: { type: string, format: uuid }
+  type:
+    type: string
+    enum:
+      - NEW_APPLICATION
+      - FREE_PARTICIPATION
+      - PARTICIPATION_CANCELLED
+      - APPLICATION_APPROVED
+      - APPLICATION_REJECTED
+      - PARTICIPANT_REMOVED
+      - EVENT_CHANGED
+      - EVENT_CANCELLED
+      - EVENT_REMINDER_24H
+      - NEW_COMMENT
+      - COMMENT_REPLY
+      - REVIEW_REMINDER
+      - NEW_REVIEW
+      - REVIEW_REPLY
+      - ACCOUNT_STATUS_CHANGED
+  targetType: { type: string }
+  targetId: { type: string, format: uuid }
+  title: { type: string }
+  message: { type: string }
+  isRead: { type: boolean }
+  createdAt: { type: string, format: date-time }

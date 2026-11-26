@@ -3,6 +3,7 @@ import type { RequestHandler } from 'express';
 import type { UserProvider, UserOnboardingProvider } from '../users/index.js';
 import type { CityProvider, InterestProvider } from '../dictionaries/index.js';
 import type { AuditLogger } from '../moderation/index.js';
+import type { ImageOwnership } from '../storage/index.js';
 import {
   SetDateOfBirthUseCase,
   SetProfileUseCase,
@@ -25,6 +26,7 @@ export interface CreateOnboardingModuleDependencies {
   interests: InterestProvider;
   audit: AuditLogger;
   requireAuth: RequestHandler;
+  images?: ImageOwnership;
 }
 
 export function createOnboardingModule({
@@ -34,7 +36,8 @@ export function createOnboardingModule({
   cities,
   interests,
   audit,
-  requireAuth
+  requireAuth,
+  images
 }: CreateOnboardingModuleDependencies) {
   const stateRepository = new OnboardingStateRepositoryAdapter(
     dataSource.getRepository(OnboardingStateEntity)
@@ -57,7 +60,8 @@ export function createOnboardingModule({
     stateRepository,
     users,
     onboardingUsers,
-    audit
+    audit,
+    images
   );
 
   const setCity = new SetCityUseCase(

@@ -1,0 +1,27 @@
+type: object
+required:
+  [
+    id,
+    reporterId,
+    objectType,
+    objectId,
+    reason,
+    text,
+    status,
+    assignedModeratorId,
+    resolutionNotes,
+    createdAt,
+    updatedAt
+  ]
+properties:
+  id: { type: string, format: uuid }
+  reporterId: { type: string, format: uuid }
+  objectType: { type: string, enum: [EVENT, COMMENT, REVIEW, PROFILE] }
+  objectId: { type: string, format: uuid }
+  reason: { type: string }
+  text: { type: string }
+  status: { type: string, enum: [NEW, IN_PROGRESS, RESOLVED, REJECTED] }
+  assignedModeratorId: { type: [string, 'null'], format: uuid }
+  resolutionNotes: { type: [string, 'null'] }
+  createdAt: { type: string, format: date-time }
+  updatedAt: { type: string, format: date-time }

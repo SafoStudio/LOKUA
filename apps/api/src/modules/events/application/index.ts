@@ -6,6 +6,7 @@ export type { GetEventsQuery } from './types/get-events-query.js';
 export { GetEventsUseCase } from './use-cases/get-events.use-case.js';
 export { GetEventByIdUseCase } from './use-cases/get-event-by-id.use-case.js';
 export type {
+  FeedEvent,
   FindPublishedEventsQuery,
   FindPublishedEventsResult
 } from './ports/event.repository.js';

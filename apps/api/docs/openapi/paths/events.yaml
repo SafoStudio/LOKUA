@@ -1,8 +1,11 @@
 /api/v1/events:
   get:
     tags: [Events]
-    summary: List published events
-    description: Anonymous visitors see unrestricted events. Signed-in visitors also see events allowed by their age.
+    summary: List upcoming events by start time
+    description: >
+      Lists future published and full events in ascending start-time order. The first page
+      falls back to online events with DATE sorting when no city events match and format is unspecified.
+      Use the same filters on subsequent pages. Visibility depends on age, moderation and user blocks.
     security:
       - {}
       - CookieAuth: []
@@ -14,15 +17,56 @@
       - name: cursor
         in: query
         schema: { type: string, minLength: 1 }
+      - name: cityId
+        in: query
+        description: Defaults to the signed-in user's profile city or Kyiv.
+        schema: { type: string, format: uuid }
+      - name: from
+        in: query
+        description: Inclusive start instant.
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        description: Exclusive end instant.
+        schema: { type: string, format: date-time }
+      - name: period
+        in: query
+        description: Calendar dates in the selected city's timezone. Weekend includes Saturday and Sunday.
+        schema: { type: string, enum: [TODAY, TOMORROW, WEEKEND] }
+      - name: freeOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: participationMode
+        in: query
+        schema: { type: string, enum: [FREE, REQUEST] }
+      - name: availableOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: search
+        in: query
+        description: Case-insensitive substring of the title, description, or a tag.
+        schema: { type: string, minLength: 1, maxLength: 200 }
       - name: categoryId
         in: query
         schema: { type: string, format: uuid }
       - name: format
         in: query
         schema: { type: string, enum: [OFFLINE, ONLINE] }
+      - name: sort
+        in: query
+        description: DISTANCE sorts offline events in the selected city by distance, then start time and ID.
+        schema: { type: string, enum: [DATE, DISTANCE], default: DATE }
+      - name: latitude
+        in: query
+        description: Origin latitude. Required with DISTANCE and accepted only with that sort.
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: longitude
+        in: query
+        description: Origin longitude. Required with DISTANCE and accepted only with that sort.
+        schema: { type: number, minimum: -180, maximum: 180 }
     responses:
       '200':
-        description: Page of published events
+        description: Page of upcoming events
         content:
           application/json:
             schema:
@@ -32,7 +76,7 @@
                 data:
                   type: array
                   items:
-                    $ref: '#/components/schemas/PublicEvent'
+                    $ref: '#/components/schemas/FeedEvent'
                 pagination:
                   type: object
                   required: [nextCursor, hasMore]
@@ -108,10 +152,77 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
 
+/api/v1/events/me:
+  get:
+    tags: [Events]
+    summary: List the current user's events
+    description: |
+      GOING lists ongoing or upcoming events with approved participation.
+      APPLICATIONS lists pending, rejected and unconsidered applications by latest status update.
+      ORGANIZING lists the caller's ongoing or upcoming published and full events.
+      DRAFTS lists the caller's drafts by latest edit.
+      PAST lists ended, completed and cancelled events organized by the caller or with their
+      approved participation, ordered by end time descending. Ended events may still have
+      PUBLISHED or FULL status until their status is updated.
+      GOING and ORGANIZING sort by start time ascending. All tabs use the event ID to break ties.
+      Age, moderation and blocking rules apply to events organized by other users.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: tab
+        in: query
+        required: true
+        schema: { type: string, enum: [GOING, APPLICATIONS, ORGANIZING, DRAFTS, PAST] }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      - name: cursor
+        in: query
+        description: Use the next cursor from a previous response for the same tab.
+        schema: { type: string, minLength: 1, maxLength: 256 }
+    responses:
+      '200':
+        description: Page of the current user's events
+        headers:
+          Cache-Control:
+            schema: { type: string, const: 'private, no-store' }
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/MyEvent'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'] }
+                    hasMore: { type: boolean }
+      '400':
+        description: Invalid query or pagination cursor
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/ValidationErrorResponse'
+                - $ref: '#/components/schemas/ErrorResponse'
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+
 /api/v1/events/{id}:
   get:
     tags: [Events]
-    summary: Get a published event
+    summary: Get event details
+    description: |
+      Published, full and completed events follow age, blocking and moderation visibility rules.
+      Organizers and administrators can read drafts and moderation-hidden events.
+      Cancelled events are available to the organizer, administrators and viewers with a pending
+      or approved participation, subject to visibility rules.
     security:
       - {}
       - CookieAuth: []
@@ -123,7 +234,10 @@
         schema: { type: string, format: uuid }
     responses:
       '200':
-        description: Published event visible to the visitor
+        description: Event visible to the caller
+        headers:
+          Cache-Control:
+            schema: { type: string, const: 'private, no-store' }
         content:
           application/json:
             schema:
@@ -131,7 +245,15 @@
               required: [data]
               properties:
                 data:
-                  $ref: '#/components/schemas/PublicEvent'
+                  anyOf:
+                    - allOf:
+                        - $ref: '#/components/schemas/EventDraft'
+                        - type: object
+                          required: [location]
+                          properties:
+                            location:
+                              $ref: '#/components/schemas/EventDetailLocation'
+                    - $ref: '#/components/schemas/EventDetail'
       '400': *eventValidation
       '401': *eventUnauthorized
       '403': *eventForbidden
@@ -141,3 +263,603 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+
+  patch:
+    tags: [Events]
+    summary: Update your draft or active published event
+    security: &eventOwnerSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters: &eventIdParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpdateEventRequest'
+    responses:
+      '200': &eventManaged
+        description: Updated event
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/ManagedEvent'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': &eventNotOwned
+        description: Event is missing or unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409': &eventConflict
+        description: Event state or participation conflicts with the operation
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422': &eventDomainError
+        description: Event violates a domain rule
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  delete:
+    tags: [Events]
+    summary: Delete your draft or active published event without pending applications or participant history
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '204':
+        description: Event deleted
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+
+/api/v1/events/{id}/publish:
+  post:
+    tags: [Events]
+    summary: Publish your draft
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '200': *eventManaged
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+      '422': *eventDomainError
+
+/api/v1/events/{id}/cancel:
+  post:
+    tags: [Events]
+    summary: Cancel your event
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [reason]
+            properties:
+              reason: { type: string, minLength: 1, maxLength: 300 }
+    responses:
+      '200': *eventManaged
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '409': *eventConflict
+
+/api/v1/events/{id}/duplicate:
+  post:
+    tags: [Events]
+    summary: Duplicate your event as a draft without dates
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '201':
+        description: Draft created
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/EventDraft'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventNotOwned
+      '422': *eventDomainError
+
+/api/v1/events/map:
+  get:
+    tags: [Events]
+    summary: List upcoming offline event markers within a viewport
+    description: >
+      Returns markers ordered by start time and ID. Bounds include their edges and may span
+      up to five degrees per axis. The viewport determines the area when cityId is omitted.
+      Hidden addresses use rounded public coordinates for both matching and the marker.
+      Use the same viewport and filters on subsequent pages.
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: minLat
+        in: query
+        required: true
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: minLng
+        in: query
+        required: true
+        schema: { type: number, minimum: -180, maximum: 180 }
+      - name: maxLat
+        in: query
+        required: true
+        schema: { type: number, minimum: -90, maximum: 90 }
+      - name: maxLng
+        in: query
+        required: true
+        schema: { type: number, minimum: -180, maximum: 180 }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      - name: cursor
+        in: query
+        schema: { type: string, minLength: 1 }
+      - name: cityId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: categoryId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: from
+        in: query
+        description: Inclusive start instant.
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        description: Exclusive end instant.
+        schema: { type: string, format: date-time }
+      - name: period
+        in: query
+        description: Uses the selected city, profile city or Kyiv timezone.
+        schema: { type: string, enum: [TODAY, TOMORROW, WEEKEND] }
+      - name: freeOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: participationMode
+        in: query
+        schema: { type: string, enum: [FREE, REQUEST] }
+      - name: availableOnly
+        in: query
+        schema: { type: boolean, default: false }
+      - name: search
+        in: query
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    responses:
+      '200':
+        description: Page of upcoming offline event markers
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EventMapMarker'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'] }
+                    hasMore: { type: boolean }
+      '400':
+        description: Invalid map query or cursor
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: '#/components/schemas/ValidationErrorResponse'
+                - $ref: '#/components/schemas/ErrorResponse'
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+
+/api/v1/events/{id}/comments:
+  parameters: *eventIdParameters
+  get:
+    tags: [Events]
+    summary: List event comments or replies
+    description: |
+      Returns top-level comments by default, or replies to the selected top-level comment.
+      Active discussions follow event visibility rules and hide comments from blocked authors.
+      After the event ends, the discussion is available to administrators through archive mode.
+      Archive mode includes soft-deleted and moderation-hidden comments.
+    security:
+      - {}
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: parentId
+        in: query
+        schema: { type: string, format: uuid }
+      - name: archive
+        in: query
+        schema: { type: boolean, default: false }
+      - name: cursor
+        in: query
+        description: Use the next cursor from the same thread and archive mode.
+        schema: { type: string, format: uuid }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    responses:
+      '200':
+        description: Page of comments ordered by creation time and ID
+        headers:
+          Cache-Control:
+            schema: { type: string, const: 'private, no-store' }
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DiscussionComment'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'], format: uuid }
+                    hasMore: { type: boolean }
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': &commentForbidden
+        description: The caller lacks the required discussion permissions
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404': &discussionNotFound
+        description: Discussion or comment unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  post:
+    tags: [Events]
+    summary: Post a comment or reply
+    description: |
+      Signed-in users with verified email and completed onboarding can post while the discussion is active.
+      Event visibility rules apply.
+      Each author can publish up to 20 comments and replies per rolling hour across all events.
+    security: *eventOwnerSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [text]
+            properties:
+              text: { type: string, minLength: 1, maxLength: 1000 }
+              parentId: { type: string, format: uuid }
+    responses:
+      '201': &commentResponse
+        description: Saved comment
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/DiscussionComment'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *commentForbidden
+      '404': *discussionNotFound
+      '422':
+        description: The selected comment is already a reply
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: Comment posting quota exceeded
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/comments/{commentId}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: commentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  patch:
+    tags: [Events]
+    summary: Edit your comment
+    security: *eventOwnerSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [text]
+            properties:
+              text: { type: string, minLength: 1, maxLength: 1000 }
+    responses:
+      '200': *commentResponse
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *commentForbidden
+      '404': *discussionNotFound
+  delete:
+    tags: [Events]
+    summary: Remove a comment
+    description: The author or event organizer can soft-delete a comment while the discussion is active.
+    security: *eventOwnerSecurity
+    responses:
+      '204':
+        description: Comment removed from the active discussion
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *commentForbidden
+      '404': *discussionNotFound
+
+/api/v1/events/{id}/participations:
+  post:
+    tags: [Events]
+    summary: Join an event or submit an application
+    description: >
+      FREE approves immediately. REQUEST creates a pending application even when all places are
+      occupied. Repeating an approved or pending request returns that participation.
+      Schedule overlaps are returned as warnings.
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              message: { type: string, maxLength: 300, description: For REQUEST events only. }
+    responses:
+      '200':
+        description: Approved participation or pending application
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [participation, warnings]
+                  properties:
+                    participation:
+                      $ref: '#/components/schemas/OwnEventParticipation'
+                    warnings:
+                      type: array
+                      items: { type: string, enum: [SCHEDULE_CONFLICT] }
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403':
+        description: Account is ineligible to join
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404':
+        description: Event is missing or unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Event is closed or full for free entry, or participation cannot be reopened
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/participations/me:
+  delete:
+    tags: [Events]
+    summary: Cancel your participation before the event starts
+    security: *eventOwnerSecurity
+    parameters: *eventIdParameters
+    responses:
+      '200':
+        description: Cancelled participation
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/OwnEventParticipation'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404':
+        description: Event or participation not found
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Event is closed or participation cannot be cancelled
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications:
+  get:
+    tags: [Events]
+    summary: List pending applications as the organizer
+    security: *eventOwnerSecurity
+    parameters: &eventParticipationPageParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: cursor
+        in: query
+        schema: { type: string, format: uuid }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    responses:
+      '200':
+        description: Pending applications with their application messages
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data: &eventParticipationItems
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EventParticipationListItem'
+                pagination: &eventParticipationPagination
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'], format: uuid }
+                    hasMore: { type: boolean }
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': &eventParticipationNotFound
+        description: Event or participation is unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications/{participationId}/approve:
+  post:
+    tags: [Events]
+    summary: Approve a pending application as the organizer
+    security: *eventOwnerSecurity
+    parameters: &eventParticipationIdParameters
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: participationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses: &eventParticipationDecisionResponses
+      '200':
+        description: Updated participation
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: '#/components/schemas/OwnEventParticipation'
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403': *eventForbidden
+      '404': *eventParticipationNotFound
+      '409':
+        description: Event is closed or full, the participation is ineligible, or the transition is unavailable
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/events/{id}/applications/{participationId}/reject:
+  post:
+    tags: [Events]
+    summary: Reject a pending application as the organizer
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationIdParameters
+    responses: *eventParticipationDecisionResponses
+
+/api/v1/events/{id}/participants:
+  get:
+    tags: [Events]
+    summary: List approved participants and the organizer
+    description: Available to the organizer, approved participants and active administrators.
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationPageParameters
+    responses:
+      '200':
+        description: Participant profiles and the organizer profile
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, organizer, pagination]
+              properties:
+                data: *eventParticipationItems
+                organizer:
+                  $ref: '#/components/schemas/EventParticipantProfile'
+                pagination: *eventParticipationPagination
+      '400': *eventValidation
+      '401': *eventUnauthorized
+      '403':
+        description: Account is inactive or approved participation is required
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404': *eventParticipationNotFound
+
+/api/v1/events/{id}/participants/{participationId}:
+  delete:
+    tags: [Events]
+    summary: Remove an approved participant as the organizer before the event starts
+    security: *eventOwnerSecurity
+    parameters: *eventParticipationIdParameters
+    requestBody:
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              reason: { type: string, maxLength: 300 }
+    responses: *eventParticipationDecisionResponses

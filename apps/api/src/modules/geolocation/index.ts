@@ -20,3 +20,4 @@ export {
   LocationNotFoundError,
   LocationValidationError
 } from './domain/index.js';
+export { obfuscateCoordinates } from './domain/index.js';

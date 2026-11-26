@@ -29,7 +29,7 @@ describe('BrevoEmailService', () => {
         expect(sendMailMock).toHaveBeenCalledTimes(1);
         const mail = sendMailMock.mock.calls[0][0];
         expect(mail.to).toBe('user@example.com');
-        expect(mail.subject).toBe('Confirm your email');
+        expect(mail.subject).toBe('Підтвердьте електронну пошту');
         expect(mail.html).toContain('abc123');
         expect(mail.html).toContain('User');
         expect(mail.html).toContain('/api/v1/auth/verify-email?token=');
@@ -66,9 +66,9 @@ describe('BrevoEmailService', () => {
 
         const mail = sendMailMock.mock.calls[0][0];
         expect(mail.to).toBe('user@example.com');
-        expect(mail.subject).toBe('Reset your password');
+        expect(mail.subject).toBe('Скиньте пароль');
         expect(mail.html).toContain('reset-token-abc');
         expect(mail.html).toContain('/reset-password?token=');
-        expect(mail.html).toContain('1 hour');
+        expect(mail.html).toContain('1 годину');
     });
 });

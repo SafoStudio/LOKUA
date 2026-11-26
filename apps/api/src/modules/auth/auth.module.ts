@@ -257,6 +257,7 @@ export function createAuthModule({
   const router = createAuthRouter(controller, middleware);
 
   return {
+    sendNotificationEmail: emailService.sendNotificationEmail.bind(emailService),
     router,
     access,
     requireAuth: middleware.requireAuth,

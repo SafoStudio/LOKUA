@@ -14,16 +14,32 @@ try {
     onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router,
     adminUsersRouter: modules.moderation.adminUsersRouter,
-    eventsRouter: modules.events.router
+    eventsRouter: modules.events.router,
+    profilesRouter: modules.events.profilesRouter,
+    notificationsRouter: modules.notifications.router,
+    reportsRouter: modules.moderation.reportsRouter,
+    imageMediaRouter: modules.storage.imageMediaRouter,
+    profilePhotosRouter: modules.profilePhotosRouter
   });
 
   const server = app.listen(env.PORT, () => {
     logger.info(`API running at http://localhost:${env.PORT}`);
     logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
   });
+  const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
+  const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
+  const stopBlockExpiry = modules.moderation.startBlockExpiryWorker();
+  let shuttingDown = false;
 
   const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info({ signal }, 'Shutting down');
+    const workersStopped = Promise.all([
+      stopEventLifecycleWorker(),
+      stopNotificationDelivery(),
+      stopBlockExpiry()
+    ]);
 
     server.close(async (closeErr) => {
       if (closeErr) {
@@ -31,6 +47,7 @@ try {
       }
 
       try {
+        await workersStopped;
         await AppDataSource.destroy();
         logger.info('Database connection closed');
         process.exit(closeErr ? 1 : 0);

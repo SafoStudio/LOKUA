@@ -1,0 +1,96 @@
+allOf:
+  - $ref: '#/components/schemas/PublicEvent'
+  - type: object
+    required:
+      - status
+      - cancellationReason
+      - hideExactAddress
+      - tags
+      - organizer
+      - reviews
+      - organizerReviews
+      - rating
+      - ratingCount
+      - approvedParticipantCount
+      - availablePlaces
+      - participantAvatars
+      - participationStatus
+      - actions
+      - location
+      - onlineUrl
+    properties:
+      status: { type: string, enum: [PUBLISHED, FULL, COMPLETED, CANCELLED] }
+      cancellationReason: { type: [string, 'null'] }
+      hideExactAddress: { type: boolean }
+      tags:
+        type: array
+        items: { type: string }
+      organizer:
+        allOf:
+          - $ref: '#/components/schemas/OrganizerRating'
+          - type: object
+            required: [id, name, avatarUrl]
+            properties:
+              id: { type: string, format: uuid }
+              name: { type: [string, 'null'] }
+              avatarUrl: { type: [string, 'null'] }
+      reviews:
+        $ref: '#/components/schemas/EventReviewPage'
+        description: First three visible reviews for this event. Empty until the event is completed.
+      organizerReviews:
+        $ref: '#/components/schemas/EventReviewPage'
+        description: First three visible reviews of the organizer on upcoming events.
+      rating:
+        type: [number, 'null']
+        minimum: 1
+        maximum: 5
+        description: Average of visible reviews of this event, rounded to one decimal. Null without ratings.
+      ratingCount: { type: integer, minimum: 0 }
+      approvedParticipantCount:
+        type: integer
+        minimum: 0
+        description: Excludes the organizer.
+      availablePlaces:
+        type: [integer, 'null']
+        minimum: 0
+        description: Null when there is no capacity limit.
+      participantAvatars:
+        type: array
+        maxItems: 5
+        description: Approved participants visible to the signed-in caller. Empty for guests.
+        items:
+          type: object
+          required: [id, avatarUrl]
+          properties:
+            id: { type: string, format: uuid }
+            avatarUrl: { type: [string, 'null'] }
+      participationStatus:
+        type: [string, 'null']
+        enum:
+          [
+            PENDING,
+            APPROVED,
+            REJECTED,
+            NOT_CONSIDERED,
+            CANCELLED_BY_USER,
+            REMOVED_BY_ORGANIZER,
+            null
+          ]
+        description: Status of the caller's participation record, or null if none exists.
+      actions:
+        type: object
+        required: [canJoin, canApply, canCancelParticipation, canReview]
+        properties:
+          canJoin: { type: boolean }
+          canApply: { type: boolean }
+          canCancelParticipation: { type: boolean }
+          canReview: { type: boolean }
+      location:
+        $ref: '#/components/schemas/EventDetailLocation'
+        description: |
+          Hidden addresses use rounded coordinates. The organizer, approved participants
+          and administrators can see the exact location. If a location is also reserved
+          by another organizer's private event, only administrators see its exact details.
+      onlineUrl:
+        type: [string, 'null']
+        description: Available to the organizer, approved participants and administrators.

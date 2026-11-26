@@ -8,11 +8,30 @@ import type { Location } from '../../../domain/index.js';
 import type { Coordinates } from '../../../../../common/index.js';
 import type { LocationEntity } from '../entities/location.entity.js';
 
+// Both the current event location and its stored snapshot are private references.
+const discoverableLocation = `NOT EXISTS (
+  SELECT 1 FROM events event
+  WHERE event.primary_location_id = loc.id AND event.hide_exact_address
+) AND NOT EXISTS (
+  SELECT 1 FROM event_location_snapshot snapshot
+  JOIN events event ON event.id = snapshot.event_id
+  WHERE snapshot.location_id = loc.id AND event.hide_exact_address
+)`;
+
 export class LocationRepositoryAdapter implements LocationRepository {
   constructor(private readonly repository: Repository<LocationEntity>) {}
 
   async findById(id: string): Promise<Location | null> {
     const entity = await this.repository.findOne({ where: { id } });
+    return entity ? this.toDomain(entity) : null;
+  }
+
+  async findDiscoverableById(id: string): Promise<Location | null> {
+    const entity = await this.repository
+      .createQueryBuilder('loc')
+      .where('loc.id = :id', { id })
+      .andWhere(discoverableLocation)
+      .getOne();
     return entity ? this.toDomain(entity) : null;
   }
 
@@ -50,7 +69,7 @@ export class LocationRepositoryAdapter implements LocationRepository {
          loc.coordinates,
          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
          $3
-       )
+       ) AND ${discoverableLocation}
        ORDER BY distance_meters ASC
        LIMIT $4`,
       [coordinates.longitude, coordinates.latitude, radiusMeters, limit]
@@ -70,11 +89,11 @@ export class LocationRepositoryAdapter implements LocationRepository {
     limit: number
   ): Promise<Location[]> {
     const rawResults = await this.repository.query(
-      `SELECT * FROM "locations"
+      `SELECT loc.* FROM "locations" loc
        WHERE ST_Intersects(
          coordinates,
          ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
-       )
+       ) AND ${discoverableLocation}
        ORDER BY created_at DESC
        LIMIT $5`,
       [minLng, minLat, maxLng, maxLat, limit]
@@ -86,7 +105,8 @@ export class LocationRepositoryAdapter implements LocationRepository {
   async search(query: string, cityId: string | null, limit: number): Promise<Location[]> {
     const qb = this.repository
       .createQueryBuilder('loc')
-      .where('(loc.name ILIKE :q OR loc.address ILIKE :q)', { q: `%${query}%` });
+      .where('(loc.name ILIKE :q OR loc.address ILIKE :q)', { q: `%${query}%` })
+      .andWhere(discoverableLocation);
 
     if (cityId) qb.andWhere('loc.city_id = :cityId', { cityId });
 

@@ -1,0 +1,25 @@
+allOf:
+  - $ref: '#/components/schemas/PublicEvent'
+  - type: object
+    required:
+      - status
+      - updatedAt
+      - isOrganizer
+      - isHiddenByAdmin
+      - cancellationReason
+      - participationStatus
+      - participationStatusUpdatedAt
+    properties:
+      status: { type: string, enum: [DRAFT, PUBLISHED, FULL, COMPLETED, CANCELLED] }
+      updatedAt: { type: string, format: date-time }
+      isOrganizer: { type: boolean }
+      isHiddenByAdmin: { type: boolean }
+      cancellationReason: { type: [string, 'null'] }
+      participationStatus:
+        type: [string, 'null']
+        enum: [PENDING, APPROVED, REJECTED, NOT_CONSIDERED, null]
+        description: Null for events organized by the caller.
+      participationStatusUpdatedAt:
+        type: [string, 'null']
+        format: date-time
+        description: Null for events organized by the caller.

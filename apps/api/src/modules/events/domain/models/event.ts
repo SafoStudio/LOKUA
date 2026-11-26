@@ -8,6 +8,7 @@ export interface Event {
   organizerId: string;
 
   title: string;
+  tags?: string[];
   categoryId: string;
   description: string;
 
@@ -20,6 +21,7 @@ export interface Event {
   hideExactAddress: boolean;
 
   capacityLimit: number | null;
+  hasApprovedParticipants: boolean;
   participationMode: ParticipationMode;
   ageRestriction: AgeRestriction;
 

@@ -6,8 +6,11 @@ import type {
   UserProfileProvider
 } from './application/index.js';
 import { AccessService } from './application/index.js';
+import { UserPhotoProviderAdapter } from './infrastructure/persistence/adapters/user-photo.provider.adapter.js';
 import {
   UserEntity,
+  UserBlockEntity,
+  UserBlockProviderAdapter,
   UserRepositoryAdapter,
   UserProviderAdapter,
   AuthUserProviderAdapter,
@@ -28,6 +31,7 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
   const profiles: UserProfileProvider = new UserProfileProviderAdapter(
     dataSource.getRepository(UserEntity)
   );
+  const blocks = new UserBlockProviderAdapter(dataSource.getRepository(UserBlockEntity));
   const access = new AccessService();
 
   return {
@@ -35,6 +39,8 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
     authUsers,
     onboarding,
     profiles,
+    photos: new UserPhotoProviderAdapter(dataSource),
+    blocks,
     access
   };
 }

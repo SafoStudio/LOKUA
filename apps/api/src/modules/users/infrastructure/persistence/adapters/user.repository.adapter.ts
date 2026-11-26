@@ -8,8 +8,9 @@ import { toEntityManager } from '../../../../../common/index.js';
 export class UserRepositoryAdapter implements UserRepository {
   constructor(private readonly repo: Repository<UserEntity>) {}
 
-  async findById(id: string): Promise<User | null> {
-    const entity = await this.repo.findOne({ where: { id } });
+  async findById(id: string, tx?: TransactionContext): Promise<User | null> {
+    const repo = tx ? toEntityManager(tx).getRepository(UserEntity) : this.repo;
+    const entity = await repo.findOne({ where: { id } });
     return entity ? this.toDomain(entity) : null;
   }
 

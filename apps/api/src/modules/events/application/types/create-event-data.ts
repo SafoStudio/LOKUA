@@ -2,6 +2,7 @@ import type { AgeRestriction, EventFormat, ParticipationMode } from '../../domai
 
 export interface CreateEventData {
   title: string;
+  tags?: string[];
   categoryId: string;
   description: string;
 

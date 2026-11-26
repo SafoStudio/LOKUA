@@ -1,0 +1,13 @@
+type: object
+required: [data, pagination]
+properties:
+  data:
+    type: array
+    items:
+      $ref: '#/components/schemas/EventReview'
+  pagination:
+    type: object
+    required: [nextCursor, hasMore]
+    properties:
+      nextCursor: { type: [string, 'null'], format: uuid }
+      hasMore: { type: boolean }

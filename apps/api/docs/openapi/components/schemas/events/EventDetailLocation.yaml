@@ -1,0 +1,15 @@
+type: [object, 'null']
+required: [cityId, districtId, countryCode, isExact, coordinates, name, address]
+properties:
+  cityId: { type: string, format: uuid }
+  districtId: { type: [string, 'null'], format: uuid }
+  countryCode: { type: string }
+  isExact: { type: boolean }
+  coordinates:
+    type: object
+    required: [latitude, longitude]
+    properties:
+      latitude: { type: number, minimum: -90, maximum: 90 }
+      longitude: { type: number, minimum: -180, maximum: 180 }
+  name: { type: [string, 'null'] }
+  address: { type: [string, 'null'] }

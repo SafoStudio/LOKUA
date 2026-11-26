@@ -1,4 +1,4 @@
-import { loadOpenApiDocument } from '../src/docs';
+import { loadOpenApiDocument } from '../src/docs/index.js';
 
 type AnyRecord = Record<string, unknown>;
 

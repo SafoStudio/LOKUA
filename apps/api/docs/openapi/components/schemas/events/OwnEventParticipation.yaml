@@ -1,0 +1,11 @@
+type: object
+required: [id, eventId, status, statusUpdatedAt]
+properties:
+  id: { type: string, format: uuid }
+  eventId: { type: string, format: uuid }
+  status:
+    {
+      type: string,
+      enum: [PENDING, APPROVED, REJECTED, NOT_CONSIDERED, CANCELLED_BY_USER, REMOVED_BY_ORGANIZER]
+    }
+  statusUpdatedAt: { type: string, format: date-time }

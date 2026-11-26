@@ -8,3 +8,4 @@ export { UserProviderAdapter } from './persistence/adapters/user.provider.adapte
 export { AuthUserProviderAdapter } from './persistence/adapters/auth-user.provider.adapter.js';
 export { UserOnboardingProviderAdapter } from './persistence/adapters/user-onboarding.provider.adapter.js';
 export { UserProfileProviderAdapter } from './persistence/adapters/user-profile.provider.adapter.js';
+export { UserBlockProviderAdapter } from './persistence/adapters/user-block.provider.adapter.js';

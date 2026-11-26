@@ -11,10 +11,11 @@ export const createEventSchema = z
   .object({
     title: z.string().trim().min(3).max(100),
     categoryId: z.uuid(),
+    tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).max(10).optional(),
     description: z.string().trim().min(1),
 
     coverUrl: optionalNullableUrl,
-    mediaUrls: z.array(z.url()).max(10).optional(),
+    mediaUrls: z.array(z.url()).max(5).optional(),
 
     format: z.enum(['OFFLINE', 'ONLINE']),
     primaryLocationId: z.uuid().nullable().optional(),

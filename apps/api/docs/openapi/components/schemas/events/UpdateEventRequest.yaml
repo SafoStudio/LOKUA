@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+minProperties: 1
+properties:
+  title: { type: string, minLength: 3, maxLength: 100 }
+  categoryId: { type: string, format: uuid }
+  tags:
+    type: array
+    maxItems: 10
+    items: { type: string, minLength: 1, maxLength: 30 }
+    description: Tags are trimmed, lowercased, and deduplicated.
+  description: { type: string, minLength: 1 }
+  coverUrl:
+    type: [string, 'null']
+    description: Newly attached URLs must come from the current user's EVENT uploads.
+  mediaUrls:
+    type: array
+    maxItems: 5
+    description: Newly attached URLs must come from the current user's EVENT uploads.
+    items: { type: string, format: uri }
+  format: { type: string, enum: [OFFLINE, ONLINE] }
+  primaryLocationId: { type: [string, 'null'], format: uuid }
+  onlineUrl: { type: [string, 'null'] }
+  hideExactAddress: { type: boolean }
+  capacityLimit: { type: [integer, 'null'], minimum: 1 }
+  participationMode: { type: string, enum: [FREE, REQUEST] }
+  ageRestriction: { type: string, enum: [ALL, SIXTEEN_PLUS, EIGHTEEN_PLUS] }
+  isFree: { type: boolean }
+  priceText: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+  itemsToBring: { type: [string, 'null'], maxLength: 500 }
+  firstStartsAt: { type: [string, 'null'], format: date-time }
+  firstEndsAt: { type: [string, 'null'], format: date-time }
+  timezone: { type: string, minLength: 1, maxLength: 64 }
