@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TypeOrmUnitOfWork } from '../../src/common/index.js';
+import { errorHandler } from '../../src/middlewares/index.js';
 import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
 import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
@@ -8,6 +12,7 @@ import { AccessService, createUsersModule } from '../../src/modules/users/index.
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
+import { createEventsModule } from '../../src/modules/events/index.js';
 import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
 import { ListEventParticipationUseCase } from '../../src/modules/events/application/use-cases/list-event-participation.use-case.js';
 import { toOwnParticipationView } from '../../src/modules/events/presentation/http/participation.view.js';
@@ -135,6 +140,205 @@ describe('event management and feed with PostgreSQL', () => {
       ...patch
     };
   }
+
+  it('serves event details and protects private fields across event and geolocation routes', async () => {
+    const [owner, applicant, participant, other, adminUser] = await Promise.all([
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser(),
+      createUser()
+    ]);
+    const admin: AuthUser = { ...adminUser, role: 'ADMIN' };
+    const minor: AuthUser = { ...other, birthDate: new Date('2025-01-01T00:00:00Z') };
+    const viewers = new Map<string, AuthUser>(
+      [owner, applicant, participant, minor, admin].map((user) => [user.id, user])
+    );
+    const optionalAuth: RequestHandler = (req, _res, next) => {
+      const user = viewers.get(req.get('X-Test-User') ?? '');
+      if (user) req.user = user;
+      next();
+    };
+    const requireAuth: RequestHandler = (req, res, next) => {
+      optionalAuth(req, res, () => {
+        if (req.user) next();
+        else res.sendStatus(401);
+      });
+    };
+    const { categories, cities, countries } = createDictionariesModule({ dataSource });
+    const users = createUsersModule({ dataSource });
+    const geo = createGeolocationModule({
+      dataSource,
+      cities,
+      countries,
+      users: users.users,
+      requireAuth
+    });
+    const events = createEventsModule({
+      dataSource,
+      access: users.access,
+      authUsers: users.authUsers,
+      profiles: users.profiles,
+      blocks: users.blocks,
+      categories,
+      cities,
+      locations: geo.locations,
+      optionalAuth,
+      requireAuth
+    });
+    const app = express();
+    app.use('/events', events.router);
+    app.use('/geo', geo.router);
+    app.use(errorHandler);
+    const api = request(app);
+    const get = (id: string, viewer?: AuthUser) =>
+      api.get(`/events/${id}`).set('X-Test-User', viewer?.id ?? '');
+
+    const onlineDraft = await manageEvent.create(
+      owner,
+      eventData({ participationMode: 'REQUEST', capacityLimit: 2, tags: ['privacy'] })
+    );
+    await get(onlineDraft.id).expect(404);
+    await get(onlineDraft.id, owner).expect(200);
+    await manageEvent.publish(owner, onlineDraft.id);
+    const participations = dataSource.getRepository(EventParticipationEntity);
+    await participations.save([
+      { eventId: onlineDraft.id, userId: applicant.id, status: 'PENDING' },
+      { eventId: onlineDraft.id, userId: participant.id, status: 'APPROVED' }
+    ]);
+
+    const guest = await get(onlineDraft.id).expect(200).expect('Cache-Control', 'private, no-store');
+    expect(guest.body.data).toMatchObject({
+      organizer: { id: owner.id },
+      tags: ['privacy'],
+      approvedParticipantCount: 1,
+      availablePlaces: 1,
+      participantAvatars: [],
+      participationStatus: null,
+      onlineUrl: null
+    });
+    expect(guest.body.data.organizer).not.toHaveProperty('email');
+    const pending = await get(onlineDraft.id, applicant).expect(200);
+    expect(pending.body.data).toMatchObject({
+      participationStatus: 'PENDING',
+      participantAvatars: [{ id: participant.id }],
+      onlineUrl: null
+    });
+    expect(pending.body.data.participantAvatars[0]).not.toHaveProperty('email');
+    for (const viewer of [owner, participant, admin]) {
+      const response = await get(onlineDraft.id, viewer).expect(200);
+      expect(response.body.data.onlineUrl).toBe(onlineDraft.onlineUrl);
+    }
+
+    const rows = dataSource.getRepository(EventEntity);
+    await rows.update(onlineDraft.id, { ageRestriction: 'EIGHTEEN_PLUS' });
+    await get(onlineDraft.id).expect(404);
+    await get(onlineDraft.id, minor).expect(404);
+    await get(onlineDraft.id, participant).expect(200);
+    const blocks = dataSource.getRepository(UserBlockEntity);
+    for (const [blockerId, blockedId] of [
+      [owner.id, participant.id],
+      [participant.id, owner.id]
+    ]) {
+      await blocks.insert({ blockerId, blockedId });
+      await get(onlineDraft.id, participant).expect(404);
+      await blocks.delete({ blockerId, blockedId });
+      await get(onlineDraft.id, participant).expect(200);
+    }
+    await rows.update(onlineDraft.id, { ageRestriction: 'ALL', isHiddenByAdmin: true });
+    await get(onlineDraft.id, participant).expect(404);
+    await get(onlineDraft.id, owner).expect(200);
+    await get(onlineDraft.id, admin).expect(200);
+    await rows.update(onlineDraft.id, { isHiddenByAdmin: false, status: 'COMPLETED' });
+    await get(onlineDraft.id).expect(200);
+    const completed = await get(onlineDraft.id, participant).expect(200);
+    expect(completed.body.data.actions).toEqual({
+      canJoin: false,
+      canApply: false,
+      canCancelParticipation: false
+    });
+    await rows.update(onlineDraft.id, { status: 'CANCELLED', cancellationReason: 'Weather' });
+    await get(onlineDraft.id).expect(404);
+    const cancelled = await get(onlineDraft.id, applicant).expect(200);
+    expect(cancelled.body.data.cancellationReason).toBe('Weather');
+
+    const exactCoordinates = { latitude: 50.450123, longitude: 30.523456 };
+    const location = await locations.create({
+      name: 'Private venue',
+      address: 'Private address',
+      cityId: kyivId,
+      districtId: null,
+      countryCode: 'UA',
+      exactCoordinates,
+      publicCoordinates: exactCoordinates,
+      provider: 'manual',
+      providerPlaceId: null,
+      createdBy: null
+    });
+    locationIds.push(location.id);
+    const existingEvent = await publishForFeed(applicant, {
+      format: 'OFFLINE',
+      onlineUrl: null,
+      primaryLocationId: location.id
+    });
+    const exactLookup = `/geo/locations/${location.id}?precision=EXACT`;
+    await api.get(exactLookup).set('X-Test-User', other.id).expect(200);
+    const offlineDraft = await manageEvent.create(
+      owner,
+      eventData({
+        format: 'OFFLINE',
+        onlineUrl: null,
+        primaryLocationId: location.id,
+        hideExactAddress: true
+      })
+    );
+    const draftCard = await get(offlineDraft.id, owner).expect(200);
+    expect(draftCard.body.data.location).toMatchObject({
+      address: location.address,
+      isExact: true
+    });
+    const offline = await manageEvent.publish(owner, offlineDraft.id);
+    const sharedCard = await get(existingEvent.id, applicant).expect(200);
+    expect(sharedCard.body.data.location).toMatchObject({ isExact: false, address: null });
+    await participations.save({ eventId: offline.id, userId: participant.id, status: 'APPROVED' });
+    const publicCard = await get(offline.id).expect(200);
+    expect(publicCard.body.data).not.toHaveProperty('primaryLocationId');
+    expect(publicCard.body.data.location).toMatchObject({
+      coordinates: obfuscateCoordinates(exactCoordinates),
+      address: null,
+      name: null,
+      isExact: false
+    });
+    for (const viewer of [owner, participant, admin]) {
+      const privateCard = await get(offline.id, viewer).expect(200);
+      expect(privateCard.body.data.location).toMatchObject({
+        coordinates: exactCoordinates,
+        address: location.address,
+        isExact: true
+      });
+    }
+    await api.get(`/geo/locations/${location.id}`).expect(404);
+    await api.get(exactLookup).set('X-Test-User', other.id).expect(404);
+    await expect(
+      manageEvent.create(
+        applicant,
+        eventData({ format: 'OFFLINE', onlineUrl: null, primaryLocationId: location.id })
+      )
+    ).rejects.toMatchObject({ message: 'Event location not found' });
+    const nearby = await api.get('/geo/locations/nearby').query(exactCoordinates).expect(200);
+    expect(nearby.body.data).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ location: expect.objectContaining({ id: location.id }) })
+      ])
+    );
+    const bbox = await api
+      .get('/geo/locations/bbox')
+      .query({ minLat: 50.44, minLng: 30.51, maxLat: 50.46, maxLng: 30.54 })
+      .expect(200);
+    expect(bbox.body.data).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: location.id })])
+    );
+  });
 
   it('guards ownership, publishes and reschedules one occurrence, then duplicates and cancels', async () => {
     const owner = await createUser();

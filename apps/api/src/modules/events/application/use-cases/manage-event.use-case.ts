@@ -35,6 +35,7 @@ export class ManageEventUseCase {
     await this.validate(user, data);
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
+      await this.ensureLocationAvailable(events, user.id, data.primaryLocationId);
       const event = await events.create(user.id, data);
       const tags = validateEventTags(data.tags ?? []);
       await events.replaceTags(event.id, tags);
@@ -52,6 +53,9 @@ export class ManageEventUseCase {
       const published = event.status !== 'DRAFT';
       if (patch.isFree && patch.priceText === undefined) next.priceText = null;
       const location = await this.validate(user, { ...next, mediaUrls: patch.mediaUrls });
+      if (next.primaryLocationId !== event.primaryLocationId) {
+        await this.ensureLocationAvailable(events, user.id, next.primaryLocationId);
+      }
 
       if (published) {
         const startsChanged = next.firstStartsAt?.getTime() !== event.firstStartsAt?.getTime();
@@ -103,6 +107,7 @@ export class ManageEventUseCase {
     return this.change(user, id, async (events, event, now) => {
       if (event.status !== 'DRAFT') throw new AppError('Only drafts can be published', 409);
       const location = await this.validate(user, event);
+      await this.ensureLocationAvailable(events, user.id, event.primaryLocationId);
       validatePublicationDates(event, now);
       if ((await events.countUpcoming(user.id, now)) >= 10) {
         throw new AppError('Upcoming event limit reached', 409);
@@ -156,6 +161,7 @@ export class ManageEventUseCase {
       const tags = validateEventTags(await events.readTags(id));
       const data = { ...event, firstStartsAt: null, firstEndsAt: null, tags };
       await this.validate(user, data);
+      await this.ensureLocationAvailable(events, user.id, data.primaryLocationId);
       const draft = await events.create(user.id, data);
       await events.replaceTags(draft.id, tags);
       return { ...draft, tags };
@@ -178,6 +184,16 @@ export class ManageEventUseCase {
       if (!event) throw new AppError('Event not found', 404);
       return execute(events, event, this.clock());
     });
+  }
+
+  private async ensureLocationAvailable(
+    events: EventManagementRepository,
+    organizerId: string,
+    locationId: string | null | undefined
+  ): Promise<void> {
+    if (locationId && (await events.hasForeignPrivateLocation(locationId, organizerId))) {
+      throw new AppError('Event location not found', 422);
+    }
   }
 
   private async validate(user: AuthUser, data: CreateEventData) {

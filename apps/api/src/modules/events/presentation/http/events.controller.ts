@@ -6,7 +6,7 @@ import type {
 } from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
-import { toEventView, toFeedEventView, toMapEventView, toPublicEventView } from './event.view.js';
+import { toEventDetailView, toEventView, toFeedEventView, toMapEventView } from './event.view.js';
 import type { GetEventsQuery } from '../../application/index.js';
 
 import type { ManageParticipationUseCase } from '../../application/use-cases/manage-participation.use-case.js';
@@ -180,12 +180,9 @@ export function createEventsController({
 
     async getById(req: Request, res: Response): Promise<void> {
       const { id } = req.params as { id: string };
-      const event = await getEventById.execute(id, req.user ?? null);
       res.set('Cache-Control', 'private, no-store');
-
-      res.status(200).json({
-        data: event.status === 'DRAFT' ? toEventView(event) : toPublicEventView(event)
-      });
+      const detail = await getEventById.execute(id, req.user ?? null);
+      res.status(200).json({ data: toEventDetailView(detail) });
     }
   };
 }

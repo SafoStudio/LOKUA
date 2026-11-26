@@ -23,10 +23,18 @@ export interface FindPublishedEventsResult {
   nextCursor: string | null;
 }
 
+export interface EventLocationSnapshot {
+  cityId: string;
+  districtId: string | null;
+  countryCode: string;
+  name: string;
+  address: string;
+  coordinates: Coordinates;
+  publicCoordinates: Coordinates;
+}
+
 export interface EventRepository {
   create(organizerId: string, data: CreateEventData): Promise<Event>;
 
   findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult>;
-
-  findPublishedById(id: string): Promise<Event | null>;
 }

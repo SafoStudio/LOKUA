@@ -64,7 +64,14 @@ export function createEventsModule({
   );
   const createEvent = new CreateEventUseCase(manageEvent);
   const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);
-  const getEventById = new GetEventByIdUseCase(eventRepository, access, manageEvent);
+  const getEventById = new GetEventByIdUseCase(
+    eventRepository,
+    access,
+    blocks,
+    profiles,
+    locations,
+    clock
+  );
 
   const listParticipation = new ListEventParticipationUseCase(
     eventRepository,

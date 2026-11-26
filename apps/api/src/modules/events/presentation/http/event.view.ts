@@ -1,4 +1,4 @@
-import type { FeedEvent } from '../../application/index.js';
+import type { FeedEvent, GetEventByIdUseCase } from '../../application/index.js';
 import type { Event } from '../../domain/index.js';
 
 export function toEventView(event: Event) {
@@ -62,6 +62,40 @@ export function toFeedEventView(event: FeedEvent) {
     status: event.status,
     hasAvailablePlaces: event.hasAvailablePlaces,
     distanceMeters: event.distanceMeters
+  };
+}
+
+export function toEventDetailView(result: Awaited<ReturnType<GetEventByIdUseCase['execute']>>) {
+  if (result.kind === 'DRAFT') {
+    return { ...toEventView(result.event), location: result.location };
+  }
+
+  const {
+    event,
+    tags,
+    organizer,
+    approvedParticipantCount,
+    availablePlaces,
+    participantAvatars,
+    participationStatus,
+    actions,
+    location,
+    onlineUrl
+  } = result;
+  return {
+    ...toPublicEventView(event),
+    status: event.status,
+    cancellationReason: event.cancellationReason,
+    hideExactAddress: event.hideExactAddress,
+    tags,
+    organizer,
+    approvedParticipantCount,
+    availablePlaces,
+    participantAvatars,
+    participationStatus,
+    actions,
+    location,
+    onlineUrl
   };
 }
 

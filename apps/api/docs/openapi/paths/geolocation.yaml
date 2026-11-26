@@ -50,6 +50,7 @@
   get:
     tags: [Geolocation]
     summary: Search locations nearby
+    description: Excludes locations associated with events whose addresses are hidden.
     parameters:
       - name: latitude
         in: query
@@ -95,6 +96,7 @@
   get:
     tags: [Geolocation]
     summary: Search locations in a bounding box
+    description: Excludes locations associated with events whose addresses are hidden.
     parameters:
       - name: minLat
         in: query
@@ -152,6 +154,8 @@
       Returns the location. When precision=PUBLIC (default), only public coordinates
       are returned and address is omitted. When precision=EXACT, exact coordinates
       and the address are returned to an authenticated active account.
+      Locations associated with an event whose address is hidden are served through
+      the event card and are unavailable through this endpoint in either precision.
     security:
       - {}
       - CookieAuth: []
@@ -184,7 +188,7 @@
             schema:
               $ref: '#/components/schemas/ValidationErrorResponse'
       '404':
-        description: Location not found
+        description: Location not found or restricted by event address privacy
         content:
           application/json:
             schema:

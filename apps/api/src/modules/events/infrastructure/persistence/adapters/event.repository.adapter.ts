@@ -1,5 +1,5 @@
 import type { Repository, SelectQueryBuilder } from 'typeorm';
-import { In } from 'typeorm';
+import type { EventLocationSnapshot } from '../../../application/ports/event.repository.js';
 import type { TransactionContext } from '../../../../../common/index.js';
 import { obfuscateCoordinates } from '../../../../geolocation/index.js';
 import type { Location } from '../../../../geolocation/index.js';
@@ -38,7 +38,15 @@ interface FeedRow {
 
 // Older snapshots can contain full precision in public_coordinates.
 const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
-const publicPoint = `CASE WHEN event.hide_exact_address THEN ST_SetSRID(ST_MakePoint(
+const foreignPrivateSnapshot = `EXISTS (
+  SELECT 1 FROM events other_event
+  LEFT JOIN event_location_snapshot other_snapshot ON other_snapshot.event_id = other_event.id
+  WHERE other_event.hide_exact_address
+    AND other_event.organizer_id <> event.organizer_id
+    AND (other_event.primary_location_id = snapshot.location_id
+      OR other_snapshot.location_id = snapshot.location_id)
+)`;
+const publicPoint = `CASE WHEN event.hide_exact_address OR ${foreignPrivateSnapshot} THEN ST_SetSRID(ST_MakePoint(
   CAST(ROUND(CAST(ST_X(${publicSnapshot}) AS numeric), 2) AS double precision),
   CAST(ROUND(CAST(ST_Y(${publicSnapshot}) AS numeric), 2) AS double precision)
 ), 4326) ELSE CAST(snapshot.coordinates AS geometry) END`;
@@ -113,6 +121,17 @@ export class EventRepositoryAdapter
   async findEvent(id: string): Promise<Event | null> {
     const entity = await this.repository.findOneBy({ id });
     return entity ? this.toDomain(entity) : null;
+  }
+
+  hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
+    return this.repository
+      .createQueryBuilder('event')
+      .leftJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
+      .where('event.organizer_id <> :organizerId AND event.hide_exact_address', { organizerId })
+      .andWhere('(event.primary_location_id = :locationId OR snapshot.location_id = :locationId)', {
+        locationId
+      })
+      .getExists();
   }
 
   findParticipationById(eventId: string, id: string): Promise<EventParticipation | null> {
@@ -518,16 +537,10 @@ export class EventRepositoryAdapter
     }
   }
 
-  async findPublishedById(id: string): Promise<Event | null> {
-    const entity = await this.repository.findOne({
-      where: {
-        id,
-        status: In(['PUBLISHED', 'FULL']),
-        isHiddenByAdmin: false
-      }
-    });
-
-    return entity ? this.toDomain(entity) : null;
+  findLocationSnapshot(eventId: string, locationId: string): Promise<EventLocationSnapshot | null> {
+    return this.repository.manager
+      .getRepository(EventLocationSnapshotEntity)
+      .findOneBy({ eventId, locationId });
   }
 
   private toDomain(entity: EventEntity): Event {

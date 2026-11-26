@@ -41,6 +41,7 @@ export function createGeolocationController({
     async getById(req: Request, res: Response): Promise<void> {
       const precision = (req.query.precision as 'EXACT' | 'PUBLIC') ?? 'PUBLIC';
       const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      res.set('Cache-Control', 'private, no-store');
 
       if (precision === 'EXACT') {
         const location = await findLocationById.execute({ id });

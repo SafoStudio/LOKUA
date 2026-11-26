@@ -155,7 +155,12 @@
 /api/v1/events/{id}:
   get:
     tags: [Events]
-    summary: Get a visible event or your own draft
+    summary: Get event details
+    description: |
+      Published, full and completed events follow age, blocking and moderation visibility rules.
+      Organizers and administrators can read drafts and moderation-hidden events.
+      Cancelled events are available to the organizer, administrators and viewers with a pending
+      or approved participation, subject to visibility rules.
     security:
       - {}
       - CookieAuth: []
@@ -167,7 +172,10 @@
         schema: { type: string, format: uuid }
     responses:
       '200':
-        description: Published event visible to the visitor or a draft owned by the caller
+        description: Event visible to the caller
+        headers:
+          Cache-Control:
+            schema: { type: string, const: 'private, no-store' }
         content:
           application/json:
             schema:
@@ -176,8 +184,14 @@
               properties:
                 data:
                   anyOf:
-                    - $ref: '#/components/schemas/EventDraft'
-                    - $ref: '#/components/schemas/PublicEvent'
+                    - allOf:
+                        - $ref: '#/components/schemas/EventDraft'
+                        - type: object
+                          required: [location]
+                          properties:
+                            location:
+                              $ref: '#/components/schemas/EventDetailLocation'
+                    - $ref: '#/components/schemas/EventDetail'
       '400': *eventValidation
       '401': *eventUnauthorized
       '403': *eventForbidden
