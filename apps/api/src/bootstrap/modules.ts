@@ -22,9 +22,18 @@ export function createModules(dataSource: DataSource) {
 
   const storageModule = createStorageModule();
 
+  const notificationsModule = createNotificationsModule({
+    dataSource,
+    requireAuth: authModule.requireAuth,
+    sendEmail: authModule.sendNotificationEmail
+  });
+
   const moderationModule = createModerationModule({
     dataSource,
     users: usersModule.users,
+    access: usersModule.access,
+    blocks: usersModule.blocks,
+    notifications: notificationsModule.publisher,
     requireAuth: authModule.requireAuth,
     requireRole: authModule.requireRole
   });
@@ -45,12 +54,6 @@ export function createModules(dataSource: DataSource) {
     countries: dictionariesModule.countries,
     users: usersModule.users,
     requireAuth: authModule.requireAuth
-  });
-
-  const notificationsModule = createNotificationsModule({
-    dataSource,
-    requireAuth: authModule.requireAuth,
-    sendEmail: authModule.sendNotificationEmail
   });
 
   const eventsModule = createEventsModule({

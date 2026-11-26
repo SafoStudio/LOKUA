@@ -16,7 +16,8 @@ try {
     adminUsersRouter: modules.moderation.adminUsersRouter,
     eventsRouter: modules.events.router,
     profilesRouter: modules.events.profilesRouter,
-    notificationsRouter: modules.notifications.router
+    notificationsRouter: modules.notifications.router,
+    reportsRouter: modules.moderation.reportsRouter
   });
 
   const server = app.listen(env.PORT, () => {
@@ -25,13 +26,18 @@ try {
   });
   const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
   const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
+  const stopBlockExpiry = modules.moderation.startBlockExpiryWorker();
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down');
-    const workersStopped = Promise.all([stopEventLifecycleWorker(), stopNotificationDelivery()]);
+    const workersStopped = Promise.all([
+      stopEventLifecycleWorker(),
+      stopNotificationDelivery(),
+      stopBlockExpiry()
+    ]);
 
     server.close(async (closeErr) => {
       if (closeErr) {

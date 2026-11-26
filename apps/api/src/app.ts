@@ -16,6 +16,7 @@ interface AppDependencies {
   eventsRouter: express.Router;
   profilesRouter?: express.Router;
   notificationsRouter?: express.Router;
+  reportsRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -27,7 +28,8 @@ export function createApp({
   adminUsersRouter,
   eventsRouter,
   profilesRouter,
-  notificationsRouter
+  notificationsRouter,
+  reportsRouter
 }: AppDependencies) {
   const app = express();
 
@@ -116,6 +118,7 @@ export function createApp({
   if (notificationsRouter) {
     app.use(`${API_PREFIX}/notifications`, notificationsRouter);
   }
+  if (reportsRouter) app.use(`${API_PREFIX}/reports`, reportsRouter);
 
   app.use(notFound);
   app.use(errorHandler);

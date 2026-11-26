@@ -1,0 +1,283 @@
+/api/v1/reports:
+  post:
+    tags: [Moderation]
+    summary: Report visible content or a profile
+    description: A user may submit up to ten reports per rolling hour and have one active report per target.
+    security: &moderationSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [objectType, objectId, reason]
+            properties:
+              objectType: { type: string, enum: [EVENT, COMMENT, REVIEW, PROFILE] }
+              objectId: { type: string, format: uuid }
+              reason:
+                type: string
+                enum:
+                  [SPAM, ABUSE, UNSAFE_OR_ILLEGAL_EVENT, FAKE_PROFILE, INAPPROPRIATE_CONTENT, OTHER]
+              text: { type: string, minLength: 1, maxLength: 500 }
+            if:
+              properties:
+                reason: { const: OTHER }
+            then:
+              required: [text]
+    responses:
+      '201':
+        description: Report submitted
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [id, status, createdAt]
+                  properties:
+                    id: { type: string, format: uuid }
+                    status: { const: NEW }
+                    createdAt: { type: string, format: date-time }
+      '400': &moderationValidation
+        description: Invalid request
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+      '401': &moderationUnauthorized
+        description: Missing or invalid credentials
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+      '403': &moderationForbidden
+        description: Insufficient permissions
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+      '404': &moderationNotFound
+        description: Report, account or target unavailable
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+      '409': &moderationConflict
+        description: Active report already exists or the requested transition is invalid
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+      '429':
+        description: Report submission limit exceeded
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+/api/v1/admin/reports:
+  get:
+    tags: [Moderation]
+    summary: List reports as an administrator
+    security: *moderationSecurity
+    parameters:
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      - name: cursor
+        in: query
+        schema: { type: string, format: uuid }
+      - name: status
+        in: query
+        schema: { type: string, enum: [NEW, IN_PROGRESS, RESOLVED, REJECTED] }
+    responses:
+      '200':
+        description: Reports in creation order
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items: { $ref: '#/components/schemas/ModerationReport' }
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'], format: uuid }
+                    hasMore: { type: boolean }
+      '400': *moderationValidation
+      '401': *moderationUnauthorized
+      '403': *moderationForbidden
+
+/api/v1/admin/reports/{id}:
+  parameters: &moderationId
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [Moderation]
+    summary: Inspect a report and its target, including hidden content
+    security: *moderationSecurity
+    responses:
+      '200':
+        description: Report and target. The target is null when it has been deleted.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [report, target]
+                  properties:
+                    report: { $ref: '#/components/schemas/ModerationReport' }
+                    target:
+                      type: [object, 'null']
+                      required: [id, ownerId, eventId, content]
+                      properties:
+                        id: { type: string, format: uuid }
+                        ownerId: { type: string, format: uuid }
+                        eventId: { type: [string, 'null'], format: uuid }
+                        content: { type: object }
+      '400': *moderationValidation
+      '401': *moderationUnauthorized
+      '403': *moderationForbidden
+      '404': *moderationNotFound
+  patch:
+    tags: [Moderation]
+    summary: Start or close a report as an administrator
+    description: Start a new report before closing it. RESOLVED means action taken. REJECTED means no violation.
+    security: *moderationSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { const: IN_PROGRESS }
+              - type: object
+                required: [status]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [RESOLVED, REJECTED] }
+                  notes: { type: string, minLength: 1, maxLength: 500 }
+    responses:
+      '200':
+        description: Report updated
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: { $ref: '#/components/schemas/ModerationReport' }
+      '400': *moderationValidation
+      '401': *moderationUnauthorized
+      '403': *moderationForbidden
+      '404': *moderationNotFound
+      '409': *moderationConflict
+
+/api/v1/admin/content/{type}/{id}/visibility:
+  patch:
+    tags: [Moderation]
+    summary: Hide or restore event content as an administrator
+    security: *moderationSecurity
+    parameters:
+      - name: type
+        in: path
+        required: true
+        schema: { type: string, enum: [EVENT, COMMENT, REVIEW] }
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [isHiddenByAdmin, reason]
+            properties:
+              isHiddenByAdmin: { type: boolean }
+              reason: { type: string, minLength: 1, maxLength: 500 }
+    responses:
+      '200':
+        description: Moderation visibility updated
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [id, isHiddenByAdmin]
+                  properties:
+                    id: { type: string, format: uuid }
+                    isHiddenByAdmin: { type: boolean }
+      '400': *moderationValidation
+      '401': *moderationUnauthorized
+      '403': *moderationForbidden
+      '404': *moderationNotFound
+
+/api/v1/admin/users/{id}/status:
+  parameters: *moderationId
+  patch:
+    tags: [Moderation]
+    summary: Block or unblock an account as an administrator
+    security: *moderationSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                required: [status, blockedUntil, reason]
+                additionalProperties: false
+                properties:
+                  status: { const: BLOCKED_TEMPORARY }
+                  blockedUntil: { type: string, format: date-time }
+                  reason: { type: string, minLength: 1, maxLength: 500 }
+              - type: object
+                required: [status, reason]
+                additionalProperties: false
+                properties:
+                  status: { type: string, enum: [ACTIVE, BLOCKED_PERMANENT] }
+                  reason: { type: string, minLength: 1, maxLength: 500 }
+    responses:
+      '200':
+        description: Account status updated
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [id, status, blockedUntil]
+                  properties:
+                    id: { type: string, format: uuid }
+                    status: { type: string, enum: [ACTIVE, BLOCKED_TEMPORARY, BLOCKED_PERMANENT] }
+                    blockedUntil: { type: [string, 'null'], format: date-time }
+      '400': *moderationValidation
+      '401': *moderationUnauthorized
+      '403': *moderationForbidden
+      '404': *moderationNotFound
+      '409': *moderationConflict
+      '422':
+        description: Temporary block must end in the future
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ErrorResponse' }

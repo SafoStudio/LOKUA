@@ -16,6 +16,8 @@ import { createEventsModule } from '../../src/modules/events/index.js';
 import { createNotificationsModule } from '../../src/modules/notifications/index.js';
 import type { CreateNotificationsModuleDependencies } from '../../src/modules/notifications/index.js';
 import { NotificationEntity } from '../../src/modules/notifications/infrastructure/index.js';
+import { createModerationModule } from '../../src/modules/moderation/index.js';
+import { AuditLogEntity } from '../../src/modules/moderation/infrastructure/index.js';
 import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
 import { ListEventParticipationUseCase } from '../../src/modules/events/application/use-cases/list-event-participation.use-case.js';
 import { toOwnParticipationView } from '../../src/modules/events/presentation/http/participation.view.js';
@@ -105,6 +107,7 @@ describe('event management and feed with PostgreSQL', () => {
     try {
       if (userIds.length) {
         await dataSource.query('DELETE FROM events WHERE organizer_id = ANY($1::uuid[])', [userIds]);
+        await dataSource.query('DELETE FROM audit_logs WHERE actor_id = ANY($1::uuid[])', [userIds]);
         await dataSource.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [userIds]);
       }
       if (locationIds.length) {
@@ -188,6 +191,18 @@ describe('event management and feed with PostgreSQL', () => {
       requireAuth,
       sendEmail: sendEmail ?? (async () => {})
     });
+    const moderation = createModerationModule({
+      dataSource,
+      users: users.users,
+      access: users.access,
+      blocks: users.blocks,
+      notifications: notifications.publisher,
+      requireAuth,
+      requireRole: (...roles) => (req, res, next) => {
+        if (req.user && roles.includes(req.user.role)) next();
+        else res.sendStatus(403);
+      }
+    });
     const events = createEventsModule({
       dataSource,
       access: users.access,
@@ -206,9 +221,11 @@ describe('event management and feed with PostgreSQL', () => {
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
     app.use('/notifications', notifications.router);
+    app.use('/admin', moderation.adminUsersRouter);
+    app.use('/reports', moderation.reportsRouter);
     app.use('/geo', geo.router);
     app.use(errorHandler);
-    return { api: request(app), notifications };
+    return { api: request(app), notifications, moderation };
   }
 
   it('serves event details and protects private fields across event and geolocation routes', async () => {
@@ -1529,5 +1546,69 @@ describe('event management and feed with PostgreSQL', () => {
     expect(cancellations.map(({ message }) => message)).toEqual([
       expect.stringContaining('Weather'), expect.stringContaining('Weather')
     ]);
+  });
+
+  it('moderates reported content and accounts with an audit trail', async () => {
+    const [organizer, reporter, staff] = await Promise.all([createUser(), createUser(), createUser()]);
+    await dataSource.getRepository(UserEntity).update(staff.id, { role: 'ADMIN' });
+    const administrator: AuthUser = { ...staff, role: 'ADMIN' };
+    const { api, moderation } = createEventsTestContext([organizer, reporter, administrator]);
+    const event = await publishForFeed(organizer, {});
+    const submit = (reason: string) => api.post('/reports').set('X-Test-User', reporter.id)
+      .send({ objectType: 'EVENT', objectId: event.id, reason });
+    await api.get('/admin/reports').set('X-Test-User', reporter.id).expect(403);
+    await submit('OTHER').expect(400);
+    const attempts = await Promise.all([submit('SPAM'), submit('SPAM')]);
+    expect(attempts.map(({ status }) => status).sort()).toEqual([201, 409]);
+    const reportId = attempts.find(({ status }) => status === 201)?.body.data.id;
+    expect(reportId).toEqual(expect.any(String));
+
+    const reportPath = `/admin/reports/${reportId}`;
+    const transition = (status: string) =>
+      api.patch(reportPath).set('X-Test-User', administrator.id).send({ status });
+    await transition('RESOLVED').expect(409);
+    const started = await transition('IN_PROGRESS').expect(200);
+    expect(started.body.data).toMatchObject({ assignedModeratorId: administrator.id });
+    const queue = await api.get('/admin/reports').set('X-Test-User', administrator.id)
+      .query({ status: 'IN_PROGRESS', limit: 1 }).expect(200);
+    expect(queue.body.data).toMatchObject([{ id: reportId, status: 'IN_PROGRESS' }]);
+
+    const visibilityPath = `/admin/content/EVENT/${event.id}/visibility`;
+    const hide = (isHiddenByAdmin: boolean) =>
+      api.patch(visibilityPath).set('X-Test-User', administrator.id)
+        .send({ isHiddenByAdmin, reason: 'Report investigation' });
+    await hide(true).expect(200);
+    await api.get(`/events/${event.id}`).expect(404);
+    await submit('SPAM').expect(404);
+    const inspected = await api.get(reportPath).set('X-Test-User', administrator.id).expect(200);
+    expect(inspected.body.data.target).toMatchObject({
+      id: event.id, content: { isHiddenByAdmin: true, title: event.title }
+    });
+    expect(inspected.body.data.target.content).not.toHaveProperty('onlineUrl');
+    await transition('RESOLVED').expect(200);
+    await hide(false).expect(200);
+    await api.get(`/events/${event.id}`).expect(200);
+    await submit('SPAM').expect(201);
+
+    const statusPath = `/admin/users/${organizer.id}/status`;
+    const blockedUntil = new Date(Date.now() + 60_000);
+    await api.patch(statusPath).set('X-Test-User', administrator.id)
+      .send({ status: 'BLOCKED_TEMPORARY', reason: 'Report decision', blockedUntil }).expect(200);
+    const users = dataSource.getRepository(UserEntity);
+    expect(await users.findOneByOrFail({ id: organizer.id }))
+      .toMatchObject({ status: 'BLOCKED_TEMPORARY', blockedUntil });
+    await users.update(organizer.id, { blockedUntil: new Date(Date.now() - 1) });
+    const stop = moderation.startBlockExpiryWorker();
+    await stop();
+    expect(await users.findOneByOrFail({ id: organizer.id }))
+      .toMatchObject({ status: 'ACTIVE', blockedUntil: null });
+    expect(await dataSource.getRepository(NotificationEntity).countBy({
+      recipientId: organizer.id, type: 'ACCOUNT_STATUS_CHANGED'
+    })).toBe(2);
+    const audit = await dataSource.getRepository(AuditLogEntity).findBy({ actorId: administrator.id });
+    expect(audit.map(({ action }) => action)).toEqual(expect.arrayContaining([
+      'REPORT_STARTED', 'REPORT_TARGET_VIEWED', 'REPORT_RESOLVED',
+      'CONTENT_HIDDEN', 'CONTENT_RESTORED', 'USER_BLOCKED'
+    ]));
   });
 });
