@@ -4,12 +4,13 @@ export function toReviewView({
   review,
   author
 }: {
-  review: EventReview;
+  review: EventReview & { eventTitle?: string };
   author: { id: string; name: string | null; avatarUrl: string | null };
 }) {
   return {
     id: review.id,
     eventId: review.eventId,
+    eventTitle: review.eventTitle,
     author,
     rating: review.rating,
     text: review.text,

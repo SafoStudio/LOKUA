@@ -31,7 +31,10 @@ export class GetEventByIdUseCase {
     private readonly blocks: UserBlockProvider,
     private readonly profiles: UserProfileProvider,
     private readonly locations: Pick<LocationProvider, 'findById'>,
-    private readonly reviews: Pick<EventReviewsUseCase, 'rating' | 'preview' | 'canReview'>,
+    private readonly reviews: Pick<
+      EventReviewsUseCase,
+      'rating' | 'eventRating' | 'preview' | 'organizerPreview' | 'canReview'
+    >,
     private readonly clock: () => Date
   ) {}
 
@@ -92,7 +95,9 @@ export class GetEventByIdUseCase {
       participants,
       foreignPrivateLocation,
       rating,
+      eventRating,
       reviews,
+      organizerReviews,
       canReview
     ] = await Promise.all([
       this.events.readTags(id),
@@ -112,9 +117,19 @@ export class GetEventByIdUseCase {
         : false,
       this.reviews.rating(event.organizerId),
       event.status === 'COMPLETED'
+        ? this.reviews.eventRating(id)
+        : { rating: null, ratingCount: 0 },
+      event.status === 'COMPLETED'
         ? this.reviews.preview(event.organizerId, blockedIds, id)
         : { items: [], nextCursor: null },
-      viewer && approved ? this.reviews.canReview(event, viewer.id, now) : false
+      (event.status === 'PUBLISHED' || event.status === 'FULL') &&
+      event.firstStartsAt &&
+      event.firstStartsAt > now
+        ? this.reviews.organizerPreview(event.organizerId, viewer, blockedIds, now)
+        : { items: [], nextCursor: null },
+      viewer && approved && this.access.canPostEventContent(viewer)
+        ? this.reviews.canReview(event, viewer.id, now)
+        : false
     ]);
     const exactLocation = !foreignPrivateLocation && (!event.hideExactAddress || canSeeExact);
     const participantAvatars = await Promise.all(
@@ -153,6 +168,8 @@ export class GetEventByIdUseCase {
         ...rating
       },
       reviews,
+      eventRating,
+      organizerReviews,
       approvedParticipantCount,
       availablePlaces,
       participantAvatars,

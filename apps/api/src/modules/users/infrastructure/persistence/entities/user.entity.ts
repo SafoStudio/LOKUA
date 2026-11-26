@@ -25,6 +25,9 @@ export class UserEntity {
   @Column({ type: 'boolean', name: 'email_verified', default: false })
   emailVerified!: boolean;
 
+  @Column({ type: 'boolean', name: 'email_notifications_enabled', default: true })
+  emailNotificationsEnabled!: boolean;
+
   @Column({ type: 'date', name: 'birth_date', nullable: true, transformer: dateTransformer })
   birthDate!: Date | null;
 

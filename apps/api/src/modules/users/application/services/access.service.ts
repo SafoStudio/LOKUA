@@ -4,6 +4,15 @@ import { calculateAge } from '../../domain/index.js';
 import type { AgeRestriction } from '../../../../common/index.js';
 
 export class AccessService {
+  canPostEventContent(user: AuthUser): boolean {
+    return (
+      user.role === 'USER' &&
+      user.status === 'ACTIVE' &&
+      user.emailVerified &&
+      user.onboardingCompleted
+    );
+  }
+
   canCreateEvent(user: AuthUser, now?: Date): boolean {
     if (user.status !== 'ACTIVE') return false;
     if (!user.emailVerified) return false;

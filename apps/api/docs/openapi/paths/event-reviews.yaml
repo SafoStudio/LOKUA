@@ -57,7 +57,9 @@
   post:
     tags: [Events]
     summary: Review a completed event
-    description: An approved participant can submit one review during the seven days after the event ends.
+    description: |
+      An approved participant with verified email and completed onboarding can submit one review
+      during the seven days after the event ends.
     security: &reviewWriteSecurity
       - CookieAuth: []
       - BearerAuth: []
@@ -143,6 +145,25 @@
             required: [isPinned]
             properties:
               isPinned: { type: boolean }
+    responses: *reviewUpdateResponses
+
+/api/v1/events/{id}/reviews/{reviewId}:
+  parameters: *reviewItemParameters
+  patch:
+    tags: [Events]
+    summary: Edit your review during the original seven-day window
+    security: *reviewWriteSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            minProperties: 1
+            properties:
+              rating: { type: integer, minimum: 1, maximum: 5 }
+              text: { type: [string, 'null'], minLength: 1, maxLength: 1000 }
     responses: *reviewUpdateResponses
 
 /api/v1/users/{id}:

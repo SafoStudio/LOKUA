@@ -1,5 +1,5 @@
 import { AppError } from '../../../../common/index.js';
-import type { UnitOfWork } from '../../../../common/index.js';
+import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
 import type { CategoryProvider } from '../../../dictionaries/index.js';
 import type { LocationProvider } from '../../../geolocation/index.js';
 import type { AccessService, AuthUser } from '../../../users/index.js';
@@ -12,6 +12,8 @@ import {
 } from '../../domain/rules/event-lifecycle.rules.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
 import type { CreateEventData } from '../types/create-event-data.js';
+import type { NotificationPublisher } from '../../../notifications/index.js';
+import { publishEventNotification } from '../publish-event-notification.js';
 
 const ageOrder = ['ALL', 'SIXTEEN_PLUS', 'EIGHTEEN_PLUS'] as const;
 
@@ -22,7 +24,8 @@ export class ManageEventUseCase {
     private readonly access: AccessService,
     private readonly categories: CategoryProvider,
     private readonly locations: LocationProvider,
-    private readonly clock: () => Date
+    private readonly clock: () => Date,
+    private readonly notifications?: NotificationPublisher
   ) {}
 
   async getDraft(user: AuthUser, id: string): Promise<Event | null> {
@@ -44,7 +47,7 @@ export class ManageEventUseCase {
   }
 
   update(user: AuthUser, id: string, patch: Partial<CreateEventData>): Promise<Event> {
-    return this.change(user, id, async (events, event, now) => {
+    return this.change(user, id, async (events, event, now, tx) => {
       if (event.status !== 'DRAFT' && event.status !== 'PUBLISHED' && event.status !== 'FULL') {
         throw new AppError('Event cannot be edited in its current status', 409);
       }
@@ -95,6 +98,21 @@ export class ManageEventUseCase {
         if (event.primaryLocationId !== next.primaryLocationId || event.format !== next.format) {
           await events.replaceSnapshot(id, location);
         }
+        if (
+          this.notifications &&
+          (event.firstStartsAt?.getTime() !== saved.firstStartsAt?.getTime() ||
+            event.firstEndsAt?.getTime() !== saved.firstEndsAt?.getTime() ||
+            event.primaryLocationId !== saved.primaryLocationId ||
+            event.onlineUrl !== saved.onlineUrl)
+        ) {
+          await publishEventNotification(
+            this.notifications,
+            tx,
+            saved,
+            'EVENT_CHANGED',
+            await events.listNotificationRecipients(saved, false)
+          );
+        }
       }
       if (patch.tags !== undefined) {
         await events.replaceTags(id, validateEventTags(patch.tags));
@@ -121,7 +139,7 @@ export class ManageEventUseCase {
   }
 
   cancel(user: AuthUser, id: string, reason: string): Promise<Event> {
-    return this.change(user, id, async (events, event, now) => {
+    return this.change(user, id, async (events, event, now, tx) => {
       if (
         (event.status !== 'PUBLISHED' && event.status !== 'FULL') ||
         (event.firstEndsAt && event.firstEndsAt <= now)
@@ -134,6 +152,16 @@ export class ManageEventUseCase {
       }
       const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
       await events.syncSchedule(saved, event.firstStartsAt);
+      if (this.notifications) {
+        await publishEventNotification(
+          this.notifications,
+          tx,
+          saved,
+          'EVENT_CANCELLED',
+          await events.listNotificationRecipients(saved, true),
+          cancellationReason
+        );
+      }
       return { ...saved, tags: await events.readTags(id) };
     });
   }
@@ -174,7 +202,8 @@ export class ManageEventUseCase {
     execute: (
       events: ReturnType<EventManagementRepository['inTransaction']>,
       event: Event,
-      now: Date
+      now: Date,
+      tx: TransactionContext
     ) => Promise<T>
   ): Promise<T> {
     return this.unitOfWork.run(async (tx) => {
@@ -182,7 +211,7 @@ export class ManageEventUseCase {
       await events.lockOrganizer(user.id);
       const event = await events.findOwned(id, user.id, true);
       if (!event) throw new AppError('Event not found', 404);
-      return execute(events, event, this.clock());
+      return execute(events, event, this.clock(), tx);
     });
   }
 

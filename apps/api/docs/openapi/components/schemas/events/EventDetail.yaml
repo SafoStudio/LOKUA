@@ -8,6 +8,9 @@ allOf:
       - tags
       - organizer
       - reviews
+      - organizerReviews
+      - rating
+      - ratingCount
       - approvedParticipantCount
       - availablePlaces
       - participantAvatars
@@ -34,6 +37,15 @@ allOf:
       reviews:
         $ref: '#/components/schemas/EventReviewPage'
         description: First three visible reviews for this event. Empty until the event is completed.
+      organizerReviews:
+        $ref: '#/components/schemas/EventReviewPage'
+        description: First three visible reviews of the organizer on upcoming events.
+      rating:
+        type: [number, 'null']
+        minimum: 1
+        maximum: 5
+        description: Average of visible reviews of this event, rounded to one decimal. Null without ratings.
+      ratingCount: { type: integer, minimum: 0 }
       approvedParticipantCount:
         type: integer
         minimum: 0

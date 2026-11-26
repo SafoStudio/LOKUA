@@ -13,6 +13,8 @@ import type {
   DiscussionQuery
 } from '../ports/discussion-comment.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import type { NotificationPublisher } from '../../../notifications/index.js';
+import { publishEventNotification } from '../publish-event-notification.js';
 
 const postingLimit = 20;
 const postingWindowMs = 60 * 60 * 1000;
@@ -25,7 +27,8 @@ export class EventDiscussionUseCase {
     private readonly access: AccessService,
     private readonly blocks: UserBlockProvider,
     private readonly profiles: UserProfileProvider,
-    private readonly clock: () => Date
+    private readonly clock: () => Date,
+    private readonly notifications?: NotificationPublisher
   ) {}
 
   async list(eventId: string, user: AuthUser | null, query: DiscussionQuery) {
@@ -69,67 +72,93 @@ export class EventDiscussionUseCase {
       )
     );
     return {
-      items: page.map((comment) => ({ comment, author: authors.get(comment.authorId) ?? null })),
+      items: page.map((comment) => ({
+        comment,
+        author: authors.get(comment.authorId) ?? null,
+        isOrganizer: comment.authorId === event.organizerId
+      })),
       nextCursor: rows.length > query.limit ? (page.at(-1)?.id ?? null) : null
     };
   }
 
   async create(user: AuthUser, eventId: string, text: string, parentId?: string) {
-    const comment = await this.unitOfWork.run(async (tx) => {
+    const { comment, isOrganizer } = await this.unitOfWork.run(async (tx) => {
       const comments = this.comments.inTransaction(tx);
       await comments.lockAuthor(user.id);
-      const { event, events, now, blockedIds } = await this.openDiscussion(user, eventId, tx);
-      if (event.organizerId !== user.id) {
-        const participation = await events.findParticipation(eventId, user.id);
-        if (participation?.status !== 'APPROVED') {
-          throw new AppError('Approved participation is required to post comments', 403);
-        }
+      const { event, now, blockedIds } = await this.openDiscussion(user, eventId, tx);
+      if (!this.access.canPostEventContent(user)) {
+        throw new AppError('The account is not eligible to post comments', 403);
       }
+      let parentAuthorId: string | undefined;
       if (parentId) {
         const parent = await comments.find(eventId, parentId);
         if (!parent || !this.canReadComment(parent, blockedIds)) {
           throw new AppError('Comment not found', 404);
         }
         if (parent.parentId !== null) throw new AppError('Replies cannot have replies', 422);
+        parentAuthorId = parent.authorId;
       }
       const windowStart = new Date(now.getTime() - postingWindowMs);
       if (!(await comments.consumeQuota(user.id, now, windowStart, postingLimit))) {
         throw new AppError('Comment posting limit exceeded', 429);
       }
-      return comments.create({
+      const saved = await comments.create({
         eventId,
         authorId: user.id,
         parentId: parentId ?? null,
         text,
         createdAt: now
       });
+      if (event.organizerId !== user.id) {
+        await publishEventNotification(this.notifications, tx, event, 'NEW_COMMENT', [
+          event.organizerId
+        ]);
+      }
+      if (parentAuthorId && parentAuthorId !== user.id) {
+        await publishEventNotification(this.notifications, tx, event, 'COMMENT_REPLY', [
+          parentAuthorId
+        ]);
+      }
+      return { comment: saved, isOrganizer: event.organizerId === user.id };
     });
-    return { comment, author: await this.author(comment.authorId) };
+    return { comment, author: await this.author(comment.authorId), isOrganizer };
   }
 
   async edit(user: AuthUser, eventId: string, commentId: string, text: string) {
-    const comment = await this.changeComment(
+    const { comment, isOrganizer } = await this.changeComment(
       user,
       eventId,
       commentId,
-      async (comments, current) => {
+      async (comments, current, event) => {
+        if (!this.access.canPostEventContent(user)) {
+          throw new AppError('The account is not eligible to edit comments', 403);
+        }
         if (current.isArchived) throw new AppError('Comment not found', 404);
         if (current.authorId !== user.id)
           throw new AppError('Only the author can edit a comment', 403);
-        if (current.text === text) return current;
-        return comments.save({ ...current, text, isEdited: true });
+        const comment =
+          current.text === text
+            ? current
+            : await comments.save({ ...current, text, isEdited: true });
+        return { comment, isOrganizer: event.organizerId === current.authorId };
       }
     );
-    return { comment, author: await this.author(comment.authorId) };
+    return { comment, author: await this.author(comment.authorId), isOrganizer };
   }
 
   async remove(user: AuthUser, eventId: string, commentId: string) {
-    await this.changeComment(user, eventId, commentId, async (comments, comment, event) => {
-      if (comment.authorId !== user.id && event.organizerId !== user.id) {
-        throw new AppError('Comment removal is not allowed', 403);
-      }
-      if (!comment.isArchived) await comments.save({ ...comment, isArchived: true });
-    });
+    await this.changeComment(
+      user,
+      eventId,
+      commentId,
+      async (comments, comment, event) => {
+        if (comment.authorId !== user.id && event.organizerId !== user.id) {
+          throw new AppError('Comment removal is not allowed', 403);
+        }
+        if (!comment.isArchived) await comments.save({ ...comment, isArchived: true });
+      },
+      true
+    );
   }
 
   private changeComment<T>(
@@ -140,16 +169,19 @@ export class EventDiscussionUseCase {
       comments: DiscussionCommentRepository,
       comment: DiscussionComment,
       event: Event
-    ) => Promise<T>
+    ) => Promise<T>,
+    allowOrganizerModeration = false
   ): Promise<T> {
     return this.unitOfWork.run(async (tx) => {
       const { event, blockedIds } = await this.openDiscussion(user, eventId, tx);
       const comments = this.comments.inTransaction(tx);
       const comment = await comments.find(eventId, commentId);
-      if (!comment || comment.isHiddenByAdmin || blockedIds.includes(comment.authorId)) {
+      if (!comment) throw new AppError('Comment not found', 404);
+      const canModerate = allowOrganizerModeration && event.organizerId === user.id;
+      if (!canModerate && (comment.isHiddenByAdmin || blockedIds.includes(comment.authorId))) {
         throw new AppError('Comment not found', 404);
       }
-      if (comment.parentId) {
+      if (!canModerate && comment.parentId) {
         const parent = await comments.find(eventId, comment.parentId);
         if (!parent || !this.canReadComment(parent, blockedIds)) {
           throw new AppError('Comment not found', 404);
@@ -165,7 +197,7 @@ export class EventDiscussionUseCase {
     if (!event || this.access.isBlocked(user)) throw new AppError('Discussion not found', 404);
     const now = this.clock();
     const blockedIds = await this.visibleDiscussion(event, user, now, tx);
-    return { event, events, now, blockedIds };
+    return { event, now, blockedIds };
   }
 
   private async visibleDiscussion(

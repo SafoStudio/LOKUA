@@ -1,4 +1,4 @@
-import type { Repository } from 'typeorm';
+import type { Repository, SelectQueryBuilder } from 'typeorm';
 import { toEntityManager } from '../../../../../common/index.js';
 import type { TransactionContext } from '../../../../../common/index.js';
 import type {
@@ -45,25 +45,44 @@ export class EventReviewRepositoryAdapter implements EventReviewRepository {
     return this.organizerReviews(organizerId).andWhere('review.is_pinned').getCount();
   }
 
-  async getOrganizerRating(organizerId: string): Promise<OrganizerRating> {
-    const result = await this.organizerReviews(organizerId)
-      .andWhere("event.status = 'COMPLETED'")
-      .andWhere('NOT event.is_hidden_by_admin AND NOT review.is_hidden_by_admin')
+  getOrganizerRating(organizerId: string): Promise<OrganizerRating> {
+    return this.aggregateRating(
+      this.organizerReviews(organizerId)
+        .andWhere("event.status = 'COMPLETED'")
+        .andWhere('NOT event.is_hidden_by_admin'),
+      3
+    );
+  }
+
+  getEventRating(eventId: string): Promise<OrganizerRating> {
+    return this.aggregateRating(
+      this.repository.createQueryBuilder('review').where('review.event_id = :eventId', { eventId }),
+      1
+    );
+  }
+
+  private async aggregateRating(
+    builder: SelectQueryBuilder<EventReviewEntity>,
+    minimumRatings: number
+  ): Promise<OrganizerRating> {
+    const result = await builder
+      .andWhere('NOT review.is_hidden_by_admin')
       .select('COUNT(*)', 'rating_count')
       .addSelect('ROUND(AVG(review.rating), 1)', 'rating')
       .getRawOne<{ rating_count: string; rating: string | null }>();
     const ratingCount = Number(result?.rating_count ?? 0);
     return {
       ratingCount,
-      rating: ratingCount >= 3 && result?.rating != null ? Number(result.rating) : null
+      rating: ratingCount >= minimumRatings && result?.rating != null ? Number(result.rating) : null
     };
   }
 
-  list(query: ReviewListQuery): Promise<EventReview[]> {
+  async list(query: ReviewListQuery): Promise<(EventReview & { eventTitle: string })[]> {
     const { organizerId, eventId, blockedAuthorIds, ageRestrictions, cursor, limit } = query;
     const builder = this.organizerReviews(organizerId)
       .andWhere("event.status = 'COMPLETED'")
       .andWhere('NOT review.is_hidden_by_admin')
+      .addSelect('event.title', 'event_title')
       .orderBy('review.isPinned', 'DESC')
       .addOrderBy('review.createdAt', 'DESC')
       .addOrderBy('review.id', 'DESC')
@@ -74,7 +93,7 @@ export class EventReviewRepositoryAdapter implements EventReviewRepository {
       builder.andWhere('NOT event.is_hidden_by_admin');
     }
     if (ageRestrictions) {
-      if (ageRestrictions.length === 0) return Promise.resolve([]);
+      if (ageRestrictions.length === 0) return [];
       builder.andWhere('event.age_restriction IN (:...ageRestrictions)', { ageRestrictions });
     }
     if (blockedAuthorIds.length) {
@@ -92,7 +111,8 @@ export class EventReviewRepositoryAdapter implements EventReviewRepository {
         { cursor }
       );
     }
-    return builder.getMany();
+    const { entities, raw } = await builder.getRawAndEntities<{ event_title: string }>();
+    return entities.map((review, index) => ({ ...review, eventTitle: raw[index].event_title }));
   }
 
   private organizerReviews(organizerId: string) {

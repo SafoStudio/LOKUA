@@ -1,5 +1,17 @@
 type: object
-required: [id, parentId, author, text, isEdited, isArchived, isHiddenByAdmin, createdAt, updatedAt]
+required:
+  [
+    id,
+    parentId,
+    author,
+    isOrganizer,
+    text,
+    isEdited,
+    isArchived,
+    isHiddenByAdmin,
+    createdAt,
+    updatedAt
+  ]
 properties:
   id: { type: string, format: uuid }
   parentId: { type: [string, 'null'], format: uuid }
@@ -11,6 +23,7 @@ properties:
       name: { type: [string, 'null'] }
       avatarUrl: { type: [string, 'null'] }
   text: { type: string, minLength: 1, maxLength: 1000 }
+  isOrganizer: { type: boolean }
   isEdited: { type: boolean }
   isArchived: { type: boolean }
   isHiddenByAdmin: { type: boolean }

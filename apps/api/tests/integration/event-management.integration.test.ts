@@ -13,6 +13,9 @@ import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
 import { createEventsModule } from '../../src/modules/events/index.js';
+import { createNotificationsModule } from '../../src/modules/notifications/index.js';
+import type { CreateNotificationsModuleDependencies } from '../../src/modules/notifications/index.js';
+import { NotificationEntity } from '../../src/modules/notifications/infrastructure/index.js';
 import { toFeedEventView, toMapEventView } from '../../src/modules/events/presentation/http/event.view.js';
 import { ListEventParticipationUseCase } from '../../src/modules/events/application/use-cases/list-event-participation.use-case.js';
 import { toOwnParticipationView } from '../../src/modules/events/presentation/http/participation.view.js';
@@ -150,6 +153,13 @@ describe('event management and feed with PostgreSQL', () => {
   }
 
   function createEventsTestApi(testUsers: AuthUser[]) {
+    return createEventsTestContext(testUsers).api;
+  }
+
+  function createEventsTestContext(
+    testUsers: AuthUser[],
+    sendEmail?: CreateNotificationsModuleDependencies['sendEmail']
+  ) {
     const viewers = new Map<string, AuthUser>(
       testUsers.map((user) => [user.id, user])
     );
@@ -173,6 +183,11 @@ describe('event management and feed with PostgreSQL', () => {
       users: users.users,
       requireAuth
     });
+    const notifications = createNotificationsModule({
+      dataSource,
+      requireAuth,
+      sendEmail: sendEmail ?? (async () => {})
+    });
     const events = createEventsModule({
       dataSource,
       access: users.access,
@@ -183,15 +198,17 @@ describe('event management and feed with PostgreSQL', () => {
       cities,
       locations: geo.locations,
       optionalAuth,
-      requireAuth
+      requireAuth,
+      notifications: sendEmail ? notifications.publisher : undefined
     });
     const app = express();
     app.use(express.json());
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
+    app.use('/notifications', notifications.router);
     app.use('/geo', geo.router);
     app.use(errorHandler);
-    return request(app);
+    return { api: request(app), notifications };
   }
 
   it('serves event details and protects private fields across event and geolocation routes', async () => {
@@ -1140,10 +1157,18 @@ describe('event management and feed with PostgreSQL', () => {
       api.post(path).set('X-Test-User', user.id).send({ text, parentId });
 
     await api.post(path).send({ text: 'Guest comment' }).expect(401);
-    await post(outsider, 'This should be forbidden').expect(403);
+    await post(admin, 'Administrative account').expect(403);
+    const unverifiedApi = createEventsTestApi([{ ...outsider, emailVerified: false }]);
+    await unverifiedApi.post(path).set('X-Test-User', outsider.id)
+      .send({ text: 'Unverified account' }).expect(403);
+    const eligibleVisitor = await api.post(`/events/${otherEvent.id}/comments`)
+      .set('X-Test-User', outsider.id).send({ text: 'A visitor with a verified account' }).expect(201);
+    expect(eligibleVisitor.body.data.isOrganizer).toBe(false);
     await post(owner, '  ').expect(400);
     const root = (await post(owner, '  First comment  ').expect(201)).body.data;
-    expect(root).toMatchObject({ text: 'First comment', parentId: null, author: { id: owner.id } });
+    expect(root).toMatchObject({
+      text: 'First comment', parentId: null, author: { id: owner.id }, isOrganizer: true
+    });
     expect(root.author).not.toHaveProperty('email');
     const reply = (await post(participant, 'A reply', root.id).expect(201)).body.data;
     await post(owner, 'A nested reply', reply.id).expect(422);
@@ -1316,8 +1341,26 @@ describe('event management and feed with PostgreSQL', () => {
     const fourthReview = (await submit(other.id, first, 1).expect(201)).body.data;
     const card = await api.get(`/events/${event.id}`).expect(200);
     expect(card.body.data.organizer).toMatchObject({ rating: 3, ratingCount: 4 });
+    expect(card.body.data).toMatchObject({ rating: 4.5, ratingCount: 2 });
     expect(card.body.data.reviews.data.map(({ id }: { id: string }) => id).sort())
       .toEqual([firstReview.id, secondReview.id].sort());
+    const reviewPath = `/events/${event.id}/reviews/${firstReview.id}`;
+    await api.patch(reviewPath).set('X-Test-User', owner.id).send({ rating: 1 }).expect(403);
+    const edited = await api.patch(reviewPath).set('X-Test-User', first.id)
+      .send({ rating: 3, text: null }).expect(200);
+    expect(edited.body.data).toMatchObject({ rating: 3, text: null });
+    const updatedCard = await api.get(`/events/${event.id}`).expect(200);
+    expect(updatedCard.body.data).toMatchObject({ rating: 3.5, ratingCount: 2 });
+    await api.patch(reviewPath).set('X-Test-User', first.id).send({ rating: 5 }).expect(200);
+
+    const upcoming = await publishForFeed(owner, {});
+    await events.update(upcoming.id, {
+      firstStartsAt: new Date(Date.now() + hour),
+      firstEndsAt: new Date(Date.now() + 2 * hour)
+    });
+    const upcomingCard = await api.get(`/events/${upcoming.id}`).expect(200);
+    expect(upcomingCard.body.data.organizerReviews.data).toHaveLength(3);
+    expect(upcomingCard.body.data.organizerReviews.data[0].eventTitle).toBe(event.title);
 
     const reply = (author: AuthUser) =>
       api
@@ -1375,5 +1418,116 @@ describe('event management and feed with PostgreSQL', () => {
     const hiddenEvent = await api.get(profilePath).expect(200);
     expect(hiddenEvent.body.data).toMatchObject({ rating: null, ratingCount: 2 });
     expect(hiddenEvent.body.data.reviews.data).toHaveLength(2);
+    await events.update(event.id, {
+      firstStartsAt: new Date(recentEnd - 8 * 24 * hour),
+      firstEndsAt: new Date(recentEnd - 7 * 24 * hour)
+    });
+    await api.patch(reviewPath).set('X-Test-User', first.id).send({ rating: 1 }).expect(409);
+  });
+
+  it('queues event notifications transactionally and honors email preferences at delivery', async () => {
+    const [owner, attendee, applicant] = await Promise.all([createUser(), createUser(), createUser()]);
+    const delivered: string[] = [];
+    let failDelivery = true;
+    const { api, notifications } = createEventsTestContext([owner, attendee, applicant], async ({ to }) => {
+      if (failDelivery) throw new Error('SMTP unavailable');
+      delivered.push(to);
+    });
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const events = dataSource.getRepository(EventEntity);
+    const hour = 60 * 60 * 1000;
+    const start = new Date(Date.now() + 6 * hour);
+    const end = new Date(start.getTime() + hour);
+    await events.update(event.id, { firstStartsAt: start, firstEndsAt: end });
+    await dataSource.getRepository(EventOccurrenceEntity).update(
+      { eventId: event.id },
+      { startsAt: start, endsAt: end }
+    );
+    const join = (user: AuthUser) =>
+      api.post(`/events/${event.id}/participations`).set('X-Test-User', user.id).send({});
+    const joined = await join(attendee).expect(200);
+    await join(attendee).expect(200);
+    await join(applicant).expect(200);
+    const approve = () => api
+      .post(`/events/${event.id}/applications/${joined.body.data.participation.id}/approve`)
+      .set('X-Test-User', owner.id);
+    await approve().expect(200);
+    await approve().expect(200);
+
+    const inbox = (user: AuthUser) => api.get('/notifications').set('X-Test-User', user.id);
+    await api.get('/notifications').expect(401);
+    const organizerInbox = await inbox(owner).query({ limit: 1 }).expect(200);
+    expect(organizerInbox.body.data).toMatchObject([{ type: 'NEW_APPLICATION', targetId: event.id }]);
+    expect(organizerInbox.body.pagination.hasMore).toBe(true);
+    const organizerNext = await inbox(owner)
+      .query({ limit: 1, cursor: organizerInbox.body.pagination.nextCursor })
+      .expect(200);
+    expect(organizerNext.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    const attendeeInbox = await inbox(attendee).expect(200);
+    expect(attendeeInbox.body.data).toMatchObject([{ type: 'APPLICATION_APPROVED', isRead: false }]);
+    const notificationId = attendeeInbox.body.data[0].id;
+    await api.patch(`/notifications/${notificationId}/read`).set('X-Test-User', applicant.id).expect(404);
+    await api.patch(`/notifications/${notificationId}/read`).set('X-Test-User', attendee.id).expect(204);
+
+    const rows = dataSource.getRepository(NotificationEntity);
+    await notifications.startDeliveryWorker()();
+    const failed = await rows.findOneByOrFail({ id: notificationId });
+    expect(failed).toMatchObject({ isRead: true, emailAttempts: 1, emailDueAt: expect.any(Date) });
+    expect(failed.emailDueAt?.getTime()).toBeGreaterThan(Date.now());
+    failDelivery = false;
+    await rows.update(notificationId, { emailDueAt: new Date(0) });
+    await notifications.startDeliveryWorker()();
+    expect(delivered).toEqual([attendee.email]);
+    expect(await rows.findOneByOrFail({ id: notificationId })).toMatchObject({ emailDueAt: null });
+
+    await api.patch('/notifications/preferences').set('X-Test-User', attendee.id)
+      .send({ emailEnabled: false }).expect(200);
+    const preferences = await api.get('/notifications/preferences').set('X-Test-User', attendee.id).expect(200);
+    expect(preferences.body.data).toEqual({ emailEnabled: false });
+
+    await api.patch(`/events/${event.id}`).set('X-Test-User', owner.id)
+      .send({ onlineUrl: 'https://example.com/updated-meeting' }).expect(200);
+    expect(await rows.countBy({ type: 'EVENT_CHANGED', recipientId: attendee.id, targetId: event.id }))
+      .toBe(1);
+
+    let cutoff = new Date();
+    const lifecycle = new AdvanceEventLifecycleUseCase(
+      new EventLifecycleRepositoryAdapter(notifications.publisher),
+      new TypeOrmUnitOfWork(dataSource),
+      () => cutoff
+    );
+    await lifecycle.execute();
+    await lifecycle.execute();
+    const reminder = await rows.findOneByOrFail({
+      recipientId: attendee.id, type: 'EVENT_REMINDER_24H', targetId: event.id
+    });
+    expect(await rows.countBy({ type: 'EVENT_REMINDER_24H', targetId: event.id })).toBe(1);
+    expect(await rows.countBy({ recipientId: applicant.id, targetId: event.id })).toBe(0);
+    await rows.update(reminder.id, { emailDueAt: new Date(0) });
+    await notifications.startDeliveryWorker()();
+    expect(delivered).toEqual([attendee.email]);
+
+    cutoff = end;
+    await lifecycle.execute();
+    await lifecycle.execute();
+    expect(await rows.countBy({ type: 'REVIEW_REMINDER', targetId: event.id })).toBe(1);
+    expect(await rows.findOneByOrFail({ type: 'REVIEW_REMINDER', targetId: event.id })).toMatchObject({
+      recipientId: attendee.id, emailDueAt: null
+    });
+
+    const cancelled = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    await events.update(cancelled.id, { firstStartsAt: start, firstEndsAt: end });
+    for (const user of [attendee, applicant]) {
+      await api.post(`/events/${cancelled.id}/participations`)
+        .set('X-Test-User', user.id).send({}).expect(200);
+    }
+    await api.post(`/events/${cancelled.id}/cancel`).set('X-Test-User', owner.id)
+      .send({ reason: 'Weather' }).expect(200);
+    const cancellations = await rows.findBy({ type: 'EVENT_CANCELLED', targetId: cancelled.id });
+    expect(cancellations.map(({ recipientId }) => recipientId).sort())
+      .toEqual([attendee.id, applicant.id].sort());
+    expect(cancellations.map(({ message }) => message)).toEqual([
+      expect.stringContaining('Weather'), expect.stringContaining('Weather')
+    ]);
   });
 });

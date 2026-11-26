@@ -171,6 +171,21 @@ export class EventRepositoryAdapter
     return entity ? this.toDomain(entity) : null;
   }
 
+  async listNotificationRecipients(event: Event, includePending: boolean): Promise<string[]> {
+    const statuses = includePending ? ['APPROVED', 'PENDING'] : ['APPROVED'];
+    const participants = await this.repository.manager
+      .getRepository(EventParticipationEntity)
+      .createQueryBuilder('participation')
+      .select('participation.userId', 'user_id')
+      .where('participation.eventId = :eventId AND participation.userId <> :organizerId', {
+        eventId: event.id,
+        organizerId: event.organizerId
+      })
+      .andWhere('participation.status IN (:...statuses)', { statuses })
+      .getRawMany<{ user_id: string }>();
+    return participants.map((participant) => participant.user_id);
+  }
+
   hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
     return this.repository
       .createQueryBuilder('event')

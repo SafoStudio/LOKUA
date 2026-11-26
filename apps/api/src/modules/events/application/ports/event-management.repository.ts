@@ -13,6 +13,7 @@ export interface EventManagementRepository {
   countApproved(event: Event): Promise<number>;
   hasParticipantHistory(event: Event): Promise<boolean>;
   hasPendingApplications(eventId: string): Promise<boolean>;
+  listNotificationRecipients(event: Event, includePending: boolean): Promise<string[]>;
   hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean>;
   save(event: Event): Promise<Event>;
   delete(id: string): Promise<void>;

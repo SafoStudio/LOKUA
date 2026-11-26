@@ -29,5 +29,6 @@ export interface EventReviewRepository {
   save(review: EventReview): Promise<EventReview>;
   countPinned(organizerId: string): Promise<number>;
   getOrganizerRating(organizerId: string): Promise<OrganizerRating>;
-  list(query: ReviewListQuery): Promise<EventReview[]>;
+  getEventRating(eventId: string): Promise<OrganizerRating>;
+  list(query: ReviewListQuery): Promise<(EventReview & { eventTitle: string })[]>;
 }

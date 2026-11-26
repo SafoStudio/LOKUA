@@ -3,6 +3,9 @@ required: [id, eventId, author, rating, text, organizerReply, organizerReplyAt, 
 properties:
   id: { type: string, format: uuid }
   eventId: { type: string, format: uuid }
+  eventTitle:
+    type: string
+    description: Title of the reviewed event, included in review lists.
   author:
     type: object
     required: [id, name, avatarUrl]

@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import type { ReviewPageQuery } from '../../application/ports/event-review.repository.js';
 import type { EventReviewsUseCase } from '../../application/use-cases/event-reviews.use-case.js';
 import { toEventContext } from './event-context.js';
-import type { CreateReviewBody, ReviewParams } from './event-review.schema.js';
+import type { CreateReviewBody, EditReviewBody, ReviewParams } from './event-review.schema.js';
 import { toReviewPageView, toReviewView } from './event-review.view.js';
 
 export function createEventReviewController(reviews: EventReviewsUseCase) {
@@ -49,6 +49,17 @@ export function createEventReviewController(reviews: EventReviewsUseCase) {
       const { id, reviewId } = req.params as ReviewParams;
       const { text } = req.body as { text: string };
       const review = await reviews.reply(toEventContext(req).user, id, reviewId, text);
+      res.json({ data: toReviewView(review) });
+    },
+
+    async edit(req: Request, res: Response): Promise<void> {
+      const { id, reviewId } = req.params as ReviewParams;
+      const review = await reviews.edit(
+        toEventContext(req).user,
+        id,
+        reviewId,
+        req.body as EditReviewBody
+      );
       res.json({ data: toReviewView(review) });
     },
 

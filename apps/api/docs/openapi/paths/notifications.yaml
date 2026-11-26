@@ -1,0 +1,117 @@
+/api/v1/notifications:
+  get:
+    tags: [Notifications]
+    summary: List the current user's notifications
+    description: Notifications are ordered by creation time and ID, newest first.
+    security: &notificationSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      - name: cursor
+        in: query
+        schema: { type: string, format: uuid }
+    responses:
+      '200':
+        description: Private notification page
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data, pagination]
+              properties:
+                data:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Notification'
+                pagination:
+                  type: object
+                  required: [nextCursor, hasMore]
+                  properties:
+                    nextCursor: { type: [string, 'null'], format: uuid }
+                    hasMore: { type: boolean }
+      '400': &notificationValidation
+        description: Invalid request
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidationErrorResponse'
+      '401': &notificationUnauthorized
+        description: Missing or invalid credentials
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403': &notificationForbidden
+        description: Inactive account
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+/api/v1/notifications/preferences:
+  get:
+    tags: [Notifications]
+    summary: Get email notification preferences
+    security: *notificationSecurity
+    responses:
+      '200': &emailPreferencesResponse
+        description: Effective optional email setting. Service emails are independent of this setting.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: &emailPreferences
+                  type: object
+                  required: [emailEnabled]
+                  properties:
+                    emailEnabled: { type: boolean }
+      '401': *notificationUnauthorized
+      '403': *notificationForbidden
+      '404':
+        description: Account unavailable
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  patch:
+    tags: [Notifications]
+    summary: Update email notification preferences
+    security: *notificationSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: *emailPreferences
+    responses:
+      '200': *emailPreferencesResponse
+      '400': *notificationValidation
+      '401': *notificationUnauthorized
+      '403': *notificationForbidden
+
+/api/v1/notifications/{id}/read:
+  patch:
+    tags: [Notifications]
+    summary: Mark a notification as read
+    security: *notificationSecurity
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    responses:
+      '204':
+        description: Notification marked as read
+      '400': *notificationValidation
+      '401': *notificationUnauthorized
+      '403': *notificationForbidden
+      '404':
+        description: Notification unavailable to the caller
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'

@@ -15,7 +15,8 @@ try {
     geolocationRouter: modules.geolocation.router,
     adminUsersRouter: modules.moderation.adminUsersRouter,
     eventsRouter: modules.events.router,
-    profilesRouter: modules.events.profilesRouter
+    profilesRouter: modules.events.profilesRouter,
+    notificationsRouter: modules.notifications.router
   });
 
   const server = app.listen(env.PORT, () => {
@@ -23,13 +24,14 @@ try {
     logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
   });
   const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
+  const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'Shutting down');
-    const lifecycleStopped = stopEventLifecycleWorker();
+    const workersStopped = Promise.all([stopEventLifecycleWorker(), stopNotificationDelivery()]);
 
     server.close(async (closeErr) => {
       if (closeErr) {
@@ -37,7 +39,7 @@ try {
       }
 
       try {
-        await lifecycleStopped;
+        await workersStopped;
         await AppDataSource.destroy();
         logger.info('Database connection closed');
         process.exit(closeErr ? 1 : 0);

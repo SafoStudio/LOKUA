@@ -9,6 +9,8 @@ import type {
 import type { EventParticipation } from '../../domain/models/event-participation.js';
 import type { Event } from '../../domain/index.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import type { NotificationPublisher } from '../../../notifications/index.js';
+import { publishEventNotification } from '../publish-event-notification.js';
 
 export class ManageParticipationUseCase {
   constructor(
@@ -17,7 +19,8 @@ export class ManageParticipationUseCase {
     private readonly users: AuthUserProvider,
     private readonly access: AccessService,
     private readonly blocks: UserBlockProvider,
-    private readonly clock: () => Date
+    private readonly clock: () => Date,
+    private readonly notifications?: NotificationPublisher
   ) {}
 
   join(user: AuthUser, eventId: string, message?: string) {
@@ -59,6 +62,13 @@ export class ManageParticipationUseCase {
           mode === 'REQUEST'
             ? await events.saveParticipation({ ...entry, status: 'PENDING', applicationMessage })
             : await this.approve(events, event, entry);
+        await publishEventNotification(
+          this.notifications,
+          tx,
+          event,
+          mode === 'REQUEST' ? 'NEW_APPLICATION' : 'FREE_PARTICIPATION',
+          [event.organizerId]
+        );
       }
 
       const conflict = await events.hasScheduleConflict(
@@ -72,7 +82,7 @@ export class ManageParticipationUseCase {
   }
 
   cancel(user: AuthUser, eventId: string) {
-    return this.withEvent(eventId, async (events, event, now) => {
+    return this.withEvent(eventId, async (events, event, now, tx) => {
       if (event.organizerId === user.id) {
         throw new AppError('The organizer cannot cancel their own participation', 409);
       }
@@ -92,6 +102,9 @@ export class ManageParticipationUseCase {
       if (participation.status === 'APPROVED') {
         await this.updateCapacity(events, event, await events.countApproved(event));
       }
+      await publishEventNotification(this.notifications, tx, event, 'PARTICIPATION_CANCELLED', [
+        event.organizerId
+      ]);
       return saved;
     });
   }
@@ -112,12 +125,16 @@ export class ManageParticipationUseCase {
         throw new AppError('The application is no longer pending', 409);
       }
       if (decision === 'REJECTED') {
-        return events.saveParticipation({
+        const saved = await events.saveParticipation({
           ...participation,
           status: decision,
           statusUpdatedAt: now,
           removalReason: null
         });
+        await publishEventNotification(this.notifications, tx, event, 'APPLICATION_REJECTED', [
+          saved.userId
+        ]);
+        return saved;
       }
 
       const applicant = await this.users.findById(participation.userId, tx);
@@ -129,12 +146,19 @@ export class ManageParticipationUseCase {
       ) {
         throw new AppError('The applicant is no longer eligible to join', 409);
       }
-      return this.approve(events, event, { ...participation, statusUpdatedAt: now });
+      const approved = await this.approve(events, event, {
+        ...participation,
+        statusUpdatedAt: now
+      });
+      await publishEventNotification(this.notifications, tx, event, 'APPLICATION_APPROVED', [
+        approved.userId
+      ]);
+      return approved;
     });
   }
 
   remove(user: AuthUser, eventId: string, participationId: string, reason?: string) {
-    return this.withEvent(eventId, async (events, event, now) => {
+    return this.withEvent(eventId, async (events, event, now, tx) => {
       this.ensureOwner(event, user);
       const participation = await this.findManagedParticipation(events, event, participationId);
       if (participation.status === 'REMOVED_BY_ORGANIZER') return participation;
@@ -150,6 +174,14 @@ export class ManageParticipationUseCase {
         removalReason: this.normalizeText(reason)
       });
       await this.updateCapacity(events, event, await events.countApproved(event));
+      await publishEventNotification(
+        this.notifications,
+        tx,
+        event,
+        'PARTICIPANT_REMOVED',
+        [saved.userId],
+        saved.removalReason
+      );
       return saved;
     });
   }

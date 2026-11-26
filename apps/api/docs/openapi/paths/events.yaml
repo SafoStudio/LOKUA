@@ -553,7 +553,8 @@
     tags: [Events]
     summary: Post a comment or reply
     description: |
-      The organizer and approved participants can post while the discussion is active.
+      Signed-in users with verified email and completed onboarding can post while the discussion is active.
+      Event visibility rules apply.
       Each author can publish up to 20 comments and replies per rolling hour across all events.
     security: *eventOwnerSecurity
     requestBody:

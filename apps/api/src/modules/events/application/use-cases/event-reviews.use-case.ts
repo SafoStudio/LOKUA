@@ -10,6 +10,8 @@ import type { AgeRestriction, Event } from '../../domain/index.js';
 import type { EventReview } from '../../domain/models/event-review.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import type { NotificationPublisher } from '../../../notifications/index.js';
+import { publishEventNotification } from '../publish-event-notification.js';
 import type {
   EventReviewRepository,
   ReviewListQuery,
@@ -34,15 +36,34 @@ export class EventReviewsUseCase {
     private readonly access: AccessService,
     private readonly blocks: UserBlockProvider,
     private readonly profiles: UserProfileProvider,
-    private readonly clock: () => Date
+    private readonly clock: () => Date,
+    private readonly notifications?: NotificationPublisher
   ) {}
 
   rating(organizerId: string) {
     return this.reviews.getOrganizerRating(organizerId);
   }
 
+  eventRating(eventId: string) {
+    return this.reviews.getEventRating(eventId);
+  }
+
   preview(organizerId: string, blockedAuthorIds: string[], eventId: string) {
     return this.page({ organizerId, blockedAuthorIds, eventId, limit: previewLimit });
+  }
+
+  organizerPreview(
+    organizerId: string,
+    user: AuthUser | null,
+    blockedAuthorIds: string[],
+    now: Date
+  ) {
+    return this.page({
+      organizerId,
+      blockedAuthorIds,
+      ageRestrictions: this.visibleAgeRestrictions(organizerId, user, now),
+      limit: previewLimit
+    });
   }
 
   async canReview(event: Event, authorId: string, now: Date): Promise<boolean> {
@@ -77,32 +98,54 @@ export class EventReviewsUseCase {
 
   async create(user: AuthUser, eventId: string, rating: number, text: string | null) {
     const review = await this.unitOfWork.run(async (tx) => {
-      const { event, events } = await this.lockCompletedEvent(eventId, tx);
-      const now = this.clock();
-      const blockedIds = await this.blocks.listRelatedUserIds(user.id, tx);
-      this.ensureEventVisibility(event, user, blockedIds, now);
-      const participation = await events.findParticipation(eventId, user.id);
-      if (event.organizerId === user.id || participation?.status !== 'APPROVED') {
-        throw new AppError('Approved participation is required to review the event', 403);
-      }
-      if (!this.isReviewWindowOpen(event, now)) {
-        throw new AppError('The review period is closed', 409);
-      }
-      const reviews = this.reviews.inTransaction(tx);
+      const { event, reviews } = await this.reviewContext(user, eventId, tx);
       if (await reviews.findByAuthor(eventId, user.id)) {
         throw new AppError('The participant has already reviewed this event', 409);
       }
-      return reviews.create({ eventId, authorId: user.id, rating, text });
+      const saved = await reviews.create({ eventId, authorId: user.id, rating, text });
+      await publishEventNotification(this.notifications, tx, event, 'NEW_REVIEW', [
+        event.organizerId
+      ]);
+      return saved;
+    });
+    return this.withAuthor(review);
+  }
+
+  async edit(
+    user: AuthUser,
+    eventId: string,
+    reviewId: string,
+    patch: { rating?: number; text?: string | null }
+  ) {
+    const review = await this.unitOfWork.run(async (tx) => {
+      const { reviews } = await this.reviewContext(user, eventId, tx);
+      const current = await reviews.find(eventId, reviewId);
+      if (!current || current.authorId !== user.id || current.isHiddenByAdmin) {
+        throw new AppError('Review not found', 404);
+      }
+      return reviews.save({
+        ...current,
+        rating: patch.rating ?? current.rating,
+        text: patch.text === undefined ? current.text : patch.text
+      });
     });
     return this.withAuthor(review);
   }
 
   async reply(user: AuthUser, eventId: string, reviewId: string, text: string) {
     const review = await this.unitOfWork.run(async (tx) => {
-      const { reviews, current } = await this.lockOwnedReview(user, eventId, reviewId, tx);
+      const { event, reviews, current } = await this.lockOwnedReview(user, eventId, reviewId, tx);
       if (current.organizerReply !== null)
         throw new AppError('The review already has a reply', 409);
-      return reviews.save({ ...current, organizerReply: text, organizerReplyAt: this.clock() });
+      const saved = await reviews.save({
+        ...current,
+        organizerReply: text,
+        organizerReplyAt: this.clock()
+      });
+      await publishEventNotification(this.notifications, tx, event, 'REVIEW_REPLY', [
+        saved.authorId
+      ]);
+      return saved;
     });
     return this.withAuthor(review);
   }
@@ -145,14 +188,36 @@ export class EventReviewsUseCase {
     if (blockedAuthorIds.includes(organizerId)) throw new AppError('Profile not found', 404);
     const profile = await this.profiles.findByUserId(organizerId);
     if (!profile) throw new AppError('Profile not found', 404);
-    const now = this.clock();
-    const ageRestrictions =
-      user?.id === organizerId || (user && this.access.canAccessAdmin(user, 'ADMIN'))
-        ? undefined
-        : reviewAgeRestrictions.filter((restriction) =>
-            this.access.canViewEvent(user, restriction, now)
-          );
+    const ageRestrictions = this.visibleAgeRestrictions(organizerId, user, this.clock());
     return { profile, filters: { organizerId, blockedAuthorIds, ageRestrictions } };
+  }
+
+  private visibleAgeRestrictions(organizerId: string, user: AuthUser | null, now: Date) {
+    return user?.id === organizerId || (user && this.access.canAccessAdmin(user, 'ADMIN'))
+      ? undefined
+      : reviewAgeRestrictions.filter((restriction) =>
+          this.access.canViewEvent(user, restriction, now)
+        );
+  }
+
+  private async reviewContext(user: AuthUser, eventId: string, tx: TransactionContext) {
+    const { event, events } = await this.lockCompletedEvent(eventId, tx);
+    const now = this.clock();
+    const blockedIds = await this.blocks.listRelatedUserIds(user.id, tx);
+    this.ensureEventVisibility(event, user, blockedIds, now);
+    if (
+      !this.access.canPostEventContent(user) ||
+      event.organizerId === user.id ||
+      (await events.findParticipation(eventId, user.id))?.status !== 'APPROVED'
+    ) {
+      throw new AppError(
+        'Approved participation and an eligible account are required to review the event',
+        403
+      );
+    }
+    if (!this.isReviewWindowOpen(event, now))
+      throw new AppError('The review period is closed', 409);
+    return { event, reviews: this.reviews.inTransaction(tx) };
   }
 
   private ensureEventVisibility(
@@ -200,7 +265,7 @@ export class EventReviewsUseCase {
     const reviews = this.reviews.inTransaction(tx);
     const current = await reviews.find(eventId, reviewId);
     if (!current || current.isHiddenByAdmin) throw new AppError('Review not found', 404);
-    return { reviews, current };
+    return { event, reviews, current };
   }
 
   private async withAuthor(review: EventReview) {

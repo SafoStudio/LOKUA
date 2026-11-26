@@ -47,6 +47,12 @@ export function createModules(dataSource: DataSource) {
     requireAuth: authModule.requireAuth
   });
 
+  const notificationsModule = createNotificationsModule({
+    dataSource,
+    requireAuth: authModule.requireAuth,
+    sendEmail: authModule.sendNotificationEmail
+  });
+
   const eventsModule = createEventsModule({
     cities: dictionariesModule.cities,
     profiles: usersModule.profiles,
@@ -57,10 +63,9 @@ export function createModules(dataSource: DataSource) {
     dataSource,
     access: usersModule.access,
     optionalAuth: authModule.optionalAuth,
-    requireAuth: authModule.requireAuth
+    requireAuth: authModule.requireAuth,
+    notifications: notificationsModule.publisher
   });
-
-  const notificationsModule = createNotificationsModule({ dataSource });
 
   return {
     dictionaries: dictionariesModule,

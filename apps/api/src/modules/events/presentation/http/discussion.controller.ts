@@ -8,13 +8,15 @@ import { toEventContext } from './event-context.js';
 interface DiscussionItem {
   comment: DiscussionComment;
   author: { id: string; name: string | null; avatarUrl: string | null } | null;
+  isOrganizer: boolean;
 }
 
-function toCommentView({ comment, author }: DiscussionItem) {
+function toCommentView({ comment, author, isOrganizer }: DiscussionItem) {
   return {
     id: comment.id,
     parentId: comment.parentId,
     author,
+    isOrganizer,
     text: comment.text,
     isEdited: comment.isEdited,
     isArchived: comment.isArchived,

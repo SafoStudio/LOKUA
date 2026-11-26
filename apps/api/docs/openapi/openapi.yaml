@@ -25,6 +25,7 @@ servers:
     description: Local Development Server
 
 tags:
+  - name: Notifications
   - name: Events
     description: Event drafts and public event discovery
 

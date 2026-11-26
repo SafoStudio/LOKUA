@@ -7,6 +7,7 @@ import type { DiscussionController } from './discussion.controller.js';
 import type { EventReviewController } from './event-review.controller.js';
 import {
   createReviewSchema,
+  editReviewSchema,
   pinReviewSchema,
   replyToReviewSchema,
   reviewPageSchema,
@@ -83,6 +84,12 @@ export function createEventsRouter({
     requireAuth,
     validate({ params: reviewParamsSchema, body: replyToReviewSchema }),
     reviews.reply
+  );
+  router.patch(
+    '/:id/reviews/:reviewId',
+    requireAuth,
+    validate({ params: reviewParamsSchema, body: editReviewSchema }),
+    reviews.edit
   );
   router.put(
     '/:id/reviews/:reviewId/pin',
