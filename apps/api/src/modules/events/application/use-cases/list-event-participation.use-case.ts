@@ -39,9 +39,9 @@ export class ListEventParticipationUseCase {
     } else if (!admin) {
       if (event.isHiddenByAdmin) throw new AppError('Event not found', 404);
       if (!owner) {
-        blockedUserIds = await this.blocks.listRelatedUserIds(user.id);
+        const blockerIds = await this.blocks.listBlockerIds(user.id);
         if (
-          blockedUserIds.includes(event.organizerId) ||
+          blockerIds.includes(event.organizerId) ||
           !this.access.canViewEvent(user, event.ageRestriction, this.clock())
         ) {
           throw new AppError('Event not found', 404);
@@ -50,6 +50,7 @@ export class ListEventParticipationUseCase {
         if (ownParticipation?.status !== 'APPROVED') {
           throw new AppError('Participant access is required', 403);
         }
+        blockedUserIds = await this.blocks.listRelatedUserIds(user.id);
       }
     }
 

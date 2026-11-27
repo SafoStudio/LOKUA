@@ -77,8 +77,13 @@ export class EventReviewsUseCase {
   async listForEvent(eventId: string, user: AuthUser | null, query: ReviewPageQuery) {
     const event = await this.events.findEvent(eventId);
     if (!event || event.status !== 'COMPLETED') throw new AppError('Event not found', 404);
-    const blockedAuthorIds = user ? await this.blocks.listRelatedUserIds(user.id) : [];
-    this.ensureEventVisibility(event, user, blockedAuthorIds, this.clock());
+    const [blockerIds, blockedAuthorIds] = user
+      ? await Promise.all([
+          this.blocks.listBlockerIds(user.id),
+          this.blocks.listRelatedUserIds(user.id)
+        ])
+      : [[], []];
+    this.ensureEventVisibility(event, user, blockerIds, this.clock());
     return this.page({ ...query, organizerId: event.organizerId, eventId, blockedAuthorIds });
   }
 
@@ -203,7 +208,7 @@ export class EventReviewsUseCase {
   private async reviewContext(user: AuthUser, eventId: string, tx: TransactionContext) {
     const { event, events } = await this.lockCompletedEvent(eventId, tx);
     const now = this.clock();
-    const blockedIds = await this.blocks.listRelatedUserIds(user.id, tx);
+    const blockedIds = await this.blocks.listBlockerIds(user.id, tx);
     this.ensureEventVisibility(event, user, blockedIds, now);
     if (
       !this.access.canPostEventContent(user) ||

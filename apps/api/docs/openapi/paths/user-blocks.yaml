@@ -1,0 +1,63 @@
+/api/v1/users/me/blocks:
+  get:
+    tags: [Users]
+    summary: List users blocked by the current user
+    security: &userBlockSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200':
+        description: Outgoing blocks ordered newest first
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: array
+                  items:
+                    type: object
+                    required: [userId, createdAt]
+                    properties:
+                      userId: { type: string, format: uuid }
+                      createdAt: { type: string, format: date-time }
+      '401': &blockAuthRequired
+        description: Authentication required
+      '403': &blockInactiveAccount
+        description: Inactive account
+/api/v1/users/me/blocks/{userId}:
+  parameters:
+    - name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [Users]
+    summary: Block another user
+    description: >
+      The blocked user loses access to the current user's events and cannot join them.
+      The current user no longer sees comments by the blocked user.
+      Existing applications and participations retain their status.
+    security: *userBlockSecurity
+    responses:
+      '204':
+        description: Block exists
+      '400': &blockInvalidId
+        description: Invalid user ID
+      '401': *blockAuthRequired
+      '403': *blockInactiveAccount
+      '404':
+        description: User not found
+      '422':
+        description: Cannot block oneself
+  delete:
+    tags: [Users]
+    summary: Remove the current user's block
+    security: *userBlockSecurity
+    responses:
+      '204':
+        description: The outgoing block is absent
+      '400': *blockInvalidId
+      '401': *blockAuthRequired
+      '403': *blockInactiveAccount

@@ -11,6 +11,7 @@ import type { LocationProvider } from '../../src/modules/geolocation/index.js';
 import {
   AccessService,
   createProfilePhotosRouter,
+  createUserBlocksRouter,
   createUsersModule
 } from '../../src/modules/users/index.js';
 import type { ImageOwnership } from '../../src/modules/storage/index.js';
@@ -227,6 +228,7 @@ describe('event management and feed with PostgreSQL', () => {
     app.use(express.json());
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
+    app.use('/users/me/blocks', createUserBlocksRouter(requireAuth, users.blockSettings));
     if (images) app.use('/users/me/photos', createProfilePhotosRouter(requireAuth, users.photos, images));
     app.use('/notifications', notifications.router);
     app.use('/admin', moderation.adminUsersRouter);
@@ -235,6 +237,36 @@ describe('event management and feed with PostgreSQL', () => {
     app.use(errorHandler);
     return { api: request(app), notifications, moderation };
   }
+
+  it('manages outgoing blocks without changing an existing approval', async () => {
+    const [owner, participant] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, participant]);
+    const ownerEvent = await publishForFeed(owner, {});
+    const participantEvent = await publishForFeed(participant, {});
+    await manageParticipation.join(participant, ownerEvent.id);
+    const path = '/users/me/blocks';
+
+    await api.get(path).expect(401);
+    await api.put(`${path}/${owner.id.toUpperCase()}`).set('X-Test-User', owner.id).expect(422);
+    await api.put(`${path}/${randomUUID()}`).set('X-Test-User', owner.id).expect(404);
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    const outgoing = await api.get(path).set('X-Test-User', owner.id).expect(200);
+    expect(outgoing.body.data).toEqual([
+      { userId: participant.id, createdAt: expect.any(String) }
+    ]);
+    const incoming = await api.get(path).set('X-Test-User', participant.id).expect(200);
+    expect(incoming.body.data).toEqual([]);
+    await api.delete(`${path}/${owner.id}`).set('X-Test-User', participant.id).expect(204);
+    await api.get(`/events/${ownerEvent.id}`).set('X-Test-User', participant.id).expect(404);
+    await api.get(`/events/${participantEvent.id}`).set('X-Test-User', owner.id).expect(200);
+
+    await api.delete(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    await api.delete(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    const restored = await api.get(`/events/${ownerEvent.id}`)
+      .set('X-Test-User', participant.id).expect(200);
+    expect(restored.body.data.participationStatus).toBe('APPROVED');
+  });
 
   it('serves event details and protects private fields across event and geolocation routes', async () => {
     const [owner, applicant, participant, other, adminUser] = await Promise.all([
@@ -292,12 +324,12 @@ describe('event management and feed with PostgreSQL', () => {
     await get(onlineDraft.id, minor).expect(404);
     await get(onlineDraft.id, participant).expect(200);
     const blocks = dataSource.getRepository(UserBlockEntity);
-    for (const [blockerId, blockedId] of [
-      [owner.id, participant.id],
-      [participant.id, owner.id]
-    ]) {
+    for (const [blockerId, blockedId, expectedStatus] of [
+      [owner.id, participant.id, 404],
+      [participant.id, owner.id, 200]
+    ] as const) {
       await blocks.insert({ blockerId, blockedId });
-      await get(onlineDraft.id, participant).expect(404);
+      await get(onlineDraft.id, participant).expect(expectedStatus);
       await blocks.delete({ blockerId, blockedId });
       await get(onlineDraft.id, participant).expect(200);
     }
@@ -671,7 +703,7 @@ describe('event management and feed with PostgreSQL', () => {
     const hidden = await publishForFeed(owner, base);
     const past = await publishForFeed(owner, base);
     const paid = await publishForFeed(owner, { ...base, isFree: false, priceText: '10 UAH' });
-    await publishForFeed(blockedByViewer, base);
+    const outgoingBlockEvent = await publishForFeed(blockedByViewer, base);
     await publishForFeed(blockingViewer, base);
 
     const events = dataSource.getRepository(EventEntity);
@@ -696,14 +728,19 @@ describe('event management and feed with PostgreSQL', () => {
       { ...query, cursor: firstPage.nextCursor ?? undefined },
       viewer
     );
-    const items = [...firstPage.items, ...secondPage.items];
-    expect(items.map((event) => event.id)).toEqual([open.id, full.id].sort());
-    expect(secondPage.nextCursor).toBeNull();
+    expect(secondPage.nextCursor).not.toBeNull();
+    const thirdPage = await getEvents.execute(
+      { ...query, cursor: secondPage.nextCursor ?? undefined },
+      viewer
+    );
+    const items = [...firstPage.items, ...secondPage.items, ...thirdPage.items];
+    expect(items.map((event) => event.id)).toEqual([open.id, full.id, outgoingBlockEvent.id].sort());
+    expect(thirdPage.nextCursor).toBeNull();
     expect(items.find((event) => event.id === full.id)?.hasAvailablePlaces).toBe(false);
     expect(toFeedEventView(items[0])).not.toHaveProperty('onlineUrl');
 
-    const onlyAvailable = await getEvents.execute({ ...query, availableOnly: true }, viewer);
-    expect(onlyAvailable.items.map((event) => event.id)).toEqual([open.id]);
+    const onlyAvailable = await getEvents.execute({ ...query, limit: 3, availableOnly: true }, viewer);
+    expect(onlyAvailable.items.map((event) => event.id)).toEqual([open.id, outgoingBlockEvent.id].sort());
     expect(items.map((event) => event.id)).not.toContain(restricted.id);
     expect(items.map((event) => event.id)).not.toContain(paid.id);
   });
@@ -906,10 +943,10 @@ describe('event management and feed with PostgreSQL', () => {
     await expect(manageParticipation.join(viewer, restricted.id))
       .rejects.toMatchObject({ statusCode: 404 });
     await blocks.delete({ blockerId: owner.id, blockedId: viewer.id });
-    await blocks.insert({ blockerId: viewer.id, blockedId: owner.id });
-    await expect(manageParticipation.join(viewer, restricted.id))
-      .rejects.toMatchObject({ statusCode: 404 });
-    await blocks.delete({ blockerId: viewer.id, blockedId: owner.id });
+    const reverseViewer = await createUser();
+    await blocks.insert({ blockerId: reverseViewer.id, blockedId: owner.id });
+    await expect(manageParticipation.join(reverseViewer, restricted.id))
+      .resolves.toMatchObject({ participation: { status: 'APPROVED' } });
 
     const request = await publishForFeed(owner, { participationMode: 'REQUEST' });
     await expect(manageParticipation.join(viewer, request.id)).resolves.toMatchObject({
@@ -993,7 +1030,7 @@ describe('event management and feed with PostgreSQL', () => {
     const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
     const { participation } = await manageParticipation.join(applicant, event.id, 'Hello');
     const blocks = dataSource.getRepository(UserBlockEntity);
-    await blocks.insert({ blockerId: applicant.id, blockedId: owner.id });
+    await blocks.insert({ blockerId: owner.id, blockedId: applicant.id });
     await expect(manageParticipation.decide(owner, event.id, participation.id, 'APPROVED'))
       .rejects.toMatchObject({ statusCode: 409 });
 
@@ -1005,7 +1042,7 @@ describe('event management and feed with PostgreSQL', () => {
     );
     expect(rejected).toMatchObject({ status: 'REJECTED', removalReason: null });
     expect(toOwnParticipationView(rejected)).not.toHaveProperty('removalReason');
-    await blocks.delete({ blockerId: applicant.id, blockedId: owner.id });
+    await blocks.delete({ blockerId: owner.id, blockedId: applicant.id });
     await expect(manageParticipation.join(applicant, event.id)).rejects.toMatchObject({
       statusCode: 409
     });
@@ -1215,6 +1252,12 @@ describe('event management and feed with PostgreSQL', () => {
     await blocks.insert({ blockerId: outsider.id, blockedId: participant.id });
     const filteredThread = await list(outsider).query({ parentId: root.id }).expect(200);
     expect(filteredThread.body.data).toEqual([]);
+    const outsiderReply = (await post(outsider, 'Reply from the blocker', root.id).expect(201))
+      .body.data;
+    const reverseThread = await list(participant).query({ parentId: root.id }).expect(200);
+    expect(reverseThread.body.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: outsiderReply.id })])
+    );
 
     const replyPath = `${path}/${reply.id}`;
     await api.delete(`${path}/${root.id}`).set('X-Test-User', outsider.id).expect(403);
@@ -1227,6 +1270,7 @@ describe('event management and feed with PostgreSQL', () => {
     expect(edited.body.data).toMatchObject({ text: 'Updated reply', isEdited: true });
     await api.delete(replyPath).set('X-Test-User', outsider.id).expect(404);
     await api.delete(replyPath).set('X-Test-User', owner.id).expect(204);
+    await api.delete(`${path}/${outsiderReply.id}`).set('X-Test-User', outsider.id).expect(204);
     await api.delete(`${path}/${secondRoot.id}`).set('X-Test-User', participant.id).expect(204);
     await api.patch(replyPath).set('X-Test-User', participant.id).send({ text: 'Changed' }).expect(404);
     const afterRemoval = await list().query({ parentId: root.id }).expect(200);

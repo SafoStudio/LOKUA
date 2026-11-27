@@ -213,17 +213,17 @@ export class EventDiscussionUseCase {
     ) {
       throw new AppError('Discussion not found', 404);
     }
-    const blockedIds = user ? await this.blocks.listRelatedUserIds(user.id, tx) : [];
+    const blockerIds = user ? await this.blocks.listBlockerIds(user.id, tx) : [];
     if (
       user?.id !== event.organizerId &&
       !(user && this.access.canAccessAdmin(user, 'ADMIN')) &&
       (event.isHiddenByAdmin ||
-        blockedIds.includes(event.organizerId) ||
+        blockerIds.includes(event.organizerId) ||
         !this.access.canViewEvent(user, event.ageRestriction, now))
     ) {
       throw new AppError('Discussion not found', 404);
     }
-    return blockedIds;
+    return user ? this.blocks.listBlockedIds(user.id, tx) : [];
   }
 
   private isCompleted(event: Event, now: Date): boolean {

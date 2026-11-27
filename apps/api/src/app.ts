@@ -19,6 +19,7 @@ interface AppDependencies {
   reportsRouter?: express.Router;
   imageMediaRouter?: express.Router;
   profilePhotosRouter?: express.Router;
+  userBlocksRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -33,7 +34,8 @@ export function createApp({
   notificationsRouter,
   reportsRouter,
   imageMediaRouter,
-  profilePhotosRouter
+  profilePhotosRouter,
+  userBlocksRouter
 }: AppDependencies) {
   const app = express();
 
@@ -125,6 +127,7 @@ export function createApp({
   if (reportsRouter) app.use(`${API_PREFIX}/reports`, reportsRouter);
   if (imageMediaRouter) app.use(`${API_PREFIX}/media`, imageMediaRouter);
   if (profilePhotosRouter) app.use(`${API_PREFIX}/users/me/photos`, profilePhotosRouter);
+  if (userBlocksRouter) app.use(`${API_PREFIX}/users/me/blocks`, userBlocksRouter);
 
   app.use(notFound);
   app.use(errorHandler);

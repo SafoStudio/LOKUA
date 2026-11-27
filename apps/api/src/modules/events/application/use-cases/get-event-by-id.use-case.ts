@@ -66,11 +66,16 @@ export class GetEventByIdUseCase {
     }
 
     const now = this.clock();
-    const blockedIds = viewer ? await this.blocks.listRelatedUserIds(viewer.id) : [];
+    const [blockerIds, blockedIds] = viewer
+      ? await Promise.all([
+          this.blocks.listBlockerIds(viewer.id),
+          this.blocks.listRelatedUserIds(viewer.id)
+        ])
+      : [[], []];
     if (
       !privileged &&
       (event.isHiddenByAdmin ||
-        blockedIds.includes(event.organizerId) ||
+        blockerIds.includes(event.organizerId) ||
         !this.access.canViewEvent(viewer, event.ageRestriction, now))
     ) {
       throw new AppError('Event not found', 404);
@@ -152,7 +157,7 @@ export class GetEventByIdUseCase {
       !owner &&
       !event.isHiddenByAdmin &&
       open &&
-      !blockedIds.includes(event.organizerId) &&
+      !blockerIds.includes(event.organizerId) &&
       this.access.canViewEvent(viewer, event.ageRestriction, now) &&
       this.access.canJoinEvent(viewer, event.ageRestriction, now) &&
       participationStatus === null;

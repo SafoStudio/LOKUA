@@ -28,7 +28,7 @@ export class ManageParticipationUseCase {
       if (
         event.isHiddenByAdmin ||
         !this.access.canViewEvent(user, event.ageRestriction, now) ||
-        (await this.blocks.listRelatedUserIds(user.id, tx)).includes(event.organizerId)
+        (await this.blocks.listBlockerIds(user.id, tx)).includes(event.organizerId)
       ) {
         throw new AppError('Event not found', 404);
       }
@@ -142,7 +142,7 @@ export class ManageParticipationUseCase {
         event.isHiddenByAdmin ||
         !applicant ||
         !this.access.canJoinEvent(applicant, event.ageRestriction, now) ||
-        (await this.blocks.listRelatedUserIds(applicant.id, tx)).includes(event.organizerId)
+        (await this.blocks.listBlockerIds(applicant.id, tx)).includes(event.organizerId)
       ) {
         throw new AppError('The applicant is no longer eligible to join', 409);
       }

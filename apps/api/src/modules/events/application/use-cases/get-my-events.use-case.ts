@@ -20,7 +20,7 @@ export class GetMyEventsUseCase {
       ...query,
       userId: user.id,
       now,
-      blockedOrganizerIds: await this.blocks.listRelatedUserIds(user.id),
+      blockedOrganizerIds: await this.blocks.listBlockerIds(user.id),
       ageRestrictions: restrictions.filter((restriction) =>
         this.access.canViewEvent(user, restriction, now)
       )

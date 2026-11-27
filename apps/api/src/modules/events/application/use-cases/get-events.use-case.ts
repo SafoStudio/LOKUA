@@ -31,7 +31,7 @@ export class GetEventsUseCase {
 
     const [city, blockedOrganizerIds] = await Promise.all([
       this.resolveCity(query.cityId, user),
-      user ? this.blocks.listRelatedUserIds(user.id) : []
+      user ? this.blocks.listBlockerIds(user.id) : []
     ]);
     const now = this.clock();
     const restrictions: AgeRestriction[] = ['ALL', 'SIXTEEN_PLUS', 'EIGHTEEN_PLUS'];

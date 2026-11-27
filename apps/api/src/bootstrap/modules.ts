@@ -1,6 +1,10 @@
 import type { DataSource } from 'typeorm';
 import { createDictionariesModule } from '../modules/dictionaries/index.js';
-import { createProfilePhotosRouter, createUsersModule } from '../modules/users/index.js';
+import {
+  createProfilePhotosRouter,
+  createUserBlocksRouter,
+  createUsersModule
+} from '../modules/users/index.js';
 import { createAuthModule } from '../modules/auth/index.js';
 import { createStorageModule } from '../modules/storage/index.js';
 import { createGeolocationModule } from '../modules/geolocation/index.js';
@@ -84,6 +88,7 @@ export function createModules(dataSource: DataSource) {
     auth: authModule,
     storage: { ...storageModule, imageMediaRouter: imageMedia.router },
     profilePhotosRouter,
+    userBlocksRouter: createUserBlocksRouter(authModule.requireAuth, usersModule.blockSettings),
     moderation: moderationModule,
     onboarding: onboardingModule,
     geolocation: geolocationModule,

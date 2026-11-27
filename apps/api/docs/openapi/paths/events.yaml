@@ -5,7 +5,8 @@
     description: >
       Lists future published and full events in ascending start-time order. The first page
       falls back to online events with DATE sorting when no city events match and format is unspecified.
-      Use the same filters on subsequent pages. Visibility depends on age, moderation and user blocks.
+      Use the same filters on subsequent pages. Visibility depends on age and moderation.
+      Signed-in viewers do not see events from organizers who have blocked them.
     security:
       - {}
       - CookieAuth: []
@@ -492,7 +493,8 @@
     summary: List event comments or replies
     description: |
       Returns top-level comments by default, or replies to the selected top-level comment.
-      Active discussions follow event visibility rules and hide comments from blocked authors.
+      Active discussions follow event visibility rules. Viewers do not see comments from authors
+      they have blocked.
       After the event ends, the discussion is available to administrators through archive mode.
       Archive mode includes soft-deleted and moderation-hidden comments.
     security:

@@ -19,7 +19,8 @@ try {
     notificationsRouter: modules.notifications.router,
     reportsRouter: modules.moderation.reportsRouter,
     imageMediaRouter: modules.storage.imageMediaRouter,
-    profilePhotosRouter: modules.profilePhotosRouter
+    profilePhotosRouter: modules.profilePhotosRouter,
+    userBlocksRouter: modules.userBlocksRouter
   });
 
   const server = app.listen(env.PORT, () => {
