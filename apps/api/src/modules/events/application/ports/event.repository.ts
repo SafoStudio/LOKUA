@@ -37,4 +37,11 @@ export interface EventRepository {
   create(organizerId: string, data: CreateEventData): Promise<Event>;
 
   findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult>;
+
+  findOrganizerHistory(query: {
+    organizerId: string;
+    ageRestrictions?: AgeRestriction[];
+    limit: number;
+    cursor?: string;
+  }): Promise<{ items: Event[]; nextCursor: string | null }>;
 }

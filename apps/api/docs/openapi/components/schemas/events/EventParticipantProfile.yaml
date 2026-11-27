@@ -1,6 +1,22 @@
 type: object
-required: [id, name, avatarUrl]
+required: [id, name, avatarUrl, age, photoUrls, cityId, interestIds, bio, languages, socialLinks]
 properties:
   id: { type: string, format: uuid }
   name: { type: [string, 'null'] }
   avatarUrl: { type: [string, 'null'] }
+  age: { type: [integer, 'null'] }
+  photoUrls:
+    type: array
+    maxItems: 3
+    items: { type: string, format: uri }
+  cityId: { type: [string, 'null'], format: uuid }
+  interestIds:
+    type: array
+    items: { type: string, format: uuid }
+  bio: { type: [string, 'null'] }
+  languages:
+    type: [array, 'null']
+    items: { type: string }
+  socialLinks:
+    type: [object, 'null']
+    additionalProperties: { type: string, format: uri }

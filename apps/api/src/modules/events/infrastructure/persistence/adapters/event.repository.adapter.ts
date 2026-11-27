@@ -485,6 +485,36 @@ export class EventRepositoryAdapter
     };
   }
 
+  async findOrganizerHistory(query: Parameters<EventRepository['findOrganizerHistory']>[0]) {
+    const { organizerId, ageRestrictions, limit, cursor } = query;
+    if (ageRestrictions?.length === 0) return { items: [], nextCursor: null };
+
+    const builder = this.repository
+      .createQueryBuilder('event')
+      .where('event.organizer_id = :organizerId', { organizerId })
+      .andWhere("event.status = 'COMPLETED' AND event.first_ends_at IS NOT NULL")
+      .andWhere('event.is_hidden_by_admin = false');
+    if (ageRestrictions) {
+      builder.andWhere('event.age_restriction IN (:...ageRestrictions)', { ageRestrictions });
+    }
+    if (cursor) {
+      const anchor = this.repository
+        .createQueryBuilder('anchor')
+        .select('anchor.first_ends_at, anchor.id')
+        .where('anchor.id = :cursor AND anchor.organizer_id = :organizerId')
+        .andWhere("anchor.status = 'COMPLETED' AND anchor.is_hidden_by_admin = false");
+      if (ageRestrictions) anchor.andWhere('anchor.age_restriction IN (:...ageRestrictions)');
+      builder.andWhere(`(event.first_ends_at, event.id) < (${anchor.getQuery()})`, { cursor });
+    }
+    const rows = await builder
+      .orderBy('event.first_ends_at', 'DESC')
+      .addOrderBy('event.id', 'DESC')
+      .limit(limit + 1)
+      .getMany();
+    const items = rows.slice(0, limit).map((row) => this.toDomain(row));
+    return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
+  }
+
   async findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult> {
     let cursor: EventCursor | undefined;
     if (query.cursor) {

@@ -1,4 +1,5 @@
 import { AppError } from '../../../../common/index.js';
+import { calculateAge } from '../../../users/index.js';
 import type {
   AccessService,
   AuthUser,
@@ -32,6 +33,7 @@ export class ListEventParticipationUseCase {
 
     const owner = event.organizerId === user.id;
     const admin = this.access.canAccessAdmin(user, 'ADMIN');
+    const now = this.clock();
     const applications = kind === 'APPLICATIONS';
     let blockedUserIds: string[] = [];
     if (applications) {
@@ -42,7 +44,7 @@ export class ListEventParticipationUseCase {
         const blockerIds = await this.blocks.listBlockerIds(user.id);
         if (
           blockerIds.includes(event.organizerId) ||
-          !this.access.canViewEvent(user, event.ageRestriction, this.clock())
+          !this.access.canViewEvent(user, event.ageRestriction, now)
         ) {
           throw new AppError('Event not found', 404);
         }
@@ -66,10 +68,10 @@ export class ListEventParticipationUseCase {
       Promise.all(
         page.map(async (participation) => ({
           participation,
-          profile: await this.profile(participation.userId)
+          profile: await this.profile(participation.userId, now)
         }))
       ),
-      applications ? null : this.profile(event.organizerId)
+      applications ? null : this.profile(event.organizerId, now)
     ]);
     return {
       items,
@@ -78,12 +80,25 @@ export class ListEventParticipationUseCase {
     };
   }
 
-  private async profile(userId: string) {
+  private async profile(userId: string, now: Date) {
     const profile = await this.profiles.findByUserId(userId);
+    const details = profile?.status === 'ACTIVE' ? profile : null;
+    const socialLinks = details?.socialLinks;
     return {
       id: userId,
-      name: profile?.name ?? null,
-      avatarUrl: profile?.avatarUrl ?? null
+      name: details?.name ?? (profile?.status === 'DELETED' ? profile.name : null),
+      avatarUrl: details?.avatarUrl ?? null,
+      age: calculateAge(details?.birthDate ?? null, now),
+      photoUrls: details?.photoUrls ?? [],
+      cityId: details?.cityId ?? null,
+      interestIds: details?.interestIds ?? [],
+      bio: details?.bio ?? null,
+      languages: details?.languages ?? null,
+      socialLinks: socialLinks
+        ? Object.fromEntries(
+            Object.entries(socialLinks).filter(([, url]) => /^https?:\/\//i.test(url))
+          )
+        : null
     };
   }
 }

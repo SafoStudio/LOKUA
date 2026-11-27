@@ -1,4 +1,5 @@
 import { AppError } from '../../../../common/index.js';
+import { calculateAge } from '../../../users/index.js';
 import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
 import type {
   AccessService,
@@ -9,6 +10,7 @@ import type {
 import type { AgeRestriction, Event } from '../../domain/index.js';
 import type { EventReview } from '../../domain/models/event-review.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
+import type { EventRepository } from '../ports/event.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 import type { NotificationPublisher } from '../../../notifications/index.js';
 import { publishEventNotification } from '../publish-event-notification.js';
@@ -25,12 +27,13 @@ const reviewAgeRestrictions: AgeRestriction[] = ['ALL', 'SIXTEEN_PLUS', 'EIGHTEE
 
 export class EventReviewsUseCase {
   constructor(
-    private readonly events: Pick<EventParticipationRepository, 'findEvent'> & {
-      inTransaction(
-        tx: TransactionContext
-      ): Pick<EventParticipationRepository, 'lockEvent' | 'findParticipation'> &
-        Pick<EventManagementRepository, 'lockOrganizer'>;
-    },
+    private readonly events: Pick<EventParticipationRepository, 'findEvent'> &
+      Pick<EventRepository, 'findOrganizerHistory'> & {
+        inTransaction(
+          tx: TransactionContext
+        ): Pick<EventParticipationRepository, 'lockEvent' | 'findParticipation'> &
+          Pick<EventManagementRepository, 'lockOrganizer'>;
+      },
     private readonly reviews: EventReviewRepository,
     private readonly unitOfWork: UnitOfWork,
     private readonly access: AccessService,
@@ -89,11 +92,26 @@ export class EventReviewsUseCase {
 
   async profile(organizerId: string, user: AuthUser | null) {
     const { profile, filters } = await this.profileContext(organizerId, user);
-    const [rating, reviews] = await Promise.all([
+    const [rating, reviews, history] = await Promise.all([
       this.rating(organizerId),
-      this.page({ ...filters, limit: previewLimit })
+      this.page({ ...filters, limit: previewLimit }),
+      this.events.findOrganizerHistory({
+        organizerId,
+        ageRestrictions: filters.ageRestrictions,
+        limit: previewLimit
+      })
     ]);
-    return { profile, rating, reviews };
+    const age = user ? calculateAge(profile.birthDate ?? null, this.clock()) : undefined;
+    return { profile, age, rating, reviews, history };
+  }
+
+  async listOrganizerHistory(organizerId: string, user: AuthUser | null, query: ReviewPageQuery) {
+    const { filters } = await this.profileContext(organizerId, user);
+    return this.events.findOrganizerHistory({
+      ...query,
+      organizerId,
+      ageRestrictions: filters.ageRestrictions
+    });
   }
 
   async listForOrganizer(organizerId: string, user: AuthUser | null, query: ReviewPageQuery) {

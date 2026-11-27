@@ -174,11 +174,11 @@
       schema: { type: string, format: uuid }
   get:
     tags: [Events]
-    summary: Get a public organizer profile with ratings and reviews
+    summary: Get a public organizer profile with ratings, reviews, and event history
     security: *publicReviewSecurity
     responses:
       '200':
-        description: Public profile with rating and review preview
+        description: Public profile with rating and previews of reviews and event history
         headers: *privateReviewHeaders
         content:
           application/json:
@@ -203,6 +203,27 @@
     parameters: *reviewPageParameters
     responses:
       '200': *reviewPageResponse
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound
+
+/api/v1/users/{id}/events:
+  parameters: *reviewOrganizerId
+  get:
+    tags: [Events]
+    summary: List completed events organized by the user
+    description: Orders visible completed events by end time, newest first. Age, moderation and blocking rules apply.
+    security: *publicReviewSecurity
+    parameters: *reviewPageParameters
+    responses:
+      '200':
+        description: Visible completed events
+        headers: *privateReviewHeaders
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizerEventHistoryPage'
       '400': *reviewValidation
       '401': *reviewUnauthorized
       '403': *reviewForbidden

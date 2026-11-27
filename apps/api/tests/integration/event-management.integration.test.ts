@@ -1623,6 +1623,94 @@ describe('event management and feed with PostgreSQL', () => {
     ]);
   });
 
+  it('shares full profiles with the organizer and approved participants', async () => {
+    const [owner, applicant, attendee, outsider, staff] = await Promise.all([
+      createUser(), createUser(), createUser(), createUser(), createUser()
+    ]);
+    const admin = { ...staff, role: 'ADMIN' as const };
+    const api = createEventsTestApi([owner, applicant, attendee, outsider, admin]);
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const first = (await manageParticipation.join(applicant, event.id, 'Hello')).participation;
+    const second = (await manageParticipation.join(attendee, event.id)).participation;
+    await manageParticipation.decide(owner, event.id, second.id, 'APPROVED');
+    await dataSource.getRepository(UserEntity).update(applicant.id, {
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com', legacy: 'javascript:void(0)' }
+    });
+    const applications = `/events/${event.id}/applications`;
+    const participants = `/events/${event.id}/participants`;
+    const get = (path: string, user: AuthUser) => api.get(path).set('X-Test-User', user.id);
+    await api.get(participants).expect(401);
+    await get(applications, attendee).expect(404);
+    await get(participants, applicant).expect(403);
+    await get(participants, outsider).expect(403);
+    const pending = await get(applications, owner).expect(200);
+    const profile = pending.body.data[0].user;
+    expect(profile).toMatchObject({
+      id: applicant.id,
+      age: expect.any(Number),
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    });
+    expect(profile.socialLinks).not.toHaveProperty('legacy');
+    expect(profile).not.toHaveProperty('birthDate');
+    expect(profile).not.toHaveProperty('email');
+    await manageParticipation.decide(owner, event.id, first.id, 'APPROVED');
+    for (const viewer of [attendee, admin]) {
+      const roster = await get(participants, viewer).expect(200);
+      expect(roster.body.data.find(({ user }: { user: { id: string } }) => user.id === applicant.id)?.user)
+        .toEqual(profile);
+    }
+    await dataSource.getRepository(UserBlockEntity).insert({
+      blockerId: applicant.id,
+      blockedId: attendee.id
+    });
+    const filtered = await get(participants, attendee).expect(200);
+    expect(filtered.body.data.map(({ user }: { user: { id: string } }) => user.id))
+      .toEqual([attendee.id]);
+  });
+
+  it('paginates public organizer history and filters age, hidden events, and blocks', async () => {
+    const [owner, viewer] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, viewer]);
+    const [first, second, restricted, hidden, cancelled, future] = await Promise.all([
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, { ageRestriction: 'EIGHTEEN_PLUS' }),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {})
+    ]);
+    const events = dataSource.getRepository(EventEntity);
+    await events.update([first.id, second.id, restricted.id, hidden.id], { status: 'COMPLETED' });
+    await events.update(hidden.id, { isHiddenByAdmin: true });
+    await events.update(cancelled.id, { status: 'CANCELLED' });
+    const path = `/users/${owner.id}`;
+    const expected = [first.id, second.id].sort().reverse();
+    const profile = await api.get(path).expect(200);
+    expect(profile.body.data).not.toHaveProperty('age');
+    expect(profile.body.data.history.data.map(({ id }: { id: string }) => id)).toEqual(expected);
+    const page = await api.get(`${path}/events`).query({ limit: 1 }).expect(200);
+    expect(page.body.pagination).toEqual({ nextCursor: expected[0], hasMore: true });
+    expect(page.body.data[0]).not.toHaveProperty('onlineUrl');
+    expect(page.body.data[0]).not.toHaveProperty('primaryLocationId');
+    const next = await api.get(`${path}/events`).query({ limit: 1, cursor: expected[0] }).expect(200);
+    expect(next.body.data).toMatchObject([{ id: expected[1] }]);
+    expect(next.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    const authenticated = await api.get(path).set('X-Test-User', viewer.id).expect(200);
+    expect(authenticated.body.data.age).toEqual(expect.any(Number));
+    expect(authenticated.body.data.history.data.map(({ id }: { id: string }) => id).sort())
+      .toEqual([...expected, restricted.id].sort());
+    expect(authenticated.body.data.history.data.map(({ id }: { id: string }) => id))
+      .not.toContain(future.id);
+    await dataSource.getRepository(UserBlockEntity).insert({ blockerId: owner.id, blockedId: viewer.id });
+    await api.get(`${path}/events`).set('X-Test-User', viewer.id).expect(404);
+  });
+
   it('edits the private profile while enforcing immutable and required fields', async () => {
     const user = await createUser();
     const api = createEventsTestApi([user]);

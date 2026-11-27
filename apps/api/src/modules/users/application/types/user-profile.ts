@@ -11,6 +11,7 @@ export interface UserProfile {
   onboardingCompleted: boolean;
   createdAt: Date;
   status?: UserStatus;
+  birthDate?: Date | null;
   bio?: string | null;
   languages?: string[] | null;
   socialLinks?: Record<string, string> | null;

@@ -13,6 +13,7 @@ interface UserProfileRow {
   photoUrls: string[];
   interestIds: string[] | null;
   status: UserProfile['status'];
+  birthDate: string | null;
   bio: string | null;
   languages: string[] | null;
   socialLinks: Record<string, string> | null;
@@ -24,6 +25,7 @@ const SQL = `
     u.email,
     u.name,
     u.status,
+    to_char(u.birth_date, 'YYYY-MM-DD') AS "birthDate",
     u.bio,
     u.languages,
     u.social_links AS "socialLinks",
@@ -62,6 +64,7 @@ export class UserProfileProviderAdapter implements UserProfileProvider {
       email: row.email,
       name: row.name,
       status: row.status,
+      birthDate: row.birthDate ? new Date(`${row.birthDate}T00:00:00Z`) : null,
       bio: row.bio,
       languages: row.languages,
       socialLinks: row.socialLinks,
