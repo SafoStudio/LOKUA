@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     },
     upload: vi.fn(),
     delete: vi.fn(),
+    deleteAccountImages: vi.fn(),
     signedDownload: vi.fn(),
     signedUpload: vi.fn(),
     s3Constructor: vi.fn()
@@ -31,6 +32,7 @@ vi.mock('../../../src/modules/storage/infrastructure/index.js', () => ({
         return {
             upload: mocks.upload,
             delete: mocks.delete,
+            deleteAccountImages: mocks.deleteAccountImages,
             getSignedDownloadUrl: mocks.signedDownload,
             getSignedUploadUrl: mocks.signedUpload
         };
@@ -44,6 +46,7 @@ describe('createStorageModule', () => {
     beforeEach(() => {
         mocks.upload.mockReset().mockResolvedValue({ key: 'avatars/user-1/photo.jpg' });
         mocks.delete.mockReset().mockResolvedValue(undefined);
+        mocks.deleteAccountImages.mockReset().mockResolvedValue(undefined);
         mocks.signedDownload
             .mockReset()
             .mockResolvedValue('https://signed.example/download');
@@ -69,6 +72,12 @@ describe('createStorageModule', () => {
             secretAccessKey: mocks.env.STORAGE_SECRET_ACCESS_KEY,
             forcePathStyle: mocks.env.STORAGE_FORCE_PATH_STYLE
         });
+    });
+
+    it('delegates account image deletion to the S3 adapter', async () => {
+        const { deleteAccountImages } = createStorageModule();
+        await deleteAccountImages('user-1');
+        expect(mocks.deleteAccountImages).toHaveBeenCalledWith('user-1');
     });
 
     it('delegates upload to the port', async () => {

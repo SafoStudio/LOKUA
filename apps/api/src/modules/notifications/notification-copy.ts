@@ -74,6 +74,11 @@ export const notificationCopy: Record<
     message: 'Організатор відповів на ваш відгук.',
     email: false
   },
+  ACCOUNT_DELETION_REQUESTED: {
+    title: 'Запит на видалення акаунта',
+    message: 'Ви можете відновити акаунт протягом 30 днів з моменту запиту.',
+    email: true
+  },
   ACCOUNT_STATUS_CHANGED: {
     title: 'Статус акаунта змінено',
     message: 'Статус вашого акаунта було змінено.',

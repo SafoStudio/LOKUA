@@ -20,7 +20,8 @@ try {
     reportsRouter: modules.moderation.reportsRouter,
     imageMediaRouter: modules.storage.imageMediaRouter,
     profilePhotosRouter: modules.profilePhotosRouter,
-    userBlocksRouter: modules.userBlocksRouter
+    userBlocksRouter: modules.userBlocksRouter,
+    accountDeletionRouter: modules.accountDeletionRouter
   });
 
   const server = app.listen(env.PORT, () => {
@@ -30,6 +31,7 @@ try {
   const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
   const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
   const stopBlockExpiry = modules.moderation.startBlockExpiryWorker();
+  const stopAccountDeletion = modules.startAccountDeletionWorker();
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
@@ -39,7 +41,8 @@ try {
     const workersStopped = Promise.all([
       stopEventLifecycleWorker(),
       stopNotificationDelivery(),
-      stopBlockExpiry()
+      stopBlockExpiry(),
+      stopAccountDeletion()
     ]);
 
     server.close(async (closeErr) => {

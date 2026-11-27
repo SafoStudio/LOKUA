@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client
 } from '@aws-sdk/client-s3';
@@ -52,6 +53,23 @@ export class S3StorageService implements StorageService {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  async deleteAccountImages(ownerId: string): Promise<void> {
+    let continuationToken: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: `images/${ownerId}/`,
+          ContinuationToken: continuationToken
+        })
+      );
+      for (const object of page.Contents ?? []) {
+        if (object.Key) await this.delete(object.Key);
+      }
+      continuationToken = page.NextContinuationToken;
+    } while (continuationToken);
   }
 
   async getSignedDownloadUrl(key: string, options: SignedUrlOptions): Promise<string> {

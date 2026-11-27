@@ -88,6 +88,14 @@ Variable Description
 
 #### STORAGE_ACCESS_KEY_ID / STORAGE_SECRET_ACCESS_KEY _S3 credentials_
 
+The account deletion worker lists and deletes objects under `images/<userId>/`. The storage
+credentials need bucket listing and object deletion access for that prefix. Configure lifecycle
+rules for retained object versions if the bucket uses versioning.
+
+Account recovery emails link to `CLIENT_URL/account/restore#token=...`. That client page reads the
+fragment and posts the token to `/api/v1/auth/account/restore`. After a successful response, the
+user signs in again.
+
 #### STORAGE_FORCE_PATH_STYLE _true for MinIO, false for R2_
 
 #### STORAGE_SIGNED_URL_TTL _Signed URL TTL (default 900 s)_

@@ -62,12 +62,23 @@ export class RefreshTokensUseCase {
     const user = await this.users.findById(session.userId);
 
     if (!user) throw new AppError('User not found', 401);
+    if (
+      user.status === 'PENDING_DELETION' ||
+      user.status === 'DELETED' ||
+      user.sessionVersion !== payload.sessionVersion
+    ) {
+      throw new AppError('Invalid refresh token', 401);
+    }
 
     const newSessionId = randomUUID();
+    const claims = {
+      userId: user.id,
+      ...(user.sessionVersion ? { sessionVersion: user.sessionVersion } : {})
+    };
 
     const [accessToken, newRefreshToken] = await Promise.all([
-      this.tokens.signAccessToken({ userId: user.id }),
-      this.tokens.signRefreshToken({ userId: user.id, jti: newSessionId })
+      this.tokens.signAccessToken(claims),
+      this.tokens.signRefreshToken({ ...claims, jti: newSessionId })
     ]);
 
     const newTokenHash = createHash('sha256').update(newRefreshToken).digest('hex');

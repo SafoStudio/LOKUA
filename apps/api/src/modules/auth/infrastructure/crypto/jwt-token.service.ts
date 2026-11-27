@@ -16,10 +16,11 @@ export class JwtTokenService implements TokenService {
   }
 
   async signRefreshToken(payload: RefreshTokenPayload): Promise<string> {
-    return new SignJWT({ userId: payload.userId })
+    const { jti, ...claims } = payload;
+    return new SignJWT(claims)
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
-      .setJti(payload.jti)
+      .setJti(jti)
       .setExpirationTime(env.JWT_REFRESH_TTL)
       .sign(refreshSecret);
   }
@@ -33,7 +34,8 @@ export class JwtTokenService implements TokenService {
       throw new AppError('Invalid access token payload');
     }
 
-    return { userId: payload.userId };
+    const { userId, sessionVersion } = payload;
+    return { userId, ...(typeof sessionVersion === 'string' ? { sessionVersion } : {}) };
   }
 
   async verifyRefreshToken(token: string): Promise<RefreshTokenPayload> {
@@ -45,6 +47,7 @@ export class JwtTokenService implements TokenService {
       throw new AppError('Invalid refresh token payload');
     }
 
-    return { userId: payload.userId, jti: payload.jti };
+    const { userId, jti, sessionVersion } = payload;
+    return { userId, jti, ...(typeof sessionVersion === 'string' ? { sessionVersion } : {}) };
   }
 }

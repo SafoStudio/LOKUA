@@ -20,6 +20,7 @@ interface AppDependencies {
   imageMediaRouter?: express.Router;
   profilePhotosRouter?: express.Router;
   userBlocksRouter?: express.Router;
+  accountDeletionRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -35,7 +36,8 @@ export function createApp({
   reportsRouter,
   imageMediaRouter,
   profilePhotosRouter,
-  userBlocksRouter
+  userBlocksRouter,
+  accountDeletionRouter
 }: AppDependencies) {
   const app = express();
 
@@ -102,6 +104,7 @@ export function createApp({
   app.use('/docs', createDocsRouter());
 
   app.use(`${API_PREFIX}/auth`, authRouter);
+  if (accountDeletionRouter) app.use(`${API_PREFIX}/auth`, accountDeletionRouter);
 
   if (onboardingRouter) {
     app.use(`${API_PREFIX}/onboarding`, onboardingRouter);

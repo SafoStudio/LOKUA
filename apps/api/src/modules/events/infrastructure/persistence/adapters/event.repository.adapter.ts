@@ -158,6 +158,26 @@ export class EventRepositoryAdapter
     ]);
   }
 
+  async isOrganizerActive(id: string): Promise<boolean> {
+    const [user] = await this.repository.query<{ status: string }[]>(
+      'SELECT status FROM users WHERE id = $1',
+      [id]
+    );
+    return user?.status === 'ACTIVE';
+  }
+
+  async lockUpcoming(organizerId: string, now: Date): Promise<Event[]> {
+    const rows = await this.repository
+      .createQueryBuilder('event')
+      .where('event.organizerId = :organizerId', { organizerId })
+      .andWhere("event.status IN ('PUBLISHED', 'FULL')")
+      .andWhere('event.firstStartsAt > :now', { now })
+      .orderBy('event.id', 'ASC')
+      .setLock('pessimistic_write')
+      .getMany();
+    return rows.map((row) => this.toDomain(row));
+  }
+
   async findOwned(id: string, organizerId: string, lock = false): Promise<Event | null> {
     const entity = await this.repository.findOne({
       where: { id, organizerId },

@@ -12,6 +12,7 @@ interface UserProfileRow {
   avatarUrl: string | null;
   photoUrls: string[];
   interestIds: string[] | null;
+  status: UserProfile['status'];
 }
 
 const SQL = `
@@ -19,6 +20,7 @@ const SQL = `
     u.id,
     u.email,
     u.name,
+    u.status,
     u.city_id AS "cityId",
     u.onboarding_completed AS "onboardingCompleted",
     u.created_at AS "createdAt",
@@ -53,6 +55,7 @@ export class UserProfileProviderAdapter implements UserProfileProvider {
       id: row.id,
       email: row.email,
       name: row.name,
+      status: row.status,
       avatarUrl: row.avatarUrl,
       photoUrls: row.photoUrls,
       cityId: row.cityId,

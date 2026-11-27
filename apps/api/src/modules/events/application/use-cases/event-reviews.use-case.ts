@@ -192,7 +192,9 @@ export class EventReviewsUseCase {
     const blockedAuthorIds = user ? await this.blocks.listRelatedUserIds(user.id) : [];
     if (blockedAuthorIds.includes(organizerId)) throw new AppError('Profile not found', 404);
     const profile = await this.profiles.findByUserId(organizerId);
-    if (!profile) throw new AppError('Profile not found', 404);
+    if (!profile || profile.status === 'PENDING_DELETION' || profile.status === 'DELETED') {
+      throw new AppError('Profile not found', 404);
+    }
     const ageRestrictions = this.visibleAgeRestrictions(organizerId, user, this.clock());
     return { profile, filters: { organizerId, blockedAuthorIds, ageRestrictions } };
   }
@@ -279,6 +281,9 @@ export class EventReviewsUseCase {
 
   private async author(id: string) {
     const profile = await this.profiles.findByUserId(id);
+    if (profile?.status === 'DELETED') {
+      return { id: null, name: profile.name, avatarUrl: null };
+    }
     return { id, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
   }
 }

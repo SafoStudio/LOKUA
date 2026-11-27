@@ -19,14 +19,19 @@ interface DeliveryRow {
   email: string;
   allowed: boolean;
   attempts: number;
+  recipientId: string;
+  deletionRequestedAt: Date | null;
 }
+
+export type AccountRecoveryLink = (userId: string, requestedAt: Date) => Promise<string>;
 
 export class NotificationStore implements NotificationPublisher {
   private readonly repository: Repository<NotificationEntity>;
 
   constructor(
     private readonly dataSource: DataSource,
-    private readonly sendEmail: NotificationEmailSender
+    private readonly sendEmail: NotificationEmailSender,
+    private readonly accountRecoveryLink?: AccountRecoveryLink
   ) {
     this.repository = dataSource.getRepository(NotificationEntity);
   }
@@ -109,7 +114,14 @@ export class NotificationStore implements NotificationPublisher {
     return this.dataSource.transaction(async (manager) => {
       const [row] = await manager.query<DeliveryRow[]>(
         `SELECT notification.id, notification.type, notification.title, notification.message,
-                recipient.email, recipient.email_notifications_enabled AND recipient.email_verified
+                recipient.id AS "recipientId", recipient.email,
+                CASE WHEN recipient.status = 'PENDING_DELETION'
+                  AND notification.deduplication_key = concat(
+                    'account-deletion:', recipient.id, ':',
+                    (extract(epoch FROM recipient.deletion_requested_at) * 1000)::bigint
+                  ) THEN recipient.deletion_requested_at
+                END AS "deletionRequestedAt",
+                recipient.email_notifications_enabled AND recipient.email_verified
                    AND recipient.status = 'ACTIVE'
                    AND (
                      notification.type <> 'EVENT_REMINDER_24H' OR EXISTS (
@@ -132,9 +144,20 @@ export class NotificationStore implements NotificationPublisher {
       );
       if (!row) return false;
       let nextAttempt: Date | null = null;
-      if (row.allowed || row.type === 'ACCOUNT_STATUS_CHANGED') {
+      const sendRecovery = row.type === 'ACCOUNT_DELETION_REQUESTED' && row.deletionRequestedAt;
+      if (
+        sendRecovery ||
+        row.type === 'ACCOUNT_STATUS_CHANGED' ||
+        (row.type !== 'ACCOUNT_DELETION_REQUESTED' && row.allowed)
+      ) {
         try {
-          await this.sendEmail({ to: row.email, title: row.title, message: row.message });
+          let message = row.message;
+          if (sendRecovery) {
+            if (!this.accountRecoveryLink) throw new Error('Account recovery link unavailable');
+            const link = await this.accountRecoveryLink(row.recipientId, sendRecovery);
+            message = `${message}\nВідновити акаунт: ${link}`;
+          }
+          await this.sendEmail({ to: row.email, title: row.title, message });
         } catch {
           const delay = Math.min(60 * 2 ** row.attempts, 3600);
           nextAttempt = new Date(Date.now() + delay * 1000);

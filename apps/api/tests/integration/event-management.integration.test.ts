@@ -10,10 +10,15 @@ import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
 import {
   AccessService,
+  AccountDeletionService,
+  TypeOrmAccountDeletionStore,
   createProfilePhotosRouter,
   createUserBlocksRouter,
   createUsersModule
 } from '../../src/modules/users/index.js';
+import { createAccountDeletionRouter, createAccountRecoveryLink } from '../../src/modules/auth/index.js';
+import { JwtTokenService } from '../../src/modules/auth/infrastructure/crypto/jwt-token.service.js';
+import { createAuthMiddleware } from '../../src/modules/auth/presentation/http/auth.middleware.js';
 import type { ImageOwnership } from '../../src/modules/storage/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
@@ -196,7 +201,8 @@ describe('event management and feed with PostgreSQL', () => {
     const notifications = createNotificationsModule({
       dataSource,
       requireAuth,
-      sendEmail: sendEmail ?? (async () => {})
+      sendEmail: sendEmail ?? (async () => {}),
+      accountRecoveryLink: createAccountRecoveryLink
     });
     const moderation = createModerationModule({
       dataSource,
@@ -235,7 +241,7 @@ describe('event management and feed with PostgreSQL', () => {
     app.use('/reports', moderation.reportsRouter);
     app.use('/geo', geo.router);
     app.use(errorHandler);
-    return { api: request(app), notifications, moderation };
+    return { api: request(app), notifications, moderation, events };
   }
 
   it('manages outgoing blocks without changing an existing approval', async () => {
@@ -1300,9 +1306,15 @@ describe('event management and feed with PostgreSQL', () => {
       { id: secondRoot.id, isArchived: true }
     ]);
     const archivedThread = await list(admin).query({ archive: true, parentId: root.id }).expect(200);
-    expect(archivedThread.body.data).toMatchObject([
-      { id: reply.id, isArchived: true, text: 'Updated reply' }
-    ]);
+    expect(archivedThread.body.data).toHaveLength(2);
+    expect(archivedThread.body.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: reply.id, isArchived: true, text: 'Updated reply' }),
+      expect.objectContaining({
+        id: outsiderReply.id,
+        isArchived: true,
+        text: 'Reply from the blocker'
+      })
+    ]));
   });
 
   it('enforces the rolling comment quota across events and concurrent requests', async () => {
@@ -1598,6 +1610,100 @@ describe('event management and feed with PostgreSQL', () => {
     expect(cancellations.map(({ message }) => message)).toEqual([
       expect.stringContaining('Weather'), expect.stringContaining('Weather')
     ]);
+  });
+
+  it('cancels upcoming events on account deletion, restores once, and anonymizes expired accounts', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const upcoming = await publishForFeed(owner, {});
+    const completed = await publishForFeed(attendee, {});
+    await manageParticipation.join(attendee, upcoming.id);
+    await dataSource.getRepository(EventEntity).update(completed.id, { status: 'COMPLETED' });
+    const reviews = dataSource.getRepository(EventReviewEntity);
+    await reviews.insert({ eventId: completed.id, authorId: owner.id, rating: 5 });
+    const users = createUsersModule({ dataSource });
+    const tokens = new JwtTokenService();
+    const { requireAuth } = createAuthMiddleware({
+      tokenService: tokens,
+      users: users.authUsers,
+      access: users.access
+    });
+    const received: string[] = [];
+    const { api, events, notifications } = createEventsTestContext([owner, attendee], async (mail) => {
+      if (mail.to === owner.email) received.push(mail.message);
+    });
+    const removedImages: string[] = [];
+    let clock = now;
+    const accounts = new AccountDeletionService(
+      new TypeOrmUnitOfWork(dataSource),
+      new TypeOrmAccountDeletionStore(async (id) => { removedImages.push(id); }),
+      events,
+      notifications.publisher,
+      () => clock
+    );
+    const app = express();
+    app.use(express.json());
+    app.use(createAccountDeletionRouter(requireAuth, accounts));
+    app.use(errorHandler);
+    const accountApi = request(app);
+    const originalToken = await tokens.signAccessToken({ userId: owner.id });
+    const sessionId = randomUUID();
+    await dataSource.query(
+      'INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
+      [sessionId, owner.id, 'a'.repeat(64), new Date(Date.now() + 3_600_000)]
+    );
+    const remove = (token: string) =>
+      accountApi.delete('/account').set('Authorization', `Bearer ${token}`);
+    const pending = await remove(originalToken).expect(202);
+    const recoveryDeadline = new Date(pending.body.data.recoverUntil);
+    expect(recoveryDeadline.getTime() - now.getTime()).toBe(30 * 86_400_000);
+    const [session] = await dataSource.query<{ revoked_at: Date }[]>(
+      'SELECT revoked_at FROM refresh_sessions WHERE id = $1', [sessionId]
+    );
+    expect(session.revoked_at).toEqual(now);
+    const eventRows = dataSource.getRepository(EventEntity);
+    expect(await eventRows.findOneByOrFail({ id: upcoming.id })).toMatchObject({ status: 'CANCELLED' });
+    expect(await dataSource.getRepository(EventOccurrenceEntity).findOneByOrFail({ eventId: upcoming.id }))
+      .toMatchObject({ status: 'CANCELLED' });
+    await api.get(`/users/${owner.id}`).expect(404);
+    const inbox = await api.get('/notifications').set('X-Test-User', attendee.id).expect(200);
+    expect(inbox.body.data).toMatchObject([{ type: 'EVENT_CANCELLED', targetId: upcoming.id }]);
+    for (let attempt = 0; attempt < 50 && received.length === 0; attempt++) {
+      await notifications.startDeliveryWorker()();
+    }
+    const link = received.find((message) => message.includes('Відновити акаунт: '))
+      ?.split('Відновити акаунт: ')[1];
+    expect(link).toBeDefined();
+    const recoveryToken = new URLSearchParams(new URL(link!).hash.slice(1)).get('token');
+    await accountApi.post('/account/restore').send({ token: recoveryToken }).expect(204);
+    await accountApi.post('/account/restore').send({ token: recoveryToken }).expect(400);
+    await remove(originalToken).expect(401);
+    await api.get(`/users/${owner.id}`).expect(200);
+    expect(await eventRows.findOneByOrFail({ id: upcoming.id })).toMatchObject({ status: 'CANCELLED' });
+
+    clock = new Date(now.getTime() + 1000);
+    const restoredUser = await users.authUsers.findById(owner.id);
+    const freshToken = await tokens.signAccessToken({
+      userId: owner.id,
+      sessionVersion: restoredUser?.sessionVersion
+    });
+    const second = await remove(freshToken).expect(202);
+    const secondLink = await createAccountRecoveryLink(owner.id, clock);
+    const secondToken = new URLSearchParams(new URL(secondLink).hash.slice(1)).get('token');
+    clock = new Date(second.body.data.recoverUntil);
+    await accountApi.post('/account/restore').send({ token: secondToken }).expect(400);
+    expect(await accounts.finalizeNext()).toBe(true);
+    expect(await accounts.finalizeNext()).toBe(false);
+    expect(removedImages).toEqual([owner.id]);
+    const userRows = dataSource.getRepository(UserEntity);
+    expect(await userRows.findOneBy({ email: owner.email })).toBeNull();
+    expect(await userRows.findOneByOrFail({ id: owner.id })).toMatchObject({
+      status: 'DELETED', name: 'Видалений користувач', birthDate: null
+    });
+    const archivedReviews = await api.get(`/events/${completed.id}/reviews`).expect(200);
+    expect(archivedReviews.body.data).toMatchObject([{
+      rating: 5,
+      author: { id: null, name: 'Видалений користувач', avatarUrl: null }
+    }]);
   });
 
   it('moderates reported content and accounts with an audit trail', async () => {

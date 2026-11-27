@@ -41,6 +41,7 @@ export class ManageEventUseCase {
     await this.validate(user, data);
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
+      await this.lockActiveOrganizer(events, user.id);
       await this.ensureLocationAvailable(events, user.id, data.primaryLocationId);
       const event = await events.create(user.id, data);
       const tags = validateEventTags(data.tags ?? []);
@@ -154,20 +155,38 @@ export class ManageEventUseCase {
       if (!cancellationReason || cancellationReason.length > 300) {
         throw new AppError('A cancellation reason of 1 to 300 characters is required', 422);
       }
-      const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
-      await events.syncSchedule(saved, event.firstStartsAt);
-      if (this.notifications) {
-        await publishEventNotification(
-          this.notifications,
-          tx,
-          saved,
-          'EVENT_CANCELLED',
-          await events.listNotificationRecipients(saved, true),
-          cancellationReason
-        );
-      }
+      const saved = await this.cancelEvent(events, event, cancellationReason, tx);
       return { ...saved, tags: await events.readTags(id) };
     });
+  }
+
+  async cancelUpcomingForAccountDeletion(organizerId: string, now: Date, tx: TransactionContext) {
+    const events = this.events.inTransaction(tx);
+    const upcoming = await events.lockUpcoming(organizerId, now);
+    for (const event of upcoming) {
+      await this.cancelEvent(events, event, 'Організатор подав запит на видалення акаунта', tx);
+    }
+  }
+
+  private async cancelEvent(
+    events: EventManagementRepository,
+    event: Event,
+    cancellationReason: string,
+    tx: TransactionContext
+  ): Promise<Event> {
+    const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
+    await events.syncSchedule(saved, event.firstStartsAt);
+    if (this.notifications) {
+      await publishEventNotification(
+        this.notifications,
+        tx,
+        saved,
+        'EVENT_CANCELLED',
+        await events.listNotificationRecipients(saved, true),
+        cancellationReason
+      );
+    }
+    return saved;
   }
 
   delete(user: AuthUser, id: string): Promise<void> {
@@ -212,11 +231,16 @@ export class ManageEventUseCase {
   ): Promise<T> {
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
-      await events.lockOrganizer(user.id);
+      await this.lockActiveOrganizer(events, user.id);
       const event = await events.findOwned(id, user.id, true);
       if (!event) throw new AppError('Event not found', 404);
       return execute(events, event, this.clock(), tx);
     });
+  }
+
+  private async lockActiveOrganizer(events: EventManagementRepository, userId: string) {
+    await events.lockOrganizer(userId);
+    if (!(await events.isOrganizerActive(userId))) throw new AppError('Account is inactive', 403);
   }
 
   private async ensureLocationAvailable(

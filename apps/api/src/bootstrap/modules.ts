@@ -1,11 +1,19 @@
 import type { DataSource } from 'typeorm';
+import { TypeOrmUnitOfWork } from '../common/index.js';
+import { startBatchWorker } from '../common/start-batch-worker.js';
 import { createDictionariesModule } from '../modules/dictionaries/index.js';
 import {
   createProfilePhotosRouter,
   createUserBlocksRouter,
-  createUsersModule
+  createUsersModule,
+  AccountDeletionService,
+  TypeOrmAccountDeletionStore
 } from '../modules/users/index.js';
-import { createAuthModule } from '../modules/auth/index.js';
+import {
+  createAccountDeletionRouter,
+  createAccountRecoveryLink,
+  createAuthModule
+} from '../modules/auth/index.js';
 import { createStorageModule } from '../modules/storage/index.js';
 import { createGeolocationModule } from '../modules/geolocation/index.js';
 import { createEventsModule } from '../modules/events/index.js';
@@ -35,7 +43,8 @@ export function createModules(dataSource: DataSource) {
   const notificationsModule = createNotificationsModule({
     dataSource,
     requireAuth: authModule.requireAuth,
-    sendEmail: authModule.sendNotificationEmail
+    sendEmail: authModule.sendNotificationEmail,
+    accountRecoveryLink: createAccountRecoveryLink
   });
 
   const moderationModule = createModerationModule({
@@ -82,10 +91,20 @@ export function createModules(dataSource: DataSource) {
     images: imageMedia.images
   });
 
+  const accountDeletion = new AccountDeletionService(
+    new TypeOrmUnitOfWork(dataSource),
+    new TypeOrmAccountDeletionStore(storageModule.deleteAccountImages),
+    eventsModule,
+    notificationsModule.publisher
+  );
+
   return {
     dictionaries: dictionariesModule,
     users: usersModule,
     auth: authModule,
+    accountDeletionRouter: createAccountDeletionRouter(authModule.requireAuth, accountDeletion),
+    startAccountDeletionWorker: () =>
+      startBatchWorker(() => accountDeletion.finalizeNext(), 60_000, 'Account deletion failed'),
     storage: { ...storageModule, imageMediaRouter: imageMedia.router },
     profilePhotosRouter,
     userBlocksRouter: createUserBlocksRouter(authModule.requireAuth, usersModule.blockSettings),

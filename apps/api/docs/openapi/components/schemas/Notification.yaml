@@ -20,6 +20,7 @@ properties:
       - NEW_REVIEW
       - REVIEW_REPLY
       - ACCOUNT_STATUS_CHANGED
+      - ACCOUNT_DELETION_REQUESTED
   targetType: { type: string }
   targetId: { type: string, format: uuid }
   title: { type: string }

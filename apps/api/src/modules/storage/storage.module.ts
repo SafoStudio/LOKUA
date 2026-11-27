@@ -45,6 +45,7 @@ export function createStorageModule() {
 
   return {
     storage: facade,
+    deleteAccountImages: storage.deleteAccountImages.bind(storage),
     createImageMedia(requireAuth: RequestHandler) {
       const limit = Math.min(maxImageUploadBytes, env.STORAGE_MAX_UPLOAD_BYTES);
       const images = new ImageMediaService(

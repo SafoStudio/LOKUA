@@ -1,6 +1,7 @@
 import type { DataSource } from 'typeorm';
 import type { RequestHandler } from 'express';
 import { TypeOrmUnitOfWork } from '../../common/index.js';
+import type { TransactionContext } from '../../common/index.js';
 import type { CategoryProvider, CityProvider } from '../dictionaries/index.js';
 import type { LocationProvider } from '../geolocation/index.js';
 import type { NotificationPublisher } from '../notifications/index.js';
@@ -152,6 +153,10 @@ export function createEventsModule({
   });
 
   return {
+    lockOrganizerForAccountChange: (id: string, tx: TransactionContext) =>
+      eventRepository.inTransaction(tx).lockOrganizer(id),
+    cancelUpcomingForAccountDeletion:
+      manageEvent.cancelUpcomingForAccountDeletion.bind(manageEvent),
     createEvent,
     getEvents,
     getEventById,

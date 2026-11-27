@@ -1,3 +1,5 @@
+import type { UserStatus } from '../../domain/index.js';
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -8,4 +10,5 @@ export interface UserProfile {
   interestIds: string[];
   onboardingCompleted: boolean;
   createdAt: Date;
+  status?: UserStatus;
 }

@@ -8,6 +8,8 @@ export interface EventManagementRepository {
     tx: TransactionContext
   ): EventManagementRepository & Pick<EventRepository, 'create'>;
   lockOrganizer(id: string): Promise<void>;
+  isOrganizerActive(id: string): Promise<boolean>;
+  lockUpcoming(organizerId: string, now: Date): Promise<Event[]>;
   findOwned(id: string, organizerId: string, lock?: boolean): Promise<Event | null>;
   countUpcoming(organizerId: string, now: Date): Promise<number>;
   countApproved(event: Event): Promise<number>;
