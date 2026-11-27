@@ -1,6 +1,7 @@
 import type { Repository } from 'typeorm';
 import type { Category, CategoryProvider } from '../../../application/index.js';
 import type { CategoryEntity } from '../entities/category.entity.js';
+import type { CategoryInput } from '../../../application/admin-dictionary.js';
 
 export class CategoryRepositoryAdapter implements CategoryProvider {
   constructor(private readonly repo: Repository<CategoryEntity>) {}
@@ -18,9 +19,41 @@ export class CategoryRepositoryAdapter implements CategoryProvider {
   async listActive(): Promise<Category[]> {
     const entities = await this.repo.find({
       where: { is_active: true },
-      order: { order_num: 'ASC', name: 'ASC' }
+      order: { order_num: 'ASC', name: 'ASC', id: 'ASC' }
     });
     return entities.map((e) => this.toDomain(e));
+  }
+
+  async listAll(): Promise<Category[]> {
+    const entities = await this.repo.find({ order: { order_num: 'ASC', name: 'ASC', id: 'ASC' } });
+    return entities.map((entity) => this.toDomain(entity));
+  }
+
+  async insert({ orderNum, isActive, ...fields }: CategoryInput): Promise<Category> {
+    const saved = await this.repo.save(
+      this.repo.create({
+        ...fields,
+        icon: fields.icon ?? null,
+        order_num: orderNum ?? 0,
+        is_active: isActive ?? true
+      })
+    );
+    return this.toDomain(saved);
+  }
+
+  async patch(
+    id: string,
+    { orderNum, isActive, ...fields }: Partial<CategoryInput>
+  ): Promise<Category | null> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .update()
+      .set({ ...fields, order_num: orderNum, is_active: isActive })
+      .where('id = :id', { id })
+      .returning('*')
+      .execute();
+    const [row] = result.raw as CategoryEntity[];
+    return row ? this.toDomain(row) : null;
   }
 
   private toDomain(entity: CategoryEntity): Category {

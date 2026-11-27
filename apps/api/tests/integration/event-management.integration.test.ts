@@ -63,6 +63,8 @@ describe('event management and feed with PostgreSQL', () => {
   let lvivId: string;
   const locationIds: string[] = [];
   const districtIds: string[] = [];
+  const categoryIds: string[] = [];
+  const interestIds: string[] = [];
 
   let listParticipation: ListEventParticipationUseCase;
   let manageParticipation: ManageParticipationUseCase;
@@ -134,6 +136,12 @@ describe('event management and feed with PostgreSQL', () => {
       if (districtIds.length) {
         await dataSource.query('DELETE FROM districts WHERE id = ANY($1::uuid[])', [districtIds]);
       }
+      if (categoryIds.length) {
+        await dataSource.query('DELETE FROM categories WHERE id = ANY($1::uuid[])', [categoryIds]);
+      }
+      if (interestIds.length) {
+        await dataSource.query('DELETE FROM interests WHERE id = ANY($1::uuid[])', [interestIds]);
+      }
     } finally {
       await dataSource.destroy();
     }
@@ -199,7 +207,8 @@ describe('event management and feed with PostgreSQL', () => {
         else res.sendStatus(401);
       });
     };
-    const { categories, cities, countries, interests } = createDictionariesModule({ dataSource });
+    const dictionaries = createDictionariesModule({ dataSource });
+    const { categories, cities, countries, interests } = dictionaries;
     const users = createUsersModule({ dataSource });
     const geo = createGeolocationModule({
       dataSource,
@@ -241,7 +250,9 @@ describe('event management and feed with PostgreSQL', () => {
       images
     });
     const app = express();
+    moderation.adminUsersRouter.use(dictionaries.adminRouter);
     app.use(express.json());
+    app.use('/dictionaries', dictionaries.router);
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
     app.use('/users/me/blocks', createUserBlocksRouter(requireAuth, users.blockSettings));
@@ -1920,6 +1931,82 @@ describe('event management and feed with PostgreSQL', () => {
       rating: 5,
       author: { id: null, name: 'Видалений користувач', avatarUrl: null }
     }]);
+  });
+
+  it('manages dictionary records as an admin and exposes active choices publicly', async () => {
+    const [owner, staff] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, { ...staff, role: 'ADMIN' }]);
+    const slug = `category-${randomUUID()}`;
+    const category = { name: slug, slug, orderNum: 20, icon: '🎲' };
+    const admin = (path: string) => api.get(path).set('X-Test-User', staff.id);
+    await api.get('/admin/categories').expect(401);
+    await api.post('/admin/categories').set('X-Test-User', owner.id).send(category).expect(403);
+    const created = await api.post('/admin/categories')
+      .set('X-Test-User', staff.id).send(category).expect(201);
+    const categoryId = created.body.data.id;
+    categoryIds.push(categoryId);
+    expect(created.body.data).toMatchObject({ ...category, isActive: true });
+    await api.post('/admin/categories').set('X-Test-User', staff.id).send(category).expect(409);
+    const publicCategories = await api.get('/dictionaries/categories').expect(200);
+    expect(publicCategories.body.data).toContainEqual(created.body.data);
+    const event = await publishForFeed(owner, { categoryId });
+    const changed = await api.patch(`/admin/categories/${categoryId}`).set('X-Test-User', staff.id)
+      .send({ orderNum: 21, icon: null, isActive: false }).expect(200);
+    expect(changed.body.data).toMatchObject({ orderNum: 21, icon: null, isActive: false });
+    expect((await api.get('/dictionaries/categories').expect(200)).body.data)
+      .not.toContainEqual(expect.objectContaining({ id: categoryId }));
+    expect((await admin('/admin/categories').expect(200)).body.data).toContainEqual(changed.body.data);
+    await expect(manageEvent.create(owner, eventData({ categoryId })))
+      .rejects.toMatchObject({ statusCode: 422 });
+    await expect(manageEvent.update(owner, event.id, { title: 'Updated existing event' }))
+      .resolves.toMatchObject({ categoryId });
+
+    const interest = await api.post('/admin/interests').set('X-Test-User', staff.id)
+      .send({ name: `Interest ${randomUUID()}` }).expect(201);
+    const interestId = interest.body.data.id;
+    interestIds.push(interestId);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .toContainEqual(interest.body.data);
+    await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
+      .send({ isActive: false }).expect(200);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .not.toContainEqual(expect.objectContaining({ id: interestId }));
+    expect((await admin('/admin/interests').expect(200)).body.data)
+      .toContainEqual(expect.objectContaining({ id: interestId, isActive: false }));
+    await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
+      .send({ isActive: true }).expect(200);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .toContainEqual(interest.body.data);
+  });
+
+  it('counts only registrations, publications and request entries in the half-open period', async () => {
+    const [owner, attendee, staff] = await Promise.all([createUser(), createUser(), createUser()]);
+    const api = createEventsTestApi([owner, attendee, { ...staff, role: 'ADMIN' }]);
+    const from = '2040-08-01T00:00:00.000Z';
+    const to = '2040-08-02T00:00:00.000Z';
+    const users = dataSource.getRepository(UserEntity);
+    await users.update(owner.id, { createdAt: new Date(from) });
+    await users.update(attendee.id, { createdAt: new Date(to) });
+    const requestEvent = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const freeEvent = await publishForFeed(owner, {});
+    const draft = await manageEvent.create(owner, eventData());
+    const application = (await manageParticipation.join(attendee, requestEvent.id)).participation;
+    const freeEntry = (await manageParticipation.join(attendee, freeEvent.id)).participation;
+    expect(application.entryMode).toBe('REQUEST');
+    expect(freeEntry.entryMode).toBe('FREE');
+    const events = dataSource.getRepository(EventEntity);
+    await events.update(requestEvent.id, { participationMode: 'FREE', publishedAt: new Date(from) });
+    await events.update(freeEvent.id, { participationMode: 'REQUEST', publishedAt: new Date(to) });
+    await events.update(draft.id, { createdAt: new Date(from) });
+    await dataSource.getRepository(EventParticipationEntity)
+      .update([application.id, freeEntry.id], { createdAt: new Date(from) });
+    const path = '/admin/statistics';
+    await api.get(path).query({ from, to }).expect(401);
+    await api.get(path).query({ from, to }).set('X-Test-User', owner.id).expect(403);
+    await api.get(path).query({ from: to, to: from }).set('X-Test-User', staff.id).expect(400);
+    const response = await api.get(path).query({ from, to }).set('X-Test-User', staff.id).expect(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.body.data).toEqual({ from, to, users: 1, events: 1, applications: 1 });
   });
 
   it('moderates reported content and accounts with an audit trail', async () => {

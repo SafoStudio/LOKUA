@@ -60,7 +60,11 @@ export class ManageEventUseCase {
       this.assertNewImages(user.id, patch, event);
       const published = event.status !== 'DRAFT';
       if (patch.isFree && patch.priceText === undefined) next.priceText = null;
-      const location = await this.validate(user, { ...next, mediaUrls: patch.mediaUrls });
+      const location = await this.validate(
+        user,
+        { ...next, mediaUrls: patch.mediaUrls },
+        event.categoryId
+      );
       if (next.primaryLocationId !== event.primaryLocationId) {
         await this.ensureLocationAvailable(events, user.id, next.primaryLocationId);
       }
@@ -261,7 +265,7 @@ export class ManageEventUseCase {
     }
   }
 
-  private async validate(user: AuthUser, data: CreateEventData) {
+  private async validate(user: AuthUser, data: CreateEventData, existingCategoryId?: string) {
     if (!this.access.canCreateEventWithRestriction(user, data.ageRestriction, this.clock())) {
       throw new AppError('Event management is not allowed for this account', 403);
     }
@@ -271,7 +275,8 @@ export class ManageEventUseCase {
     if ((data.mediaUrls?.length ?? 0) > 5) {
       throw new AppError('An event can have at most five additional photos', 422);
     }
-    if (!(await this.categories.findById(data.categoryId))) {
+    const category = await this.categories.findById(data.categoryId);
+    if (!category || (!category.isActive && category.id !== existingCategoryId)) {
       throw new AppError('Event category not found', 422);
     }
     const location = data.primaryLocationId

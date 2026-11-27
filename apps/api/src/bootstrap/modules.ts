@@ -58,6 +58,7 @@ export function createModules(dataSource: DataSource) {
     requireAuth: authModule.requireAuth,
     requireRole: authModule.requireRole
   });
+  moderationModule.adminUsersRouter.use(dictionariesModule.adminRouter);
 
   const onboardingModule = createOnboardingModule({
     dataSource,

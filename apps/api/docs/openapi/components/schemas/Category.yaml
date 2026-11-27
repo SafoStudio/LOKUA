@@ -1,0 +1,9 @@
+type: object
+required: [id, name, slug, icon, orderNum, isActive]
+properties:
+  id: { type: string, format: uuid }
+  name: { type: string }
+  slug: { type: string }
+  icon: { type: [string, 'null'] }
+  orderNum: { type: integer }
+  isActive: { type: boolean }

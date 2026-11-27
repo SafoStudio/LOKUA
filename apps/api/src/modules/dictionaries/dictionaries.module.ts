@@ -1,4 +1,9 @@
 import type { DataSource } from 'typeorm';
+import { createAdminDictionary } from './application/admin-dictionary.js';
+import {
+  createAdminDictionariesRouter,
+  createPublicDictionariesRouter
+} from './presentation/http/dictionaries.routes.js';
 import type {
   CityProvider,
   CountryProvider,
@@ -27,19 +32,22 @@ export function createDictionariesModule({ dataSource }: CreateDictionariesModul
     dataSource.getRepository(CountryEntity)
   );
 
-  const interests: InterestProvider = new InterestRepositoryAdapter(
-    dataSource.getRepository(InterestEntity)
-  );
+  const interests = new InterestRepositoryAdapter(dataSource.getRepository(InterestEntity));
 
-  const categories: CategoryProvider = new CategoryRepositoryAdapter(
-    dataSource.getRepository(CategoryEntity)
-  );
+  const categories = new CategoryRepositoryAdapter(dataSource.getRepository(CategoryEntity));
+  const publicCategories: CategoryProvider = categories;
+  const publicInterests: InterestProvider = interests;
 
   return {
     cities,
     countries,
-    interests,
-    categories
+    interests: publicInterests,
+    categories: publicCategories,
+    router: createPublicDictionariesRouter(categories, interests),
+    adminRouter: createAdminDictionariesRouter(
+      createAdminDictionary(categories),
+      createAdminDictionary(interests)
+    )
   };
 }
 

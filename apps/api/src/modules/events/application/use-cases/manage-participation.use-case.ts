@@ -56,6 +56,7 @@ export class ManageParticipationUseCase {
         const entry = {
           eventId: event.id,
           userId: user.id,
+          entryMode: mode,
           statusUpdatedAt: now
         };
         participation =
@@ -189,7 +190,9 @@ export class ManageParticipationUseCase {
   private async approve(
     events: EventParticipationRepository,
     event: Event,
-    entry: Pick<EventParticipation, 'eventId' | 'userId' | 'statusUpdatedAt'> & { id?: string }
+    entry: Pick<EventParticipation, 'eventId' | 'userId' | 'statusUpdatedAt' | 'entryMode'> & {
+      id?: string;
+    }
   ): Promise<EventParticipation> {
     const approved = await events.countApproved(event);
     if (event.capacityLimit !== null && approved >= event.capacityLimit) {

@@ -58,6 +58,7 @@ import { TrackApprovedEventParticipants1795010000000 } from '../../../src/db/mig
 import { AddDiscussionCommentQuotas1795020000000 } from '../../../src/db/migrations/1795020000000-AddDiscussionCommentQuotas.js';
 import { AddNotificationDelivery1795030000000 } from '../../../src/db/migrations/1795030000000-AddNotificationDelivery.js';
 import { SeedKyivDistricts1795040000000 } from '../../../src/db/migrations/1795040000000-SeedKyivDistricts.js';
+import { TrackParticipationEntryMode1795784659655 } from '../../../src/db/migrations/1795784659655-TrackParticipationEntryMode.js';
 
 export const TEST_DATABASE_URL =
     process.env.TEST_DATABASE_URL ?? 'postgres://lokua:lokua@localhost:5433/lokua_test';
@@ -128,7 +129,8 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
       TrackApprovedEventParticipants1795010000000,
       AddDiscussionCommentQuotas1795020000000,
       AddNotificationDelivery1795030000000,
-      SeedKyivDistricts1795040000000
+      SeedKyivDistricts1795040000000,
+      TrackParticipationEntryMode1795784659655
     ]
   });
 }

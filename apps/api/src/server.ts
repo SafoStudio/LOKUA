@@ -14,6 +14,7 @@ try {
     onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router,
     adminUsersRouter: modules.moderation.adminUsersRouter,
+    dictionariesRouter: modules.dictionaries.router,
     eventsRouter: modules.events.router,
     profilesRouter: modules.events.profilesRouter,
     notificationsRouter: modules.notifications.router,

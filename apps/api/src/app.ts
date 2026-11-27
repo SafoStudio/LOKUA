@@ -13,6 +13,7 @@ interface AppDependencies {
   onboardingRouter?: express.Router;
   geolocationRouter?: express.Router;
   adminUsersRouter?: express.Router;
+  dictionariesRouter?: express.Router;
   eventsRouter: express.Router;
   profilesRouter?: express.Router;
   notificationsRouter?: express.Router;
@@ -31,6 +32,7 @@ export function createApp({
   onboardingRouter,
   geolocationRouter,
   adminUsersRouter,
+  dictionariesRouter,
   eventsRouter,
   profilesRouter,
   notificationsRouter,
@@ -119,6 +121,7 @@ export function createApp({
   if (adminUsersRouter) {
     app.use(`${API_PREFIX}/admin`, adminUsersRouter);
   }
+  if (dictionariesRouter) app.use(`${API_PREFIX}/dictionaries`, dictionariesRouter);
 
   if (eventsRouter) {
     app.use(`${API_PREFIX}/events`, eventsRouter);
