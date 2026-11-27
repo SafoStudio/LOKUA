@@ -3,6 +3,7 @@ required:
   - email
   - name
   - password
+  - termsAccepted
 properties:
   email:
     type: string
@@ -19,3 +20,7 @@ properties:
     maxLength: 72
     description: Password (8 to 72 UTF-8 characters/bytes)
     example: Password123!
+  termsAccepted:
+    type: boolean
+    const: true
+    description: Explicit acceptance of the terms of use and privacy policy.

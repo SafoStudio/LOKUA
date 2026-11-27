@@ -52,6 +52,10 @@ import { createAuthController } from './presentation/http/auth.controller.js';
 import { createAuthMiddleware } from './presentation/http/auth.middleware.js';
 import { createRequireRole } from './presentation/http/require-role.middleware.js';
 import { createAuthRouter } from './presentation/http/auth.routes.js';
+import { ChangeEmailUseCase } from './application/use-cases/change-email.use-case.js';
+import { JwtEmailChangeTokens } from './infrastructure/crypto/email-change-tokens.js';
+import { TypeOrmEmailChangeStore } from './infrastructure/persistence/adapters/email-change.store.js';
+import { createEmailChangeRouter } from './presentation/http/email-change.routes.js';
 import { parseTtlToMs } from './application/use-cases/parse-ttl.js';
 import { env } from '../../config/env.js';
 
@@ -255,6 +259,20 @@ export function createAuthModule({
   });
 
   const router = createAuthRouter(controller, middleware);
+  const changeEmail = new ChangeEmailUseCase(
+    new TypeOrmEmailChangeStore(dataSource),
+    new JwtEmailChangeTokens(env.JWT_REFRESH_SECRET),
+    async (to, token) => {
+      const url = new URL('/account/confirm-email', env.CLIENT_URL);
+      url.hash = new URLSearchParams({ token }).toString();
+      await emailService.sendNotificationEmail({
+        to,
+        title: 'Підтвердження нової email-адреси',
+        message: `Підтвердьте нову email-адресу протягом години: ${url}`
+      });
+    }
+  );
+  router.use(createEmailChangeRouter(middleware.requireAuth, changeEmail));
 
   return {
     sendNotificationEmail: emailService.sendNotificationEmail.bind(emailService),

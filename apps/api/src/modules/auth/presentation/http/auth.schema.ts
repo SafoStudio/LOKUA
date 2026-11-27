@@ -7,7 +7,8 @@ const passkeyResponseSchema = z.looseObject({
 export const registerSchema = z.object({
   email: z.email(),
   name: z.string().min(1).max(100),
-  password: z.string().min(8).max(72)
+  password: z.string().min(8).max(72),
+  termsAccepted: z.literal(true)
 });
 
 export const loginSchema = z.object({
@@ -21,6 +22,7 @@ export const passkeySignupOptionsSchema = z.object({
 });
 
 export const passkeySignupVerifySchema = z.object({
+  termsAccepted: z.literal(true),
   challenge: z.string().min(1),
   response: passkeyResponseSchema
 });

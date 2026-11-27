@@ -9,6 +9,7 @@ import type { IssueAuthTokensUseCase, AuthResult } from './issue-auth-tokens.use
 export interface CompletePasskeySignupInput {
   challenge: string;
   response: unknown;
+  termsAccepted: true;
 }
 
 export class CompletePasskeySignupUseCase {
@@ -21,6 +22,8 @@ export class CompletePasskeySignupUseCase {
   ) {}
 
   async execute(input: CompletePasskeySignupInput, context: SecurityContext): Promise<AuthResult> {
+    if (input.termsAccepted !== true)
+      throw new AppError('Потрібно прийняти умови та політику конфіденційності', 400);
     const challenge = await this.challenges.consume({
       challenge: input.challenge,
       type: 'SIGNUP'
@@ -43,7 +46,8 @@ export class CompletePasskeySignupUseCase {
       userId: challenge.userId,
       email: challenge.email,
       name: challenge.name,
-      credential
+      credential,
+      termsAcceptedAt: new Date()
     });
 
     await this.securityEvents.record({

@@ -15,6 +15,7 @@ export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction
     userId: string;
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     credential: {
       credentialId: string;
       publicKey: Buffer;
@@ -33,6 +34,7 @@ export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction
           {
             id: data.userId,
             email: data.email,
+            termsAcceptedAt: data.termsAcceptedAt,
             name: data.name
           },
           manager as unknown as TransactionContext

@@ -4,6 +4,7 @@ export interface RegistrationTransaction {
   createUserWithPasswordCredential(data: {
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     passwordHash: string;
   }): Promise<AuthUser>;
 }

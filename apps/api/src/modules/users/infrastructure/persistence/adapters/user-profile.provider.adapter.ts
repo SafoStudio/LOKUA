@@ -13,6 +13,9 @@ interface UserProfileRow {
   photoUrls: string[];
   interestIds: string[] | null;
   status: UserProfile['status'];
+  bio: string | null;
+  languages: string[] | null;
+  socialLinks: Record<string, string> | null;
 }
 
 const SQL = `
@@ -21,6 +24,9 @@ const SQL = `
     u.email,
     u.name,
     u.status,
+    u.bio,
+    u.languages,
+    u.social_links AS "socialLinks",
     u.city_id AS "cityId",
     u.onboarding_completed AS "onboardingCompleted",
     u.created_at AS "createdAt",
@@ -56,6 +62,9 @@ export class UserProfileProviderAdapter implements UserProfileProvider {
       email: row.email,
       name: row.name,
       status: row.status,
+      bio: row.bio,
+      languages: row.languages,
+      socialLinks: row.socialLinks,
       avatarUrl: row.avatarUrl,
       photoUrls: row.photoUrls,
       cityId: row.cityId,

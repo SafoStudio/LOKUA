@@ -68,6 +68,7 @@ describe('Passkey API Endpoints', () => {
           .post('/api/v1/auth/passkey/signup/verify')
           .send({
             challenge: 'signup-challenge-xyz',
+            termsAccepted: true,
             response: {
               id: 'cred-id-abc',
               rawId: 'cred-id-abc',
@@ -95,6 +96,7 @@ describe('Passkey API Endpoints', () => {
           .post('/api/v1/auth/passkey/signup/verify')
           .send({
             challenge: 'bad-challenge',
+            termsAccepted: true,
             response: { id: 'bad-cred-id' }
           });
 

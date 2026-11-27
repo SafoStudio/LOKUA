@@ -22,7 +22,7 @@ export class UserPhotoProviderAdapter implements UserPhotoProvider {
         where: { id: userId },
         lock: { mode: 'pessimistic_write' }
       });
-      if (!user || user.status !== 'ACTIVE' || !user.onboardingCompleted) {
+      if (!user || user.status !== 'ACTIVE' || !user.emailVerified || !user.onboardingCompleted) {
         throw new AppError('Profile photo changes are unavailable for this account', 403);
       }
       const photos = manager.getRepository(UserPhotoEntity);

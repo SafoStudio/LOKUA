@@ -19,8 +19,9 @@ export const googleStateCookieOptions: CookieOptions = {
   maxAge: 5 * 60 * 1000
 };
 
-export function createGoogleState(): string {
-  return randomBytes(32).toString('hex');
+export function createGoogleState(termsAccepted = false): string {
+  const nonce = randomBytes(32).toString('hex');
+  return termsAccepted ? `consent.${nonce}` : nonce;
 }
 
 export function setGoogleStateCookie(res: Response, state: string): void {

@@ -68,7 +68,7 @@ function assert(label: string, condition: boolean, detail?: any) {
 
     const reg = await api('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password, name, termsAccepted: true }),
     });
 
     if (reg.status !== 201) {

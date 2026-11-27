@@ -7,6 +7,7 @@ import type {
 } from './application/index.js';
 import { AccessService } from './application/index.js';
 import { UserBlockService } from './application/services/user-block.service.js';
+import { TypeOrmProfileSettingsStore } from './infrastructure/persistence/adapters/profile-settings.store.js';
 import { UserPhotoProviderAdapter } from './infrastructure/persistence/adapters/user-photo.provider.adapter.js';
 import {
   UserEntity,
@@ -40,6 +41,7 @@ export function createUsersModule({ dataSource }: CreateUsersModuleDependencies)
     authUsers,
     onboarding,
     profiles,
+    profileSettings: new TypeOrmProfileSettingsStore(dataSource, onboarding),
     photos: new UserPhotoProviderAdapter(dataSource),
     blocks,
     blockSettings: new UserBlockService(blocks),

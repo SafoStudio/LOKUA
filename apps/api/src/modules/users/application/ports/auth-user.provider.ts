@@ -12,6 +12,7 @@ export interface AuthUserProvider {
       emailVerified?: boolean;
       role?: UserRole;
       status?: UserStatus;
+      termsAcceptedAt?: Date;
     },
     tx?: TransactionContext
   ): Promise<AuthUser>;

@@ -12,6 +12,7 @@ export interface RegisterWithPasswordInput {
   email: string;
   name: string;
   password: string;
+  termsAccepted: true;
 }
 
 export class RegisterWithPasswordUseCase {
@@ -24,6 +25,8 @@ export class RegisterWithPasswordUseCase {
   ) {}
 
   async execute(input: RegisterWithPasswordInput, context: SecurityContext): Promise<AuthUser> {
+    if (input.termsAccepted !== true)
+      throw new AppError('Потрібно прийняти умови та політику конфіденційності', 400);
     const email = input.email.trim().toLowerCase();
 
     const existingUser = await this.users.findByEmail(email);
@@ -36,7 +39,8 @@ export class RegisterWithPasswordUseCase {
     const user = await this.registrationTransaction.createUserWithPasswordCredential({
       email,
       name: input.name.trim(),
-      passwordHash
+      passwordHash,
+      termsAcceptedAt: new Date()
     });
 
     try {

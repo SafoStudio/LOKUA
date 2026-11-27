@@ -1,4 +1,6 @@
 export { createUsersModule } from './users.module.js';
+export { createProfileSettingsRouter } from './presentation/http/profile-settings.routes.js';
+export { ProfileSettingsService } from './application/services/profile-settings.service.js';
 export { AccountDeletionService } from './application/services/account-deletion.service.js';
 export { TypeOrmAccountDeletionStore } from './infrastructure/persistence/adapters/account-deletion.store.js';
 export { createUserBlocksRouter } from './presentation/http/user-blocks.routes.js';

@@ -4,6 +4,7 @@ export interface GoogleLoginTransaction {
   createUserWithGoogleCredential(data: {
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     googleSub: string;
   }): Promise<AuthUser>;
 }

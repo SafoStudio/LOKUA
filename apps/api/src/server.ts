@@ -20,6 +20,7 @@ try {
     reportsRouter: modules.moderation.reportsRouter,
     imageMediaRouter: modules.storage.imageMediaRouter,
     profilePhotosRouter: modules.profilePhotosRouter,
+    profileSettingsRouter: modules.profileSettingsRouter,
     userBlocksRouter: modules.userBlocksRouter,
     accountDeletionRouter: modules.accountDeletionRouter
   });

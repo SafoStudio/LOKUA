@@ -14,6 +14,7 @@ export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
   async createUserWithGoogleCredential(data: {
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     googleSub: string;
   }): Promise<AuthUser> {
     try {
@@ -25,6 +26,7 @@ export class TypeOrmGoogleLoginTransaction implements GoogleLoginTransaction {
         const user = await this.users.create(
           {
             email: data.email,
+            termsAcceptedAt: data.termsAcceptedAt,
             name: data.name,
             emailVerified: true
           },

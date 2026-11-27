@@ -30,7 +30,8 @@ export class UserRepositoryAdapter implements UserRepository {
       birthDate: data.birthDate ?? null,
       role: data.role ?? 'USER',
       status: data.status ?? 'ACTIVE',
-      cityId: data.cityId ?? null
+      cityId: data.cityId ?? null,
+      termsAcceptedAt: data.termsAcceptedAt ?? null
     });
     const saved = await repo.save(entity);
     return this.toDomain(saved);

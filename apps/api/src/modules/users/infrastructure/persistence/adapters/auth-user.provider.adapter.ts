@@ -23,6 +23,7 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
       emailVerified?: boolean;
       role?: AuthUser['role'];
       status?: AuthUser['status'];
+      termsAcceptedAt?: Date;
     },
     tx?: TransactionContext
   ): Promise<AuthUser> {
@@ -33,6 +34,7 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
         name: data.name,
         emailVerified: data.emailVerified ?? false,
         role: data.role,
+        termsAcceptedAt: data.termsAcceptedAt,
         status: data.status
       },
       tx

@@ -4,10 +4,12 @@ import { startBatchWorker } from '../common/start-batch-worker.js';
 import { createDictionariesModule } from '../modules/dictionaries/index.js';
 import {
   createProfilePhotosRouter,
+  createProfileSettingsRouter,
   createUserBlocksRouter,
   createUsersModule,
   AccountDeletionService,
-  TypeOrmAccountDeletionStore
+  TypeOrmAccountDeletionStore,
+  ProfileSettingsService
 } from '../modules/users/index.js';
 import {
   createAccountDeletionRouter,
@@ -107,6 +109,15 @@ export function createModules(dataSource: DataSource) {
       startBatchWorker(() => accountDeletion.finalizeNext(), 60_000, 'Account deletion failed'),
     storage: { ...storageModule, imageMediaRouter: imageMedia.router },
     profilePhotosRouter,
+    profileSettingsRouter: createProfileSettingsRouter(
+      authModule.requireAuth,
+      usersModule.profiles,
+      new ProfileSettingsService(
+        usersModule.profileSettings,
+        dictionariesModule.cities,
+        dictionariesModule.interests
+      )
+    ),
     userBlocksRouter: createUserBlocksRouter(authModule.requireAuth, usersModule.blockSettings),
     moderation: moderationModule,
     onboarding: onboardingModule,

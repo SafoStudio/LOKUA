@@ -13,12 +13,18 @@ import {
   AccountDeletionService,
   TypeOrmAccountDeletionStore,
   createProfilePhotosRouter,
+  createProfileSettingsRouter,
+  ProfileSettingsService,
   createUserBlocksRouter,
   createUsersModule
 } from '../../src/modules/users/index.js';
 import { createAccountDeletionRouter, createAccountRecoveryLink } from '../../src/modules/auth/index.js';
 import { JwtTokenService } from '../../src/modules/auth/infrastructure/crypto/jwt-token.service.js';
 import { createAuthMiddleware } from '../../src/modules/auth/presentation/http/auth.middleware.js';
+import { ChangeEmailUseCase } from '../../src/modules/auth/application/use-cases/change-email.use-case.js';
+import { JwtEmailChangeTokens } from '../../src/modules/auth/infrastructure/crypto/email-change-tokens.js';
+import { TypeOrmEmailChangeStore } from '../../src/modules/auth/infrastructure/persistence/adapters/email-change.store.js';
+import { createEmailChangeRouter } from '../../src/modules/auth/presentation/http/email-change.routes.js';
 import type { ImageOwnership } from '../../src/modules/storage/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
@@ -189,7 +195,7 @@ describe('event management and feed with PostgreSQL', () => {
         else res.sendStatus(401);
       });
     };
-    const { categories, cities, countries } = createDictionariesModule({ dataSource });
+    const { categories, cities, countries, interests } = createDictionariesModule({ dataSource });
     const users = createUsersModule({ dataSource });
     const geo = createGeolocationModule({
       dataSource,
@@ -235,6 +241,11 @@ describe('event management and feed with PostgreSQL', () => {
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
     app.use('/users/me/blocks', createUserBlocksRouter(requireAuth, users.blockSettings));
+    app.use('/users/me/profile', createProfileSettingsRouter(
+      requireAuth,
+      users.profiles,
+      new ProfileSettingsService(users.profileSettings, cities, interests)
+    ));
     if (images) app.use('/users/me/photos', createProfilePhotosRouter(requireAuth, users.photos, images));
     app.use('/notifications', notifications.router);
     app.use('/admin', moderation.adminUsersRouter);
@@ -1610,6 +1621,76 @@ describe('event management and feed with PostgreSQL', () => {
     expect(cancellations.map(({ message }) => message)).toEqual([
       expect.stringContaining('Weather'), expect.stringContaining('Weather')
     ]);
+  });
+
+  it('edits the private profile while enforcing immutable and required fields', async () => {
+    const user = await createUser();
+    const api = createEventsTestApi([user]);
+    const { interests } = createDictionariesModule({ dataSource });
+    const interestIds = (await interests.listActive()).slice(0, 3).map(({ id }) => id);
+    const path = '/users/me/profile';
+    const patch = (body: object) => api.patch(path).set('X-Test-User', user.id).send(body);
+    await api.get(path).expect(401);
+    await patch({ birthDate: '1999-01-01' }).expect(400);
+    await patch({ cityId: randomUUID() }).expect(422);
+    await patch({ interestIds: [interestIds[0], interestIds[0], interestIds[1]] }).expect(422);
+    await patch({
+      name: '  Олена  ',
+      cityId: kyivId,
+      interestIds,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    }).expect(204);
+    const profile = await api.get(path).set('X-Test-User', user.id).expect(200);
+    expect(profile.body.data).toMatchObject({
+      name: 'Олена',
+      birthDate: '2000-01-01',
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    });
+    expect([...profile.body.data.interestIds].sort()).toEqual([...interestIds].sort());
+    await patch({ bio: null }).expect(204);
+    await dataSource.getRepository(UserEntity).update(user.id, { emailVerified: false });
+    await patch({ name: 'Інше ім’я' }).expect(403);
+  });
+
+  it('changes email only after confirmation by the account that requested it', async () => {
+    const [user, other] = await Promise.all([createUser(), createUser()]);
+    const users = createUsersModule({ dataSource });
+    const tokens = new JwtTokenService();
+    const { requireAuth } = createAuthMiddleware({ tokenService: tokens, users: users.authUsers, access: users.access });
+    const messages: { email: string; token: string }[] = [];
+    const changeEmail = new ChangeEmailUseCase(
+      new TypeOrmEmailChangeStore(dataSource),
+      new JwtEmailChangeTokens('test-only-email-change-secret'),
+      async (email, token) => { messages.push({ email, token }); }
+    );
+    const app = express();
+    app.use(express.json());
+    app.use(createEmailChangeRouter(requireAuth, changeEmail));
+    app.use(errorHandler);
+    const api = request(app);
+    const [ownerToken, otherToken] = await Promise.all(
+      [user, other].map(({ id }) => tokens.signAccessToken({ userId: id }))
+    );
+    const start = (email: string) =>
+      api.post('/change-email').set('Authorization', `Bearer ${ownerToken}`).send({ email });
+    const confirm = (session: string, token: string) =>
+      api.post('/change-email/confirm').set('Authorization', `Bearer ${session}`).send({ token });
+    await start(other.email).expect(409);
+    const email = `${randomUUID()}@example.net`;
+    await start(email.toUpperCase()).expect(202);
+    expect(messages).toEqual([{ email, token: expect.any(String) }]);
+    expect((await users.authUsers.findById(user.id))?.email).toBe(user.email);
+    const { token } = messages[0];
+    await confirm(otherToken, token).expect(400);
+    await confirm(ownerToken, token).expect(204);
+    await confirm(ownerToken, token).expect(400);
+    expect(await users.authUsers.findById(user.id)).toMatchObject({ email, emailVerified: true });
+    expect(await users.authUsers.findByEmail(user.email)).toBeNull();
   });
 
   it('cancels upcoming events on account deletion, restores once, and anonymizes expired accounts', async () => {

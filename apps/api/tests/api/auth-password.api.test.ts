@@ -7,6 +7,16 @@ import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Password API', () => {
   describe('POST /api/v1/auth/register', () => {
+    it('requires explicit consent before registering', async () => {
+      const { app, mocks } = createTestApp();
+      await request(app).post('/api/v1/auth/register').send({
+        email: 'test@example.com',
+        name: 'Test User',
+        password: 'Password123!'
+      }).expect(400);
+      expect(mocks.register.execute).not.toHaveBeenCalled();
+    });
+
     it('returns 201 with user and sets auth cookies on successful registration', async () => {
       const { app, mocks } = createTestApp();
 
@@ -27,7 +37,8 @@ describe('Auth Password API', () => {
       const res = await request(app).post('/api/v1/auth/register').send({
         email: 'test@example.com',
         name: 'Test User',
-        password: 'Password123!'
+        password: 'Password123!',
+        termsAccepted: true
       });
 
       expect(res.status).toBe(201);
@@ -76,7 +87,8 @@ describe('Auth Password API', () => {
       const res = await request(app).post('/api/v1/auth/register').send({
         email: 'duplicate@example.com',
         name: 'Duplicate',
-        password: 'Password123!'
+        password: 'Password123!',
+        termsAccepted: true
       });
 
       expect(res.status).toBe(409);

@@ -236,8 +236,8 @@ export function createAuthController({
       res.status(200).json({ message: 'Password changed successfully' });
     },
 
-    googleStart(_req: Request, res: Response): void {
-      const state = createGoogleState();
+    googleStart(req: Request, res: Response): void {
+      const state = createGoogleState(req.query.termsAccepted === 'true');
 
       setGoogleStateCookie(res, state);
 
@@ -252,7 +252,12 @@ export function createAuthController({
 
         const code = assertString(req.query.code, 'Google authorization code');
 
-        const user = await loginGoogle.execute(code, toSecurityContext(req));
+        const state = assertString(req.query.state, 'Google OAuth state');
+        const user = await loginGoogle.execute(
+          code,
+          toSecurityContext(req),
+          state.startsWith('consent.')
+        );
         const result = await issueTokens.execute(user);
 
         setAuthCookies(res, result.accessToken, result.refreshToken);

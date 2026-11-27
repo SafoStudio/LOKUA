@@ -96,6 +96,11 @@ Account recovery emails link to `CLIENT_URL/account/restore#token=...`. That cli
 fragment and posts the token to `/api/v1/auth/account/restore`. After a successful response, the
 user signs in again.
 
+Email change links open `CLIENT_URL/account/confirm-email#token=...`. The client sends the
+fragment token to `POST /api/v1/auth/change-email/confirm` with the current user's session.
+For account creation, send `termsAccepted: true` with password registration and passkey signup
+verification. For Google signup, start OAuth with `?termsAccepted=true` after consent.
+
 #### STORAGE_FORCE_PATH_STYLE _true for MinIO, false for R2_
 
 #### STORAGE_SIGNED_URL_TTL _Signed URL TTL (default 900 s)_

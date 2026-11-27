@@ -96,6 +96,7 @@ describe('CompletePasskeySignupUseCase', () => {
     const result = await useCase.execute(
         {
           challenge: 'ch-val-123',
+          termsAccepted: true,
           response: { id: 'cred-bob-1' }
         },
         context
@@ -119,7 +120,8 @@ describe('CompletePasskeySignupUseCase', () => {
       userId: 'pre-generated-uuid',
       email: 'bob@example.com',
       name: 'Bob',
-      credential: mockCredentialData
+      credential: mockCredentialData,
+      termsAcceptedAt: expect.any(Date)
     });
 
     expect(securityEvents.record).toHaveBeenCalledWith(
@@ -138,6 +140,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'non-existing-ch',
+              termsAccepted: true,
               response: { id: 'cred' }
             },
             context
@@ -161,6 +164,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'ch-val-123',
+              termsAccepted: true,
               response: { id: 'cred' }
             },
             context
@@ -179,6 +183,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'ch-val-123',
+              termsAccepted: true,
               response: { id: 'bad-response' }
             },
             context

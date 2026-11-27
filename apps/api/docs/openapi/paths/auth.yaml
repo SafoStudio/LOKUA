@@ -354,6 +354,11 @@
       - Auth / Google OAuth
     summary: Start Google OAuth authorization
     description: Generates a one-time cryptographically random state, stores it in the HttpOnly cookie googleOAuthState (Path=/api/v1/auth/google, Max-Age=300s), and performs a 302 Redirect to Google Login.
+    parameters:
+      - name: termsAccepted
+        in: query
+        description: Set to true after the user accepts the terms of use and privacy policy. Required to create a Google account.
+        schema: { type: boolean }
     responses:
       '302':
         description: Redirect to https://accounts.google.com/o/oauth2/v2/auth
@@ -396,7 +401,7 @@
             schema:
               type: string
       '400':
-        description: Invalid state (CSRF check failed) or missing code
+        description: Invalid OAuth state, missing code, or missing consent for a new account
         content:
           application/json:
             schema:
@@ -451,7 +456,15 @@
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/PasskeyVerifyRequest'
+            allOf:
+              - $ref: '#/components/schemas/PasskeyVerifyRequest'
+              - type: object
+                required: [termsAccepted]
+                properties:
+                  termsAccepted:
+                    type: boolean
+                    const: true
+                    description: Explicit acceptance of the terms of use and privacy policy.
     responses:
       '201':
         description: User and Passkey created, cookies set

@@ -86,6 +86,11 @@ describe('LoginWithGoogleUseCase', () => {
       email: 'newuser@gmail.com',
       emailVerified: true,
       name: 'New User'
+    }).mockResolvedValueOnce({
+      sub: 'new-google-sub',
+      email: 'newuser@gmail.com',
+      emailVerified: true,
+      name: 'New User'
     });
 
     vi.mocked(credentials.findByGoogleSub).mockResolvedValueOnce(null);
@@ -100,13 +105,15 @@ describe('LoginWithGoogleUseCase', () => {
 
     vi.mocked(googleLoginTransaction.createUserWithGoogleCredential).mockResolvedValueOnce(newUser);
 
-    const result = await useCase.execute('valid-code', context);
+    await expect(useCase.execute('valid-code', context)).rejects.toMatchObject({ statusCode: 400 });
+    const result = await useCase.execute('valid-code', context, true);
 
     expect(result).toEqual(newUser);
     expect(googleLoginTransaction.createUserWithGoogleCredential).toHaveBeenCalledWith({
       email: 'newuser@gmail.com',
       name: 'New User',
-      googleSub: 'new-google-sub'
+      googleSub: 'new-google-sub',
+      termsAcceptedAt: expect.any(Date)
     });
     expect(securityEvents.record).toHaveBeenCalledWith(
         expect.objectContaining({
