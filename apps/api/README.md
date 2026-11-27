@@ -68,6 +68,10 @@ Variable Description
 
 #### APP_URL _Public API URL_
 
+Set `TRUST_PROXY_HOPS` to the exact number of trusted proxy hops only when clients cannot
+reach the API directly or through a shorter path. The default is `0`.
+Login, signup and event participation rate limits use fixed windows in each API process.
+
 #### CLIENT_URL _Client URL (CORS + redirects)_
 
 #### DATABASE_URL _PostgreSQL connection string (runtime)_
@@ -212,18 +216,39 @@ tests/
 
 ### Quick diagnostics
 
-| Command                               | Checks                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm --filter api check:db`          | Reads `DATABASE_URL`. Checks connectivity, PostGIS, UUID support, applied migrations, and required columns and indexes in a read-only transaction. Add `--test` to check `TEST_DATABASE_URL` or local `lokua_test`.                                                                                                      |
-| `pnpm --filter api check:media`       | Uses local, generated images to check JPEG, PNG and WebP decoding, EXIF orientation, resizing, metadata stripping and invalid input. No object storage is needed.                                                                                                                                                        |
-| `pnpm --filter api smoke:events`      | Runs read-only HTTP checks against a running API. Checks health, published OpenAPI, protected endpoints, invalid query parameters, the feed, map and guest event privacy. Uses `SMOKE_API_URL`, then `APP_URL`, then `http://localhost:3003`. Set `SMOKE_EVENT_ID` to require a particular public event.                 |
-| `pnpm --filter api smoke:onboarding`  | Registers a test account, uploads a generated profile image, completes onboarding, checks the saved main photo and verifies logout. Requires `TEST_CITY_ID`, at least three comma-separated `TEST_INTEREST_IDS`, and a running test API with storage and email configured. Creates a user and an object in test storage. |
-| `pnpm --filter api typecheck:scripts` | Type-checks the scripts with the API's ES2022 and NodeNext settings.                                                                                                                                                                                                                                                     |
+| Command                               | Checks                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter api check:db`          | Reads `DATABASE_URL`. Checks connectivity, PostGIS, UUID support, applied migrations, and required columns and indexes in a read-only transaction. Add `--test` to check `TEST_DATABASE_URL` or local `lokua_test`. |
+| `pnpm --filter api check:media`       | Uses local, generated images to check JPEG, PNG and WebP decoding, EXIF orientation, resizing, metadata stripping and invalid input. No object storage is needed.                                                   |
+| `pnpm --filter api smoke:events`      | Checks health, OpenAPI, access, feed, map and guest privacy on its own test API. Set `SMOKE_EVENT_ID` to require a particular public test event.                                                                    |
+| `pnpm --filter api smoke:onboarding`  | Confirms a test account, uploads a profile photo, completes onboarding and verifies logout.                                                                                                                         |
+| `pnpm --filter api smoke:lifecycle`   | Runs the complete event lifecycle from registration to public review.                                                                                                                                               |
+| `pnpm --filter api typecheck:scripts` | Type-checks the scripts with the API's ES2022 and NodeNext settings.                                                                                                                                                |
 
 Each diagnostic exits with a nonzero status on failure. The HTTP smoke check explicitly reports when it skips event detail because the feed is empty.
 
+#### Full event lifecycle smoke
+
+From the repository root, run `pnpm setup:local` to install dependencies, copy the API
+environment template if needed, start Docker services, initialize buckets and migrate both
+local databases. This command targets the local Compose stack and preserves an existing `.env`.
+Run `pnpm smoke:lifecycle` from `apps/api` or `pnpm --filter api smoke:lifecycle` from the root.
+The command starts and stops its own API on `127.0.0.1:3004`, with local SMTP and the
+`lokua-uploads-test` bucket. All three smoke commands use this same isolated test API.
+
+The database defaults to `localhost:5433/lokua_test` with the standard local test credentials.
+Set `SMOKE_LIFECYCLE_DATABASE_URL` or `TEST_DATABASE_URL` if your local test connection differs.
+Use `SMOKE_LIFECYCLE_PORT` if port 3004 is occupied. The
+[Mailpit HTTP API](https://mailpit.axllent.org/docs/api-v1/) defaults to `http://127.0.0.1:8025`
+and can be set with `SMOKE_MAILPIT_URL`.
+
+The script creates and confirms two accounts, uploads test photos, completes onboarding, and
+publishes a request-only event. It checks approval and link visibility, moves its fixture's
+schedule into the past, and waits for the API worker to complete the event before posting a review.
+The accounts, images, email, and event remain in the test environment for inspection.
+
 - vitest.config.ts uses fileParallelism: false to avoid TRUNCATE deadlocks in parallel integration files.
-- Integration tests apply migrations once via global-setup.ts and refuse to run against the dev database lokua unless ALLOW_UNSAFE_TEST_DB is set. Use lokua_test or another dedicated test database.
+- Integration tests apply migrations once via `global-setup.ts` and require a loopback connection to `lokua_test`.
 
 OpenAPI / Scalar UI: /docs
 

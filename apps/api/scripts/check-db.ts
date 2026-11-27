@@ -11,6 +11,7 @@ const requiredColumns = [
   'event_occurrences.status',
   'event_location_snapshot.public_coordinates',
   'event_participations.status_updated_at',
+  'event_participations.entry_mode',
   'discussion_comment_quotas.posted_at',
   'reports.assigned_moderator_id',
   'audit_logs.actor_id',
@@ -38,6 +39,13 @@ async function main() {
     ? (process.env.TEST_DATABASE_URL ?? 'postgres://lokua:lokua@localhost:5433/lokua_test')
     : process.env.DATABASE_URL;
   assert(url, 'DATABASE_URL is required');
+  if (test) {
+    const target = new URL(url);
+    assert(
+      target.pathname === '/lokua_test' && ['localhost', '127.0.0.1', '[::1]'].includes(target.hostname),
+      '--test requires a loopback connection to lokua_test'
+    );
+  }
   const files = await readdir(new URL('../src/db/migrations/', import.meta.url));
   const expectedMigrations = files.flatMap((file) => {
     const match = file.match(/^(\d{13})-([\w-]+)\.ts$/);

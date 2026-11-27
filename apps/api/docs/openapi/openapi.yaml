@@ -55,6 +55,18 @@ tags:
   - name: Admin / Users
     description: Admin operations on user accounts (audit-logged)
 
+  - name: Users
+    description: User profiles and account settings
+
+  - name: Dictionaries
+    description: Public lists of active categories and interests
+
+  - name: Admin / Dictionaries
+    description: Manage categories and interests
+
+  - name: Admin / Statistics
+    description: Period aggregates for registrations, publications and applications
+
   - name: Onboarding
     description: Multi-step onboarding flow (date of birth -> profile -> city -> interests -> optional -> complete)
 

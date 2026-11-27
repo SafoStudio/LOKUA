@@ -112,7 +112,7 @@
   post:
     tags: [Events]
     summary: Create an event draft
-    description: Requires an active account with verified email, completed onboarding, and the applicable minimum age.
+    description: Requires the USER role, an active account with verified email and completed onboarding, and the applicable minimum age.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -654,7 +654,8 @@
     description: >
       FREE approves immediately. REQUEST creates a pending application even when all places are
       occupied. Repeating an approved or pending request returns that participation.
-      Schedule overlaps are returned as warnings.
+      Schedule overlaps are returned as warnings. Requires the USER role. Each account may
+      make up to 30 participation requests per hour across all events.
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
     requestBody:
@@ -699,6 +700,16 @@
               $ref: '#/components/schemas/ErrorResponse'
       '409':
         description: Event is closed or full for free entry, or participation cannot be reopened
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: The participation request limit was reached
+        headers:
+          Retry-After:
+            description: Seconds until the account can retry.
+            schema: { type: integer, minimum: 1 }
         content:
           application/json:
             schema:

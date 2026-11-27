@@ -1,9 +1,5 @@
-import 'dotenv/config';
 import { ok as assert, strictEqual } from 'node:assert/strict';
 import { z } from 'zod';
-
-const help = 'Usage: pnpm --filter api smoke:events\n' +
-  'Set SMOKE_API_URL to override APP_URL, and SMOKE_EVENT_ID to check a specific public event.';
 
 const eventSchema = z.object({ id: z.uuid(), status: z.enum(['PUBLISHED', 'FULL']) }).passthrough();
 const pageSchema = z.object({
@@ -36,11 +32,7 @@ function assertNoPrivateFields(value: Record<string, unknown>) {
   }
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  if (args.includes('--help')) { console.log(help); return; }
-  strictEqual(args.length, 0, help);
-  const baseUrl = new URL(process.env.SMOKE_API_URL ?? process.env.APP_URL ?? 'http://localhost:3003');
+export async function smokeEvents(baseUrl: URL) {
   assert(['http:', 'https:'].includes(baseUrl.protocol), 'Expected an HTTP(S) API URL');
   assert(!baseUrl.username && !baseUrl.password, 'Credentials are not accepted in the API URL');
   const selectedId = process.env.SMOKE_EVENT_ID ? z.uuid().parse(process.env.SMOKE_EVENT_ID) : null;
@@ -132,11 +124,4 @@ async function main() {
   }
   console.log('✅ PASS: Public event detail and guest privacy');
   console.log('🎉 Events smoke checks completed.');
-}
-
-try {
-  await main();
-} catch (error) {
-  console.error(`❌ FAIL: ${error instanceof Error ? error.message : 'Unexpected smoke check error'}`);
-  process.exitCode = 1;
 }

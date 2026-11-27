@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { validate } from '../../../../middlewares/index.js';
+import { createRequestRateLimit } from '../../../../middlewares/request-rate-limit.js';
 import {
   registerSchema,
   loginSchema,
@@ -22,10 +23,17 @@ interface AuthMiddleware {
 
 export function createAuthRouter(controller: AuthController, middleware: AuthMiddleware) {
   const router = Router();
+  const signupLimit = createRequestRateLimit({ limit: 10, windowMs: 60 * 60_000 });
+  const loginLimit = createRequestRateLimit({ limit: 20, windowMs: 15 * 60_000 });
 
-  router.post('/register', validate({ body: registerSchema }), controller.registerWithPassword);
+  router.post(
+    '/register',
+    signupLimit,
+    validate({ body: registerSchema }),
+    controller.registerWithPassword
+  );
 
-  router.post('/login', validate({ body: loginSchema }), controller.loginWithPassword);
+  router.post('/login', loginLimit, validate({ body: loginSchema }), controller.loginWithPassword);
 
   router.post('/refresh', middleware.requireRefreshToken, controller.refreshTokens);
 
@@ -35,9 +43,9 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
 
   router.get('/me', middleware.requireAuth, controller.me);
 
-  router.get('/google', controller.googleStart);
+  router.get('/google', loginLimit, controller.googleStart);
 
-  router.get('/google/callback', controller.googleCallback);
+  router.get('/google/callback', loginLimit, controller.googleCallback);
 
   router.get('/verify-email', validate({ query: verifyEmailSchema }), controller.verifyEmail);
 
@@ -60,12 +68,14 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
 
   router.post(
     '/passkey/signup/options',
+    signupLimit,
     validate({ body: passkeySignupOptionsSchema }),
     controller.startPasskeySignup
   );
 
   router.post(
     '/passkey/signup/verify',
+    signupLimit,
     validate({ body: passkeySignupVerifySchema }),
     controller.completePasskeySignup
   );
@@ -83,10 +93,11 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
     controller.completePasskeyRegistration
   );
 
-  router.post('/passkey/login/options', controller.startPasskeyLogin);
+  router.post('/passkey/login/options', loginLimit, controller.startPasskeyLogin);
 
   router.post(
     '/passkey/login/verify',
+    loginLimit,
     validate({ body: passkeyLoginVerifySchema }),
     controller.completePasskeyLogin
   );

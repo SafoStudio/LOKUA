@@ -270,6 +270,28 @@ describe('event management and feed with PostgreSQL', () => {
     return { api: request(app), notifications, moderation, events };
   }
 
+  it('enforces administrator event permissions and caps participation requests per account', async () => {
+    const [owner, viewer, staff] = await Promise.all([createUser(), createUser(), createUser()]);
+    const api = createEventsTestApi([owner, viewer, { ...staff, role: 'ADMIN', birthDate: null }]);
+    const event = await publishForFeed(owner, { ageRestriction: 'EIGHTEEN_PLUS' });
+    await dataSource.getRepository(EventEntity).update(event.id, {
+      firstStartsAt: new Date(Date.now() + 3_600_000),
+      firstEndsAt: new Date(Date.now() + 7_200_000)
+    });
+    const feed = await api.get('/events').query({ format: 'ONLINE', limit: 50 })
+      .set('X-Test-User', staff.id).expect(200);
+    expect(feed.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: event.id })]));
+    await api.post('/events').set('X-Test-User', staff.id).send(eventData()).expect(403);
+    const path = `/events/${event.id}/participations`;
+    await api.post(path).set('X-Test-User', staff.id).send({}).expect(403);
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await api.post(path).set('X-Test-User', viewer.id).send({ unexpected: true }).expect(400);
+    }
+    await api.post(`/events/${randomUUID()}/participations`).set('X-Test-User', viewer.id)
+      .send({}).expect(429).expect('Retry-After', /^[1-9]\d*$/);
+    await api.post(path).set('X-Test-User', staff.id).send({}).expect(403);
+  });
+
   it('manages outgoing blocks without changing an existing approval', async () => {
     const [owner, participant] = await Promise.all([createUser(), createUser()]);
     const api = createEventsTestApi([owner, participant]);

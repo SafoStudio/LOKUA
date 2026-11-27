@@ -6,6 +6,20 @@ import { getSetCookies } from '../helpers/get-set-cookies.js';
 import { createMockAuthUser } from '../fixtures/users.fixture.js';
 
 describe('Auth Password API', () => {
+  it('shares limits across sign-in and signup routes while keeping their budgets separate', async () => {
+    const { app } = createTestApp();
+    const api = request(app);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await api.post('/api/v1/auth/register').send({}).expect(400);
+    }
+    await api.post('/api/v1/auth/passkey/signup/options').send({}).expect(429)
+      .expect('Retry-After', /^[1-9]\d*$/);
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await api.post('/api/v1/auth/login').send({}).expect(400);
+    }
+    await api.get('/api/v1/auth/google').expect(429).expect('Retry-After', /^[1-9]\d*$/);
+  });
+
   describe('POST /api/v1/auth/register', () => {
     it('requires explicit consent before registering', async () => {
       const { app, mocks } = createTestApp();

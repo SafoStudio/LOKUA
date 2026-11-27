@@ -14,18 +14,14 @@ export class AccessService {
   }
 
   canCreateEvent(user: AuthUser, now?: Date): boolean {
-    if (user.status !== 'ACTIVE') return false;
-    if (!user.emailVerified) return false;
-    if (!user.onboardingCompleted) return false;
+    if (!this.canPostEventContent(user)) return false;
 
     const age = calculateAge(user.birthDate, now);
     return age !== null && age >= 16;
   }
 
   canJoinEvent(user: AuthUser, restriction: AgeRestriction, now?: Date): boolean {
-    if (user.status !== 'ACTIVE') return false;
-    if (!user.emailVerified) return false;
-    if (!user.onboardingCompleted) return false;
+    if (!this.canPostEventContent(user)) return false;
 
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
@@ -38,6 +34,7 @@ export class AccessService {
   canViewEvent(user: AuthUser | null, restriction: AgeRestriction, now?: Date): boolean {
     if (restriction === 'ALL') return true;
     if (!user || this.isBlocked(user)) return false;
+    if (user.role === 'ADMIN') return true;
 
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;

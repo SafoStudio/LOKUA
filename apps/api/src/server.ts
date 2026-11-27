@@ -1,4 +1,5 @@
 import { logger } from './common/index.js';
+import { createServer } from 'node:http';
 import { env } from './config/env.js';
 import { AppDataSource } from './db/data-source.js';
 import { createModules } from './bootstrap/modules.js';
@@ -26,9 +27,14 @@ try {
     accountDeletionRouter: modules.accountDeletionRouter
   });
 
-  const server = app.listen(env.PORT, () => {
+  const server = createServer(app).listen({ port: env.PORT, host: env.BIND_HOST }, () => {
     logger.info(`API running at http://localhost:${env.PORT}`);
     logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
+    if (process.connected) process.send?.({ type: 'ready' });
+  });
+  server.once('error', (err) => {
+    logger.fatal({ err }, 'HTTP server failed to listen');
+    process.exit(1);
   });
   const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
   const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
@@ -71,6 +77,7 @@ try {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  if (process.connected) process.on('disconnect', () => shutdown('IPC disconnect'));
 } catch (err) {
   logger.fatal({ err }, 'Failed to start');
   process.exit(1);

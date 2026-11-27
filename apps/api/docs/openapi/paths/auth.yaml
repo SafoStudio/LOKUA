@@ -38,6 +38,16 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '429': &authSignupRateLimit
+        description: Signup limit reached. Password and passkey signup share 10 requests per IP per hour.
+        headers:
+          Retry-After:
+            description: Seconds until the IP can retry.
+            schema: { type: integer, minimum: 1 }
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 /api/v1/auth/login:
   post:
@@ -71,6 +81,16 @@
               $ref: '#/components/schemas/ValidationErrorResponse'
       '401':
         description: Invalid email or password
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429': &authLoginRateLimit
+        description: Sign-in limit reached. Password, Google, and passkey sign-in share 20 requests per IP per 15 minutes.
+        headers:
+          Retry-After:
+            description: Seconds until the IP can retry.
+            schema: { type: integer, minimum: 1 }
         content:
           application/json:
             schema:
@@ -360,6 +380,7 @@
         description: Set to true after the user accepts the terms of use and privacy policy. Required to create a Google account.
         schema: { type: boolean }
     responses:
+      '429': *authLoginRateLimit
       '302':
         description: Redirect to https://accounts.google.com/o/oauth2/v2/auth
         headers:
@@ -390,6 +411,7 @@
         schema:
           type: string
     responses:
+      '429': *authLoginRateLimit
       '302':
         description: Redirect to the frontend URL (env.GOOGLE_SUCCESS_REDIRECT)
         headers:
@@ -426,6 +448,7 @@
           schema:
             $ref: '#/components/schemas/PasskeySignupOptionsRequest'
     responses:
+      '429': *authSignupRateLimit
       '200':
         description: Parameters for calling startRegistration() from @simplewebauthn/browser
         content:
@@ -466,6 +489,7 @@
                     const: true
                     description: Explicit acceptance of the terms of use and privacy policy.
     responses:
+      '429': *authSignupRateLimit
       '201':
         description: User and Passkey created, cookies set
         headers:
@@ -572,6 +596,7 @@
     summary: 'Passkey Login: Generate authentication options'
     description: Generates PublicKeyCredentialRequestOptions (discoverable credentials flow). The challenge is stored in the DB with type AUTHENTICATION for 5 minutes.
     responses:
+      '429': *authLoginRateLimit
       '200':
         description: Parameters for calling startAuthentication() from @simplewebauthn/browser
         content:
@@ -592,6 +617,7 @@
           schema:
             $ref: '#/components/schemas/PasskeyVerifyRequest'
     responses:
+      '429': *authLoginRateLimit
       '200':
         description: Successful Passkey sign-in, cookies set
         headers:

@@ -67,9 +67,9 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
   const parsed = new URL(url);
   const dbName = parsed.pathname.replace(/^\//, '');
 
-  if (dbName === 'lokua' && !process.env.ALLOW_UNSAFE_TEST_DB) {
+  if (dbName !== 'lokua_test' || !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
     throw new Error(
-        `Refusing to run integration tests against '${dbName}'. Test database must be separate (e.g. lokua_test).`
+        'Integration tests require a loopback connection to the dedicated lokua_test database.'
     );
   }
 

@@ -13,6 +13,13 @@ describe('AccessService', () => {
             ...overrides
         });
 
+    it('allows admins to see age-restricted events but denies creating and joining', () => {
+        const admin = userWithAge(16, { role: 'ADMIN' });
+        expect(service.canViewEvent(admin, 'EIGHTEEN_PLUS', NOW)).toBe(true);
+        expect(service.canCreateEvent(admin, NOW)).toBe(false);
+        expect(service.canJoinEvent(admin, 'ALL', NOW)).toBe(false);
+    });
+
     describe('canCreateEvent', () => {
         it('true for active verified onboarded 16+', () => {
             expect(service.canCreateEvent(userWithAge(16), NOW)).toBe(true);
