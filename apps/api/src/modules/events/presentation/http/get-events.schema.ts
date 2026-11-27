@@ -20,6 +20,7 @@ const feedFilters = z.object({
   participationMode: z.enum(['FREE', 'REQUEST']).optional(),
   availableOnly: feedBoolean.optional(),
   search: z.string().trim().min(1).max(200).optional(),
+  byInterests: feedBoolean.optional(),
   categoryId: z.uuid().optional(),
   format: z.enum(['OFFLINE', 'ONLINE']).optional()
 });

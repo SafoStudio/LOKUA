@@ -1,8 +1,9 @@
 type: [object, 'null']
-required: [cityId, districtId, countryCode, isExact, coordinates, name, address]
+required: [cityId, districtId, districtName, countryCode, isExact, coordinates, name, address]
 properties:
   cityId: { type: string, format: uuid }
   districtId: { type: [string, 'null'], format: uuid }
+  districtName: { type: [string, 'null'] }
   countryCode: { type: string }
   isExact: { type: boolean }
   coordinates:

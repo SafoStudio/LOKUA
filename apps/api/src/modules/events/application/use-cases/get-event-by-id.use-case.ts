@@ -1,5 +1,4 @@
 import { AppError } from '../../../../common/index.js';
-import { obfuscateCoordinates } from '../../../geolocation/index.js';
 import type { LocationProvider } from '../../../geolocation/index.js';
 import type {
   AccessService,
@@ -60,7 +59,10 @@ export class GetEventByIdUseCase {
         kind: 'DRAFT' as const,
         event: { ...event, tags },
         location: location
-          ? this.toLocation({ ...location, coordinates: location.exactCoordinates }, true)
+          ? this.toLocation(
+              { ...location, districtName: null, coordinates: location.exactCoordinates },
+              true
+            )
           : null
       };
     }
@@ -192,13 +194,14 @@ export class GetEventByIdUseCase {
   }
 
   private toLocation(snapshot: EventLocationSnapshot, exact: boolean) {
-    const { cityId, districtId, countryCode } = snapshot;
+    const { cityId, districtId, districtName, countryCode } = snapshot;
     return {
       cityId,
       districtId,
+      districtName,
       countryCode,
       isExact: exact,
-      coordinates: exact ? snapshot.coordinates : obfuscateCoordinates(snapshot.publicCoordinates),
+      coordinates: exact ? snapshot.coordinates : snapshot.publicCoordinates,
       name: exact ? snapshot.name : null,
       address: exact ? snapshot.address : null
     };

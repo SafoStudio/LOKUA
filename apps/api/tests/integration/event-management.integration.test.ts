@@ -62,6 +62,7 @@ describe('event management and feed with PostgreSQL', () => {
   let kyivId: string;
   let lvivId: string;
   const locationIds: string[] = [];
+  const districtIds: string[] = [];
 
   let listParticipation: ListEventParticipationUseCase;
   let manageParticipation: ManageParticipationUseCase;
@@ -129,6 +130,9 @@ describe('event management and feed with PostgreSQL', () => {
       }
       if (locationIds.length) {
         await dataSource.query('DELETE FROM locations WHERE id = ANY($1::uuid[])', [locationIds]);
+      }
+      if (districtIds.length) {
+        await dataSource.query('DELETE FROM districts WHERE id = ANY($1::uuid[])', [districtIds]);
       }
     } finally {
       await dataSource.destroy();
@@ -409,11 +413,12 @@ describe('event management and feed with PostgreSQL', () => {
     const publicCard = await get(offline.id).expect(200);
     expect(publicCard.body.data).not.toHaveProperty('primaryLocationId');
     expect(publicCard.body.data.location).toMatchObject({
-      coordinates: obfuscateCoordinates(exactCoordinates),
       address: null,
       name: null,
       isExact: false
     });
+    expect(publicCard.body.data.location.coordinates).not.toEqual(exactCoordinates);
+    expect(sharedCard.body.data.location.coordinates).toEqual(publicCard.body.data.location.coordinates);
     for (const viewer of [owner, participant, admin]) {
       const privateCard = await get(offline.id, viewer).expect(200);
       expect(privateCard.body.data.location).toMatchObject({
@@ -815,15 +820,24 @@ describe('event management and feed with PostgreSQL', () => {
     const owner = await createUser();
     const tag = randomUUID().replaceAll('-', '').slice(0, 30);
     const exactCoordinates = { latitude: 50.454321, longitude: 30.524321 };
-    const origin = obfuscateCoordinates(exactCoordinates);
+    const origin = { latitude: 50.4498, longitude: 30.5198 };
+    const districtId = randomUUID();
+    const districtName = `District fixture ${districtId}`;
+    districtIds.push(districtId);
+    await dataSource.query(
+      `INSERT INTO districts (id, city_id, name, center, boundary)
+       VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
+         ST_MakeEnvelope(30.519, 50.449, 30.525, 50.455, 4326)::geography)`,
+      [districtId, kyivId, districtName, origin.longitude, origin.latitude]
+    );
     const location = await locations.create({
       name: 'Hidden map venue',
       address: 'Private venue address',
       cityId: kyivId,
-      districtId: null,
+      districtId,
       countryCode: 'UA',
       exactCoordinates,
-      publicCoordinates: origin,
+      publicCoordinates: exactCoordinates,
       provider: 'manual',
       providerPlaceId: null,
       createdBy: null
@@ -859,7 +873,12 @@ describe('event management and feed with PostgreSQL', () => {
     );
     const markers = [...firstMap.items, ...secondMap.items].map(toMapEventView);
     expect(markers.map((marker) => marker.id)).toEqual([hidden.id, tied.id].sort());
-    expect(markers[0]).toMatchObject({ coordinates: origin });
+    expect(markers[0]).toMatchObject({ coordinates: origin, districtName });
+    const api = createEventsTestApi([owner]);
+    const card = await api.get(`/events/${hidden.id}`).expect(200);
+    expect(card.body.data.location).toMatchObject({
+      coordinates: origin, districtId, districtName, address: null, isExact: false
+    });
     expect(markers[0]).not.toHaveProperty('primaryLocationId');
     expect(markers[0]).not.toHaveProperty('address');
     expect(secondMap.nextCursor).toBeNull();
@@ -892,6 +911,34 @@ describe('event management and feed with PostgreSQL', () => {
       ...mapQuery,
       cursor: firstDistance.nextCursor ?? undefined
     }, null)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('filters future events by active interests matching a category or tag', async () => {
+    const [owner, viewer] = await Promise.all([createUser(), createUser()]);
+    const { categories, interests } = createDictionariesModule({ dataSource });
+    const category = (await categories.listActive()).find(({ slug }) => slug === 'board-games')!;
+    const interest = (await interests.listActive()).find(({ name }) => name === category.name)!;
+    await dataSource.query('INSERT INTO user_interests (user_id, interest_id) VALUES ($1, $2)', [
+      viewer.id, interest.id
+    ]);
+    const categoryMatch = await publishForFeed(owner, { categoryId: category.id });
+    const tagMatch = await publishForFeed(owner, { tags: [interest.name] });
+    const unrelated = await publishForFeed(owner, {});
+    const hidden = await publishForFeed(owner, { tags: [interest.name] });
+    const events = dataSource.getRepository(EventEntity);
+    await events.update([categoryMatch.id, tagMatch.id, unrelated.id, hidden.id], {
+      firstStartsAt: new Date(Date.now() + 3_600_000),
+      firstEndsAt: new Date(Date.now() + 7_200_000)
+    });
+    await events.update(hidden.id, { isHiddenByAdmin: true });
+    const api = createEventsTestApi([owner, viewer]);
+    const query = { byInterests: true, format: 'ONLINE' };
+    await api.get('/events').query(query).expect(401);
+    const empty = await api.get('/events').query(query).set('X-Test-User', owner.id).expect(200);
+    expect(empty.body.data).toEqual([]);
+    const personalized = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+    expect(personalized.body.data.map(({ id }: { id: string }) => id).sort())
+      .toEqual([categoryMatch.id, tagMatch.id].sort());
   });
 
   it('serializes free joins, releases a place, and remembers the first approval', async () => {

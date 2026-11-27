@@ -101,6 +101,14 @@ fragment token to `POST /api/v1/auth/change-email/confirm` with the current user
 For account creation, send `termsAccepted: true` with password registration and passkey signup
 verification. For Google signup, start OAuth with `?termsAccepted=true` after consent.
 
+For the interests section, request `GET /api/v1/events?byInterests=true` with an authenticated
+session after onboarding. Matching uses active interests and case-insensitive exact matches
+against category names and event tags. The map accepts the same filter.
+
+Hidden event locations use district centers. The Kyiv seed uses the
+[UNICEF GIS KyivDistricts layer](https://gis.unicef.org/server/rest/services/Hosted/KyivDistricts/FeatureServer/0).
+If no district can be resolved, the API uses the city center.
+
 #### STORAGE_FORCE_PATH_STYLE _true for MinIO, false for R2_
 
 #### STORAGE_SIGNED_URL_TTL _Signed URL TTL (default 900 s)_

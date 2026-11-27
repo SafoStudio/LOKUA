@@ -47,6 +47,11 @@
         in: query
         description: Case-insensitive substring of the title, description, or a tag.
         schema: { type: string, minLength: 1, maxLength: 200 }
+      - &feedByInterests
+        name: byInterests
+        in: query
+        description: Requires authentication and completed onboarding. Matches active profile interests by category name or event tag.
+        schema: { type: boolean, default: false }
       - name: categoryId
         in: query
         schema: { type: string, format: uuid }
@@ -93,13 +98,13 @@
                 - $ref: '#/components/schemas/ValidationErrorResponse'
                 - $ref: '#/components/schemas/ErrorResponse'
       '401': &eventUnauthorized
-        description: Invalid or expired credentials
+        description: Invalid or expired credentials, or authentication required for the interests view
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
       '403': &eventForbidden
-        description: Inactive account
+        description: Inactive account, or onboarding incomplete for the interests view
         content:
           application/json:
             schema:
@@ -397,7 +402,7 @@
     description: >
       Returns markers ordered by start time and ID. Bounds include their edges and may span
       up to five degrees per axis. The viewport determines the area when cityId is omitted.
-      Hidden addresses use rounded public coordinates for both matching and the marker.
+      Hidden addresses use the district center for bounds and markers, with the city center as a fallback.
       Use the same viewport and filters on subsequent pages.
     security:
       - {}
@@ -456,6 +461,7 @@
       - name: search
         in: query
         schema: { type: string, minLength: 1, maxLength: 200 }
+      - *feedByInterests
     responses:
       '200':
         description: Page of upcoming offline event markers

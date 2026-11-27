@@ -40,6 +40,7 @@ interface FeedRow {
   feed_distance?: number;
   feed_latitude?: number;
   feed_longitude?: number;
+  feed_district_name?: string | null;
 }
 
 interface MyEventRow {
@@ -80,8 +81,20 @@ const myEventViews = {
   }
 } as const;
 
-// Older snapshots can contain full precision in public_coordinates.
-const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
+const snapshotDistrict = `district.id = (
+  SELECT candidate.id FROM districts candidate
+  WHERE candidate.city_id = snapshot.city_id
+    AND (
+      ST_Covers(CAST(candidate.boundary AS geometry), CAST(snapshot.coordinates AS geometry))
+      OR (candidate.boundary IS NULL AND candidate.id = snapshot.district_id)
+    )
+  ORDER BY (candidate.id = snapshot.district_id) DESC NULLS LAST, candidate.id
+  LIMIT 1
+)`;
+const areaPoint = `COALESCE(
+  CAST(district.center AS geometry),
+  ST_SetSRID(ST_MakePoint(city.longitude, city.latitude), 4326)
+)`;
 const foreignPrivateSnapshot = `EXISTS (
   SELECT 1 FROM events other_event
   LEFT JOIN event_location_snapshot other_snapshot ON other_snapshot.event_id = other_event.id
@@ -90,10 +103,8 @@ const foreignPrivateSnapshot = `EXISTS (
     AND (other_event.primary_location_id = snapshot.location_id
       OR other_snapshot.location_id = snapshot.location_id)
 )`;
-const publicPoint = `CASE WHEN event.hide_exact_address OR ${foreignPrivateSnapshot} THEN ST_SetSRID(ST_MakePoint(
-  CAST(ROUND(CAST(ST_X(${publicSnapshot}) AS numeric), 2) AS double precision),
-  CAST(ROUND(CAST(ST_Y(${publicSnapshot}) AS numeric), 2) AS double precision)
-), 4326) ELSE CAST(snapshot.coordinates AS geometry) END`;
+const publicPoint = `CASE WHEN event.hide_exact_address OR ${foreignPrivateSnapshot}
+  THEN ${areaPoint} ELSE CAST(snapshot.coordinates AS geometry) END`;
 const feedDistance = `ST_Distance(
   CAST((${publicPoint}) AS geography),
   CAST(ST_SetSRID(ST_MakePoint(:originLongitude, :originLatitude), 4326) AS geography)
@@ -532,7 +543,11 @@ export class EventRepositoryAdapter
     ) {
       throw new AppError('Invalid cursor for the requested event view', 400);
     }
-    if (!query.ageRestrictions.length || cursor?.firstStartsAt === null) {
+    if (
+      !query.ageRestrictions.length ||
+      query.interestIds?.length === 0 ||
+      cursor?.firstStartsAt === null
+    ) {
       return { items: [], nextCursor: null };
     }
 
@@ -569,6 +584,20 @@ export class EventRepositoryAdapter
     }
     if (query.categoryId) {
       builder.andWhere('event.category_id = :categoryId', { categoryId: query.categoryId });
+    }
+    if (query.interestIds) {
+      builder.andWhere(
+        `EXISTS (
+        SELECT 1 FROM interests interest
+        JOIN categories category ON category.id = event.category_id
+        WHERE interest.id IN (:...interestIds) AND interest.is_active
+          AND (lower(btrim(interest.name)) = lower(btrim(category.name)) OR EXISTS (
+            SELECT 1 FROM event_tags link JOIN tags tag ON tag.id = link.tag_id
+            WHERE link.event_id = event.id AND lower(btrim(tag.name)) = lower(btrim(interest.name))
+          ))
+      )`,
+        { interestIds: query.interestIds }
+      );
     }
     if (query.format) {
       builder.andWhere('event.format = :format', { format: query.format });
@@ -609,6 +638,8 @@ export class EventRepositoryAdapter
       } else if (query.bounds || query.origin) {
         scoped
           .innerJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
+          .innerJoin('cities', 'city', 'city.id = snapshot.city_id')
+          .leftJoin('districts', 'district', snapshotDistrict)
           .andWhere("event.format = 'OFFLINE'");
         if (query.cityId) {
           scoped.andWhere('snapshot.city_id = :cityId', { cityId: query.cityId });
@@ -665,6 +696,7 @@ export class EventRepositoryAdapter
         ...this.toDomain(entity),
         hasAvailablePlaces: row.feed_available,
         distanceMeters: row.feed_distance,
+        districtName: row.feed_district_name,
         mapCoordinates:
           row.feed_latitude === undefined || row.feed_longitude === undefined
             ? undefined
@@ -694,6 +726,7 @@ export class EventRepositoryAdapter
     const envelope = 'ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326)';
     builder
       .andWhere(`ST_Intersects(${point}, ${envelope})`, { ...bounds })
+      .addSelect('district.name', 'feed_district_name')
       .addSelect(`ST_Y(${point})`, 'feed_latitude')
       .addSelect(`ST_X(${point})`, 'feed_longitude');
   }
@@ -718,10 +751,38 @@ export class EventRepositoryAdapter
     }
   }
 
-  findLocationSnapshot(eventId: string, locationId: string): Promise<EventLocationSnapshot | null> {
-    return this.repository.manager
+  async findLocationSnapshot(
+    eventId: string,
+    locationId: string
+  ): Promise<EventLocationSnapshot | null> {
+    const { entities, raw } = await this.repository.manager
       .getRepository(EventLocationSnapshotEntity)
-      .findOneBy({ eventId, locationId });
+      .createQueryBuilder('snapshot')
+      .innerJoin('cities', 'city', 'city.id = snapshot.city_id')
+      .leftJoin('districts', 'district', snapshotDistrict)
+      .where('snapshot.event_id = :eventId AND snapshot.location_id = :locationId', {
+        eventId,
+        locationId
+      })
+      .addSelect('district.id', 'area_id')
+      .addSelect('district.name', 'area_name')
+      .addSelect(`ST_Y(${areaPoint})`, 'area_latitude')
+      .addSelect(`ST_X(${areaPoint})`, 'area_longitude')
+      .getRawAndEntities<{
+        area_id: string | null;
+        area_name: string | null;
+        area_latitude: number;
+        area_longitude: number;
+      }>();
+    const [snapshot] = entities;
+    if (!snapshot) return null;
+    const [area] = raw;
+    return {
+      ...snapshot,
+      districtId: area.area_id,
+      districtName: area.area_name,
+      publicCoordinates: { latitude: area.area_latitude, longitude: area.area_longitude }
+    };
   }
 
   private toDomain(entity: EventEntity): Event {

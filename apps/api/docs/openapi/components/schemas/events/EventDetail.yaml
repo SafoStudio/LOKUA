@@ -88,7 +88,7 @@ allOf:
       location:
         $ref: '#/components/schemas/EventDetailLocation'
         description: |
-          Hidden addresses use rounded coordinates. The organizer, approved participants
+          Hidden addresses use the district center or the city center if no district is known. The organizer, approved participants
           and administrators can see the exact location. If a location is also reserved
           by another organizer's private event, only administrators see its exact details.
       onlineUrl:

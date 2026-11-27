@@ -133,6 +133,7 @@ export function toMapEventView(event: FeedEvent) {
     firstStartsAt: event.firstStartsAt,
     status: event.status,
     hasAvailablePlaces: event.hasAvailablePlaces,
-    coordinates: event.mapCoordinates
+    coordinates: event.mapCoordinates,
+    districtName: event.districtName ?? null
   };
 }

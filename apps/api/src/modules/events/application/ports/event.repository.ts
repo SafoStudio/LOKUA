@@ -10,12 +10,14 @@ export interface FindPublishedEventsQuery extends GetEventsQuery {
   now: Date;
   blockedOrganizerIds: string[];
   ageRestrictions: AgeRestriction[];
+  interestIds?: string[];
 }
 
 export interface FeedEvent extends Event {
   hasAvailablePlaces: boolean;
   distanceMeters?: number;
   mapCoordinates?: Coordinates;
+  districtName?: string | null;
 }
 
 export interface FindPublishedEventsResult {
@@ -26,6 +28,7 @@ export interface FindPublishedEventsResult {
 export interface EventLocationSnapshot {
   cityId: string;
   districtId: string | null;
+  districtName: string | null;
   countryCode: string;
   name: string;
   address: string;
