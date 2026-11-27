@@ -77,5 +77,15 @@ describe('Docs & Scalar API Reference', () => {
     expect(res.body.openapi).toBe('3.1.0');
     expect(res.body.info.title).toBe('LOKUA API');
     expect(res.body.paths).toHaveProperty('/api/v1/auth/register');
+    expect(res.body['x-tagGroups']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Administration', tags: expect.arrayContaining(['Admin / Moderation']) }),
+      expect.objectContaining({ name: 'User Profile', tags: expect.arrayContaining(['Users']) }),
+      expect.objectContaining({ name: 'Events', tags: expect.arrayContaining(['Participation']) })
+    ]));
+    expect(res.body.paths['/api/v1/reports'].post.tags).toEqual(['Reports']);
+    expect(res.body.paths['/api/v1/admin/reports'].get.tags).toEqual(['Admin / Moderation']);
+    expect(res.body.paths['/api/v1/users/me/photos'].put.tags).toEqual(['Users']);
+    expect(res.body.paths['/api/v1/events'].get.tags).toEqual(['Event Discovery']);
+    expect(res.body.paths['/api/v1/events'].post.tags).toEqual(['Event Management']);
   });
 });

@@ -1,6 +1,6 @@
 /api/v1/users/me/blocks:
   get:
-    tags: [Users]
+    tags: [User Blocks]
     summary: List users blocked by the current user
     security: &userBlockSecurity
       - CookieAuth: []
@@ -33,7 +33,7 @@
       required: true
       schema: { type: string, format: uuid }
   put:
-    tags: [Users]
+    tags: [User Blocks]
     summary: Block another user
     description: >
       The blocked user loses access to the current user's events and cannot join them.
@@ -52,7 +52,7 @@
       '422':
         description: Cannot block oneself
   delete:
-    tags: [Users]
+    tags: [User Blocks]
     summary: Remove the current user's block
     security: *userBlockSecurity
     responses:

@@ -25,7 +25,9 @@ export function createDocsRouter(): Router {
     apiReference({
       url: '/docs/openapi.json',
       pageTitle: 'LOKUA API Documentation',
-      theme: 'purple'
+      theme: 'purple',
+      defaultOpenFirstTag: false,
+      defaultOpenAllTags: false
     })
   );
 

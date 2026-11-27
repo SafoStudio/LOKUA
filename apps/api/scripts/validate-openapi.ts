@@ -95,6 +95,18 @@ usedTags.forEach((tag) => {
     }
 });
 
+const groupedTags = new Set<string>();
+for (const group of doc['x-tagGroups'] ?? []) {
+    for (const tag of group.tags) {
+        if (!declaredTags.has(tag)) errors.push(`Unknown tag "${tag}" in group "${group.name}"`);
+        if (groupedTags.has(tag)) errors.push(`Tag "${tag}" belongs to multiple navigation groups`);
+        groupedTags.add(tag);
+    }
+}
+for (const tag of usedTags) {
+    if (!groupedTags.has(tag)) errors.push(`Tag "${tag}" is missing from the navigation groups`);
+}
+
 // Print validation results
 if (errors.length > 0) {
     console.error(`\n❌ FAIL: OpenAPI validation failed (${errors.length} errors)\n`);

@@ -1,6 +1,6 @@
 /api/v1/events:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: List upcoming events by start time
     description: >
       Lists future published and full events in ascending start-time order. The first page
@@ -110,7 +110,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Create an event draft
     description: Requires the USER role, an active account with verified email and completed onboarding, and the applicable minimum age.
     security:
@@ -160,7 +160,7 @@
 
 /api/v1/events/me:
   get:
-    tags: [Events]
+    tags: [My Events]
     summary: List the current user's events
     description: |
       GOING lists ongoing or upcoming events with approved participation.
@@ -222,7 +222,7 @@
 
 /api/v1/events/{id}:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: Get event details
     description: |
       Published, full and completed events follow age, blocking and moderation visibility rules.
@@ -271,7 +271,7 @@
               $ref: '#/components/schemas/ErrorResponse'
 
   patch:
-    tags: [Events]
+    tags: [Event Management]
     summary: Update your draft or active published event
     security: &eventOwnerSecurity
       - CookieAuth: []
@@ -320,7 +320,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   delete:
-    tags: [Events]
+    tags: [Event Management]
     summary: Delete your draft or active published event without pending applications or participant history
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -335,7 +335,7 @@
 
 /api/v1/events/{id}/publish:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Publish your draft
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -350,7 +350,7 @@
 
 /api/v1/events/{id}/cancel:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Cancel your event
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -374,7 +374,7 @@
 
 /api/v1/events/{id}/duplicate:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Duplicate your event as a draft without dates
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -397,7 +397,7 @@
 
 /api/v1/events/map:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: List upcoming offline event markers within a viewport
     description: >
       Returns markers ordered by start time and ID. Bounds include their edges and may span
@@ -495,7 +495,7 @@
 /api/v1/events/{id}/comments:
   parameters: *eventIdParameters
   get:
-    tags: [Events]
+    tags: [Discussion]
     summary: List event comments or replies
     description: |
       Returns top-level comments by default, or replies to the selected top-level comment.
@@ -558,7 +558,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   post:
-    tags: [Events]
+    tags: [Discussion]
     summary: Post a comment or reply
     description: |
       Signed-in users with verified email and completed onboarding can post while the discussion is active.
@@ -615,7 +615,7 @@
       required: true
       schema: { type: string, format: uuid }
   patch:
-    tags: [Events]
+    tags: [Discussion]
     summary: Edit your comment
     security: *eventOwnerSecurity
     requestBody:
@@ -635,7 +635,7 @@
       '403': *commentForbidden
       '404': *discussionNotFound
   delete:
-    tags: [Events]
+    tags: [Discussion]
     summary: Remove a comment
     description: The author or event organizer can soft-delete a comment while the discussion is active.
     security: *eventOwnerSecurity
@@ -649,7 +649,7 @@
 
 /api/v1/events/{id}/participations:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Join an event or submit an application
     description: >
       FREE approves immediately. REQUEST creates a pending application even when all places are
@@ -717,7 +717,7 @@
 
 /api/v1/events/{id}/participations/me:
   delete:
-    tags: [Events]
+    tags: [Participation]
     summary: Cancel your participation before the event starts
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -750,7 +750,7 @@
 
 /api/v1/events/{id}/applications:
   get:
-    tags: [Events]
+    tags: [Participation]
     summary: List pending applications as the organizer
     security: *eventOwnerSecurity
     parameters: &eventParticipationPageParameters
@@ -795,7 +795,7 @@
 
 /api/v1/events/{id}/applications/{participationId}/approve:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Approve a pending application as the organizer
     security: *eventOwnerSecurity
     parameters: &eventParticipationIdParameters
@@ -831,7 +831,7 @@
 
 /api/v1/events/{id}/applications/{participationId}/reject:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Reject a pending application as the organizer
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters
@@ -839,7 +839,7 @@
 
 /api/v1/events/{id}/participants:
   get:
-    tags: [Events]
+    tags: [Participation]
     summary: List approved participants and the organizer
     description: Available to the organizer, approved participants and active administrators.
     security: *eventOwnerSecurity
@@ -869,7 +869,7 @@
 
 /api/v1/events/{id}/participants/{participationId}:
   delete:
-    tags: [Events]
+    tags: [Participation]
     summary: Remove an approved participant as the organizer before the event starts
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters

@@ -67,7 +67,7 @@
 
 /api/v1/users/me/photos:
   get:
-    tags: [Media]
+    tags: [Users]
     summary: List the current user's profile photos
     security: *imageSecurity
     responses:
@@ -92,7 +92,7 @@
       '403':
         description: Inactive account
   put:
-    tags: [Media]
+    tags: [Users]
     summary: Replace or reorder profile photos after onboarding
     description: The first URL is the main photo. Newly attached URLs must come from a PROFILE upload by the current user.
     security: *imageSecurity
