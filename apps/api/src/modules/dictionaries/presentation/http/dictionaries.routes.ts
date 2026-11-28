@@ -7,11 +7,21 @@ import type {
   Interest,
   InterestProvider
 } from '../../application/index.js';
-import type { CategoryInput, InterestInput } from '../../application/admin-dictionary.js';
+import type {
+  AdminDictionary,
+  CategoryInput,
+  InterestInput
+} from '../../application/admin-dictionary.js';
 
 const params = z.object({ id: z.uuid() });
+const label = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((value) => !value.includes('\0'), 'Null characters are not allowed');
 const interestBody = z.strictObject({
-  name: z.string().trim().min(1).max(100),
+  name: label,
   isActive: z.boolean().optional()
 });
 const categoryBody = interestBody.extend({
@@ -21,17 +31,15 @@ const categoryBody = interestBody.extend({
     .toLowerCase()
     .max(100)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-  icon: z.string().trim().min(1).max(100).nullable().optional(),
+  icon: label.nullable().optional(),
   orderNum: z.number().int().min(0).max(2_147_483_647).optional()
 });
-const categoryPatch = categoryBody.partial().refine((body) => Object.keys(body).length > 0);
-const interestPatch = interestBody.partial().refine((body) => Object.keys(body).length > 0);
-
-interface AdminDictionary<Item, Input> {
-  list(): Promise<Item[]>;
-  create(input: Input): Promise<Item>;
-  update(id: string, input: Partial<Input>): Promise<Item>;
-}
+const categoryPatch = categoryBody
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, 'At least one field is required');
+const interestPatch = interestBody
+  .partial()
+  .refine((body) => Object.keys(body).length > 0, 'At least one field is required');
 
 export function createPublicDictionariesRouter(
   categories: CategoryProvider,

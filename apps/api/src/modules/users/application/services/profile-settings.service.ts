@@ -30,8 +30,8 @@ export class ProfileSettingsService {
       if (ids.length < 3 || ids.length > 20) {
         throw new AppError('Оберіть від 3 до 20 різних інтересів', 422);
       }
-      const found = await this.interests.findByIds(ids);
-      if (found.filter((interest) => interest.isActive).length !== ids.length) {
+      const found = await this.interests.findActiveByIds(ids);
+      if (found.length !== ids.length) {
         throw new AppError('Деякі інтереси недоступні', 422);
       }
       patch = { ...patch, interestIds: ids };

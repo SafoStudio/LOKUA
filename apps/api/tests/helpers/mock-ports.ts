@@ -51,7 +51,7 @@ export function createMockCityProvider(): CityProvider {
 export function createMockInterestProvider(): InterestProvider {
     return {
         findById: vi.fn(),
-        findByIds: vi.fn(),
+        findActiveByIds: vi.fn(),
         listActive: vi.fn()
     };
 }

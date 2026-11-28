@@ -64,7 +64,7 @@ export class GetEventsUseCase {
     const profileCity = profileCityId ? await this.cities.findById(profileCityId) : null;
     if (profileCity?.isActive) return profileCity;
 
-    const kyiv = await this.cities.findBySlug('kyiv');
+    const kyiv = await this.cities.findBySlug('kyiv', 'UA');
     if (!kyiv?.isActive) throw new AppError('Default feed city is unavailable');
     return kyiv;
   }

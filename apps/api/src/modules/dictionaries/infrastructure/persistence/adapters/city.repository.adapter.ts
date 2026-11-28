@@ -10,15 +10,15 @@ export class CityRepositoryAdapter implements CityProvider {
     return entity ? this.toDomain(entity) : null;
   }
 
-  async findBySlug(slug: string): Promise<City | null> {
-    const entity = await this.repo.findOne({ where: { slug } });
+  async findBySlug(slug: string, countryCode: string): Promise<City | null> {
+    const entity = await this.repo.findOne({ where: { slug, country_code: countryCode } });
     return entity ? this.toDomain(entity) : null;
   }
 
   async listActive(): Promise<City[]> {
     const entities = await this.repo.find({
       where: { is_active: true },
-      order: { name: 'ASC' }
+      order: { name: 'ASC', country_code: 'ASC', id: 'ASC' }
     });
     return entities.map((e) => this.toDomain(e));
   }

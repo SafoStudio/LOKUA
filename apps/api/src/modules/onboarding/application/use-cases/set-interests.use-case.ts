@@ -45,7 +45,7 @@ export class SetInterestsUseCase {
       throw new AppError('Maximum 20 interests allowed', 422);
     }
 
-    const found = await this.interests.findByIds(uniqueIds);
+    const found = await this.interests.findActiveByIds(uniqueIds);
     if (found.length !== uniqueIds.length) {
       const foundSet = new Set(found.map((i) => i.id));
       const missing = uniqueIds.filter((id) => !foundSet.has(id));

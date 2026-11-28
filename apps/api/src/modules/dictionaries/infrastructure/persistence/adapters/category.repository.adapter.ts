@@ -1,9 +1,12 @@
 import type { Repository } from 'typeorm';
 import type { Category, CategoryProvider } from '../../../application/index.js';
 import type { CategoryEntity } from '../entities/category.entity.js';
-import type { CategoryInput } from '../../../application/admin-dictionary.js';
+import type { AdminDictionaryStore, CategoryInput } from '../../../application/admin-dictionary.js';
+import { mapDictionaryConflict } from './dictionary-conflict.js';
 
-export class CategoryRepositoryAdapter implements CategoryProvider {
+export class CategoryRepositoryAdapter
+  implements CategoryProvider, AdminDictionaryStore<Category, CategoryInput>
+{
   constructor(private readonly repo: Repository<CategoryEntity>) {}
 
   async findById(id: string): Promise<Category | null> {
@@ -30,14 +33,13 @@ export class CategoryRepositoryAdapter implements CategoryProvider {
   }
 
   async insert({ orderNum, isActive, ...fields }: CategoryInput): Promise<Category> {
-    const saved = await this.repo.save(
-      this.repo.create({
-        ...fields,
-        icon: fields.icon ?? null,
-        order_num: orderNum ?? 0,
-        is_active: isActive ?? true
-      })
-    );
+    const record = this.repo.create({
+      ...fields,
+      icon: fields.icon ?? null,
+      order_num: orderNum ?? 0,
+      is_active: isActive ?? true
+    });
+    const saved = await mapDictionaryConflict(this.repo.save(record));
     return this.toDomain(saved);
   }
 
@@ -45,13 +47,14 @@ export class CategoryRepositoryAdapter implements CategoryProvider {
     id: string,
     { orderNum, isActive, ...fields }: Partial<CategoryInput>
   ): Promise<Category | null> {
-    const result = await this.repo
+    const write = this.repo
       .createQueryBuilder()
       .update()
       .set({ ...fields, order_num: orderNum, is_active: isActive })
       .where('id = :id', { id })
       .returning('*')
       .execute();
+    const result = await mapDictionaryConflict(write);
     const [row] = result.raw as CategoryEntity[];
     return row ? this.toDomain(row) : null;
   }

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError, TypeOrmUnitOfWork } from '../../src/common/index.js';
 import { errorHandler } from '../../src/middlewares/index.js';
 import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
+import { CityEntity, CityRepositoryAdapter } from '../../src/modules/dictionaries/infrastructure/index.js';
 import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
 import {
@@ -92,8 +93,8 @@ describe('event management and feed with PostgreSQL', () => {
       users.blocks,
       () => now
     );
-    const kyiv = await cities.findBySlug('kyiv');
-    const lviv = await cities.findBySlug('lviv');
+    const kyiv = await cities.findBySlug('kyiv', 'UA');
+    const lviv = await cities.findBySlug('lviv', 'UA');
     if (!kyiv || !lviv) throw new Error('Test cities are missing');
     kyivId = kyiv.id;
     lvivId = lviv.id;
@@ -2025,6 +2026,25 @@ describe('event management and feed with PostgreSQL', () => {
     expect(discussion.body.data).toMatchObject([{ text: 'A previous comment', author: null }]);
   });
 
+  it('resolves city slugs within their country', async () => {
+    await dataSource.transaction(async (manager) => {
+      await manager.query("INSERT INTO countries (code, name) VALUES ('XZ', 'Test Country')");
+      const cities = manager.getRepository(CityEntity);
+      const other = await cities.save(cities.create({
+        country_code: 'XZ',
+        slug: 'kyiv',
+        name: 'Other Kyiv',
+        latitude: 0,
+        longitude: 0
+      }));
+      const provider = new CityRepositoryAdapter(cities);
+      await expect(provider.findBySlug('kyiv', 'UA')).resolves.toMatchObject({ id: kyivId });
+      await expect(provider.findBySlug('kyiv', 'XZ')).resolves.toMatchObject({ id: other.id });
+      await cities.delete(other.id);
+      await manager.query("DELETE FROM countries WHERE code = 'XZ'");
+    });
+  });
+
   it('manages dictionary records as an admin and exposes active choices publicly', async () => {
     const [owner, staff] = await Promise.all([createUser(), createUser()]);
     const api = createEventsTestApi([owner, { ...staff, role: 'ADMIN' }]);
@@ -2033,12 +2053,22 @@ describe('event management and feed with PostgreSQL', () => {
     const admin = (path: string) => api.get(path).set('X-Test-User', staff.id);
     await api.get('/admin/categories').expect(401);
     await api.post('/admin/categories').set('X-Test-User', owner.id).send(category).expect(403);
-    const created = await api.post('/admin/categories')
-      .set('X-Test-User', staff.id).send(category).expect(201);
+    const createCategory = (body: object) => api.post('/admin/categories')
+      .set('X-Test-User', staff.id).send(body);
+    const [first, second] = await Promise.all([createCategory(category), createCategory(category)]);
+    expect([first.status, second.status].sort()).toEqual([201, 409]);
+    const created = first.status === 201 ? first : second;
     const categoryId = created.body.data.id;
     categoryIds.push(categoryId);
     expect(created.body.data).toMatchObject({ ...category, isActive: true });
-    await api.post('/admin/categories').set('X-Test-User', staff.id).send(category).expect(409);
+    await createCategory({ ...category, name: 'bad\0name' }).expect(400);
+    const other = await createCategory({ ...category, name: `${slug}-other`, slug: `${slug}-other` }).expect(201);
+    categoryIds.push(other.body.data.id);
+    const patchCategory = (id: string, body: object) =>
+      api.patch(`/admin/categories/${id}`).set('X-Test-User', staff.id).send(body);
+    await patchCategory(other.body.data.id, { slug }).expect(409);
+    await patchCategory(categoryId, {}).expect(400);
+    await patchCategory(randomUUID(), { isActive: false }).expect(404);
     const publicCategories = await api.get('/dictionaries/categories').expect(200);
     expect(publicCategories.body.data).toContainEqual(created.body.data);
     const event = await publishForFeed(owner, { categoryId });
@@ -2057,6 +2087,15 @@ describe('event management and feed with PostgreSQL', () => {
       .send({ name: `Interest ${randomUUID()}` }).expect(201);
     const interestId = interest.body.data.id;
     interestIds.push(interestId);
+    await api.post('/admin/interests').set('X-Test-User', staff.id)
+      .send({ name: interest.body.data.name }).expect(409);
+    const { interests } = createDictionariesModule({ dataSource });
+    const currentIds = [interestId, ...(await interests.listActive())
+      .filter(({ id }) => id !== interestId).slice(0, 2).map(({ id }) => id)];
+    const profile = () => api.get('/users/me/profile').set('X-Test-User', owner.id);
+    const updateInterests = (ids: string[]) =>
+      api.patch('/users/me/profile').set('X-Test-User', owner.id).send({ interestIds: ids });
+    await updateInterests(currentIds).expect(204);
     expect((await api.get('/dictionaries/interests').expect(200)).body.data)
       .toContainEqual(interest.body.data);
     await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
@@ -2065,6 +2104,8 @@ describe('event management and feed with PostgreSQL', () => {
       .not.toContainEqual(expect.objectContaining({ id: interestId }));
     expect((await admin('/admin/interests').expect(200)).body.data)
       .toContainEqual(expect.objectContaining({ id: interestId, isActive: false }));
+    await updateInterests(currentIds).expect(422);
+    expect((await profile().expect(200)).body.data.interestIds).toContain(interestId);
     await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
       .send({ isActive: true }).expect(200);
     expect((await api.get('/dictionaries/interests').expect(200)).body.data)

@@ -11,7 +11,7 @@ export class CountryRepositoryAdapter implements CountryProvider {
   }
 
   async listAll(): Promise<Country[]> {
-    const entities = await this.repo.find({ order: { name: 'ASC' } });
+    const entities = await this.repo.find({ order: { name: 'ASC', code: 'ASC' } });
     return entities.map((e) => ({ code: e.code, name: e.name }));
   }
 }
