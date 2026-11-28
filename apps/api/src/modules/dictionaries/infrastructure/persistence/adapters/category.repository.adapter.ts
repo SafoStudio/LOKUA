@@ -1,6 +1,8 @@
 import type { Repository } from 'typeorm';
+import { toEntityManager } from '../../../../../common/index.js';
+import type { TransactionContext } from '../../../../../common/index.js';
 import type { Category, CategoryProvider } from '../../../application/index.js';
-import type { CategoryEntity } from '../entities/category.entity.js';
+import { CategoryEntity } from '../entities/category.entity.js';
 import type { AdminDictionaryStore, CategoryInput } from '../../../application/admin-dictionary.js';
 import { mapDictionaryConflict } from './dictionary-conflict.js';
 
@@ -9,8 +11,12 @@ export class CategoryRepositoryAdapter
 {
   constructor(private readonly repo: Repository<CategoryEntity>) {}
 
-  async findById(id: string): Promise<Category | null> {
-    const entity = await this.repo.findOne({ where: { id } });
+  async findById(id: string, tx?: TransactionContext): Promise<Category | null> {
+    const repo = tx ? toEntityManager(tx).getRepository(CategoryEntity) : this.repo;
+    const entity = await repo.findOne({
+      where: { id },
+      ...(tx ? { lock: { mode: 'pessimistic_read' as const } } : {})
+    });
     return entity ? this.toDomain(entity) : null;
   }
 

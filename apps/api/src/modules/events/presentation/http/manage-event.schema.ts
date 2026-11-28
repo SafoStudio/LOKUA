@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createEventSchema } from './create-event.schema.js';
+import { eventText } from './event-text.schema.js';
 
 export const updateEventSchema = createEventSchema
   .partial()
@@ -7,7 +8,7 @@ export const updateEventSchema = createEventSchema
 
 export const cancelEventSchema = z
   .object({
-    reason: z.string().trim().min(1).max(300)
+    reason: eventText(1, 300)
   })
   .strict();
 

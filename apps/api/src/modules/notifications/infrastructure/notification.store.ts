@@ -129,11 +129,22 @@ export class NotificationStore implements NotificationPublisher {
                        JOIN event_participations participation ON participation.event_id = event.id
                        WHERE event.id = notification.target_id
                          AND event.status IN ('PUBLISHED', 'FULL')
+                         AND NOT event.is_hidden_by_admin
                          AND event.first_starts_at > now()
                          AND participation.user_id = recipient.id AND participation.status = 'APPROVED'
                          AND notification.deduplication_key = concat(
                            'start:', event.id, ':', recipient.id, ':', extract(epoch FROM event.first_starts_at)
                          )
+                     )
+                   )
+                   AND (
+                     notification.type <> 'REVIEW_REMINDER' OR EXISTS (
+                       SELECT 1 FROM events event
+                       JOIN event_participations participation ON participation.event_id = event.id
+                       WHERE event.id = notification.target_id AND event.status = 'COMPLETED'
+                         AND NOT event.is_hidden_by_admin
+                         AND event.first_ends_at > now() - interval '7 days'
+                         AND participation.user_id = recipient.id AND participation.status = 'APPROVED'
                      )
                    ) AS allowed, notification.email_attempts AS attempts
          FROM notifications notification

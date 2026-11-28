@@ -31,7 +31,7 @@ allOf:
           - type: object
             required: [id, name, avatarUrl]
             properties:
-              id: { type: string, format: uuid }
+              id: { type: [string, 'null'], format: uuid }
               name: { type: [string, 'null'] }
               avatarUrl: { type: [string, 'null'] }
       reviews:
@@ -89,8 +89,8 @@ allOf:
         $ref: '#/components/schemas/EventDetailLocation'
         description: |
           Hidden addresses use the district center or the city center if no district is known. The organizer, approved participants
-          and administrators can see the exact location. If a location is also reserved
-          by another organizer's private event, only administrators see its exact details.
+          and administrators can see the exact location. If another account owns the private
+          location or another organizer reserves it through a private event, only administrators see its exact details.
       onlineUrl:
         type: [string, 'null']
         description: Available to the organizer, approved participants and administrators.

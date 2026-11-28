@@ -9,7 +9,7 @@ properties:
     maxItems: 10
     items: { type: string, minLength: 1, maxLength: 30 }
     description: Tags are trimmed, lowercased, and deduplicated.
-  description: { type: string, minLength: 1 }
+  description: { type: string, minLength: 1, maxLength: 10000 }
   coverUrl:
     type: [string, 'null']
     description: URL from an EVENT image upload by the current user.
@@ -22,7 +22,7 @@ properties:
   primaryLocationId: { type: [string, 'null'], format: uuid }
   onlineUrl: { type: [string, 'null'] }
   hideExactAddress: { type: boolean }
-  capacityLimit: { type: [integer, 'null'], minimum: 1 }
+  capacityLimit: { type: [integer, 'null'], minimum: 1, maximum: 2147483647 }
   participationMode: { type: string, enum: [FREE, REQUEST] }
   ageRestriction: { type: string, enum: [ALL, SIXTEEN_PLUS, EIGHTEEN_PLUS] }
   isFree: { type: boolean }

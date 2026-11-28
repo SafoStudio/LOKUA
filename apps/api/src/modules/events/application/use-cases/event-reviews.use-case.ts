@@ -14,6 +14,7 @@ import type { EventRepository } from '../ports/event.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 import type { NotificationPublisher } from '../../../notifications/index.js';
 import { publishEventNotification } from '../publish-event-notification.js';
+import { eventPerson } from '../event-person.js';
 import type {
   EventReviewRepository,
   ReviewListQuery,
@@ -299,9 +300,6 @@ export class EventReviewsUseCase {
 
   private async author(id: string) {
     const profile = await this.profiles.findByUserId(id);
-    if (profile?.status === 'DELETED') {
-      return { id: null, name: profile.name, avatarUrl: null };
-    }
-    return { id, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
+    return eventPerson(id, profile);
   }
 }

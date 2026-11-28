@@ -7,12 +7,12 @@ import type {
   UserProfileProvider
 } from '../../../users/index.js';
 import type { AgeRestriction } from '../../domain/index.js';
-import type { EventRepository } from '../ports/event.repository.js';
+import type { EventFeedRepository } from '../ports/event.repository.js';
 import type { GetEventsQuery } from '../types/get-events-query.js';
 
 export class GetEventsUseCase {
   constructor(
-    private readonly eventRepository: EventRepository,
+    private readonly eventRepository: EventFeedRepository,
     private readonly access: AccessService,
     private readonly cities: CityProvider,
     private readonly profiles: UserProfileProvider,

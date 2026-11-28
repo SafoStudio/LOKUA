@@ -36,10 +36,12 @@ export interface EventLocationSnapshot {
   publicCoordinates: Coordinates;
 }
 
+export interface EventFeedRepository {
+  findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult>;
+}
+
 export interface EventRepository {
   create(organizerId: string, data: CreateEventData): Promise<Event>;
-
-  findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult>;
 
   findOrganizerHistory(query: {
     organizerId: string;

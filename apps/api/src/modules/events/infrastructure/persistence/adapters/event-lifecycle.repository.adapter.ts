@@ -50,7 +50,7 @@ export class EventLifecycleRepositoryAdapter implements EventLifecycleRepository
          UPDATE events
          SET status = 'COMPLETED', updated_at = $2
          WHERE id = ANY($1::uuid[]) AND first_ends_at <= $2
-         RETURNING id, organizer_id, title, primary_location_id, first_starts_at, first_ends_at, timezone
+         RETURNING id, organizer_id, title, primary_location_id, first_starts_at, first_ends_at, timezone, is_hidden_by_admin
        ), archived AS (
          UPDATE discussion_comments comment
          SET is_archived = true, updated_at = $2
@@ -70,6 +70,7 @@ export class EventLifecycleRepositoryAdapter implements EventLifecycleRepository
        FROM completed
        JOIN event_participations participation ON participation.event_id = completed.id
        WHERE participation.status = 'APPROVED' AND participation.user_id <> completed.organizer_id
+         AND NOT completed.is_hidden_by_admin
          AND completed.first_ends_at > $2 - INTERVAL '7 days'`,
       [eventIds, now]
     );
@@ -100,6 +101,7 @@ export class EventLifecycleRepositoryAdapter implements EventLifecycleRepository
        FROM events event
        JOIN event_participations participation ON participation.event_id = event.id
        WHERE event.status IN ('PUBLISHED', 'FULL')
+         AND NOT event.is_hidden_by_admin
          AND event.first_starts_at > $1 AND event.first_starts_at <= $2
          AND participation.status = 'APPROVED' AND participation.user_id <> event.organizer_id
          AND NOT EXISTS (SELECT 1 FROM notifications n WHERE n.deduplication_key = ${key})

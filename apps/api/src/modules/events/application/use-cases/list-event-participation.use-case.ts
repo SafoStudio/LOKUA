@@ -7,6 +7,7 @@ import type {
   UserProfileProvider
 } from '../../../users/index.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import { eventPerson } from '../event-person.js';
 
 export interface ParticipationPageQuery {
   limit: number;
@@ -82,11 +83,12 @@ export class ListEventParticipationUseCase {
 
   private async profile(userId: string, now: Date) {
     const profile = await this.profiles.findByUserId(userId);
+    const person = eventPerson(userId, profile);
     const details = profile?.status === 'ACTIVE' ? profile : null;
     const socialLinks = details?.socialLinks;
     return {
-      id: userId,
-      name: details?.name ?? (profile?.status === 'DELETED' ? profile.name : null),
+      id: person.id,
+      name: details?.name ?? (profile?.status === 'DELETED' ? person.name : null),
       avatarUrl: details?.avatarUrl ?? null,
       age: calculateAge(details?.birthDate ?? null, now),
       photoUrls: details?.photoUrls ?? [],

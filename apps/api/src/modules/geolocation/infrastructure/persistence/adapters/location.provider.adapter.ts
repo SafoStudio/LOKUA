@@ -1,3 +1,4 @@
+import type { TransactionContext } from '../../../../../common/index.js';
 import type { CreateLocationProviderInput, LocationProvider } from '../../../application/index.js';
 import type { CreateLocationUseCase } from '../../../application/index.js';
 import type { Location, PublicLocationView } from '../../../domain/index.js';
@@ -13,8 +14,8 @@ export class LocationProviderAdapter implements LocationProvider {
     private readonly createLocation: CreateLocationUseCase
   ) {}
 
-  findById(id: string): Promise<Location | null> {
-    return this.locationRepository.findById(id);
+  findById(id: string, tx?: TransactionContext): Promise<Location | null> {
+    return this.locationRepository.findById(id, tx);
   }
 
   async findPublicById(id: string): Promise<PublicLocationView | null> {

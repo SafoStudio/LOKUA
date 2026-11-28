@@ -9,9 +9,12 @@ import { AppError, toEntityManager } from '../../../../../common/index.js';
 export class UserRepositoryAdapter implements UserRepository {
   constructor(private readonly repo: Repository<UserEntity>) {}
 
-  async findById(id: string, tx?: TransactionContext): Promise<User | null> {
+  async findById(id: string, tx?: TransactionContext, lockForUpdate = false): Promise<User | null> {
     const repo = tx ? toEntityManager(tx).getRepository(UserEntity) : this.repo;
-    const entity = await repo.findOne({ where: { id } });
+    const entity = await repo.findOne({
+      where: { id },
+      ...(tx && lockForUpdate ? { lock: { mode: 'for_no_key_update' as const } } : {})
+    });
     return entity ? this.toDomain(entity) : null;
   }
 

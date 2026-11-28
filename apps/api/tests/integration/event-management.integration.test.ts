@@ -34,6 +34,7 @@ import type { ImageOwnership } from '../../src/modules/storage/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
+import { EventFeedRepositoryAdapter } from '../../src/modules/events/infrastructure/persistence/adapters/event-feed.repository.adapter.js';
 import { createEventsModule } from '../../src/modules/events/index.js';
 import { createNotificationsModule } from '../../src/modules/notifications/index.js';
 import type { CreateNotificationsModuleDependencies } from '../../src/modules/notifications/index.js';
@@ -109,7 +110,7 @@ describe('event management and feed with PostgreSQL', () => {
       requireAuth: (_req, _res, next) => next()
     }).locations;
     getEvents = new GetEventsUseCase(
-      new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
+      new EventFeedRepositoryAdapter(dataSource.getRepository(EventEntity)),
       users.access,
       cities,
       users.profiles,
@@ -1061,6 +1062,16 @@ describe('event management and feed with PostgreSQL', () => {
     expect(secondDistance.items[0].distanceMeters).toBe(0);
     expect(thirdDistance.items[0].id).toBe(visible.id);
     expect(thirdDistance.items[0].distanceMeters).toBeGreaterThan(0);
+    const otherOwner = await createUser();
+    await dataSource.query('UPDATE locations SET created_by = $2, is_private = true WHERE id = $1', [
+      location.id, otherOwner.id
+    ]);
+    const privateViewport = await getEvents.execute({ ...mapQuery, limit: 10 }, null);
+    expect(privateViewport.items.map(toMapEventView)).toContainEqual(expect.objectContaining({
+      id: visible.id, coordinates: origin
+    }));
+    const privateCard = await api.get(`/events/${visible.id}`).expect(200);
+    expect(privateCard.body.data.location).toMatchObject({ coordinates: origin, isExact: false });
     expect(thirdDistance.nextCursor).toBeNull();
     await expect(getEvents.execute({
       ...mapQuery,
@@ -1094,6 +1105,36 @@ describe('event management and feed with PostgreSQL', () => {
     const personalized = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
     expect(personalized.body.data.map(({ id }: { id: string }) => id).sort())
       .toEqual([categoryMatch.id, tagMatch.id].sort());
+
+    const updatedLabel = `Renamed ${randomUUID()}`;
+    const originalTag = interest.name.trim().toLowerCase();
+    const [tag] = await dataSource.query<{ id: string }[]>('SELECT id FROM tags WHERE name = $1', [originalTag]);
+    try {
+      await dataSource.query('UPDATE categories SET name = $2 WHERE id = $1', [category.id, updatedLabel]);
+      await dataSource.query('UPDATE tags SET name = $2 WHERE id = $1', [tag.id, updatedLabel]);
+      await dataSource.query('UPDATE interests SET name = $2 WHERE id = $1', [interest.id, `${updatedLabel} interest`]);
+      const afterRename = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+      expect(afterRename.body.data.map(({ id }: { id: string }) => id).sort())
+        .toEqual([categoryMatch.id, tagMatch.id].sort());
+      await dataSource.query('UPDATE interests SET is_active = false WHERE id = $1', [interest.id]);
+      const afterDeactivation = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+      expect(afterDeactivation.body.data).toEqual([]);
+    } finally {
+      await dataSource.query('UPDATE interests SET name = $2, is_active = true WHERE id = $1', [interest.id, interest.name]);
+      await dataSource.query('UPDATE tags SET name = $2 WHERE id = $1', [tag.id, originalTag]);
+      await dataSource.query('UPDATE categories SET name = $2 WHERE id = $1', [category.id, category.name]);
+    }
+  });
+
+  it('rejects an unrepresentable capacity, invalid datetimes and null characters before writes', async () => {
+    const owner = await createUser();
+    const api = createEventsTestApi([owner]);
+    const create = (patch: object) =>
+      api.post('/events').set('X-Test-User', owner.id).send({ ...eventData(), ...patch });
+    await create({ capacityLimit: 2_147_483_648 }).expect(400);
+    await create({ firstStartsAt: true, firstEndsAt: 2_000 }).expect(400);
+    await create({ title: 'invalid\0title' }).expect(400);
+    expect(await dataSource.getRepository(EventEntity).countBy({ organizerId: owner.id })).toBe(0);
   });
 
   it('serializes free joins, releases a place, and remembers the first approval', async () => {
@@ -1143,6 +1184,29 @@ describe('event management and feed with PostgreSQL', () => {
     await expect(manageParticipation.join(other, event.id)).resolves.toMatchObject({
       participation: { status: 'APPROVED' }
     });
+  });
+
+  it('rejects participation writes authorized before the session was revoked', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const event = await publishForFeed(owner, {});
+    await dataSource.getRepository(UserEntity).update(attendee.id, { sessionVersion: randomUUID() });
+    await expect(manageParticipation.join(attendee, event.id))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(await dataSource.getRepository(EventParticipationEntity).findOneBy({
+      eventId: event.id, userId: attendee.id
+    })).toBeNull();
+  });
+
+  it('reports a schedule conflict when one attendee joins overlapping events concurrently', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const first = await publishForFeed(owner, {});
+    const second = await publishForFeed(owner, {});
+    const results = await Promise.all([
+      manageParticipation.join(attendee, first.id),
+      manageParticipation.join(attendee, second.id)
+    ]);
+    expect(results.map(({ warnings }) => warnings.length).sort()).toEqual([0, 1]);
+    expect(results.flatMap(({ warnings }) => warnings)).toEqual(['SCHEDULE_CONFLICT']);
   });
 
   it('applies age, block and event access before joining and warns about schedule conflicts', async () => {
@@ -1790,12 +1854,17 @@ describe('event management and feed with PostgreSQL', () => {
       new TypeOrmUnitOfWork(dataSource),
       () => cutoff
     );
+    const hiddenEvent = await publishForFeed(owner, {});
+    await events.update(hiddenEvent.id, { firstStartsAt: start, firstEndsAt: end });
+    await manageParticipation.join(attendee, hiddenEvent.id);
+    await events.update(hiddenEvent.id, { isHiddenByAdmin: true });
     await lifecycle.execute();
     await lifecycle.execute();
     const reminder = await rows.findOneByOrFail({
       recipientId: attendee.id, type: 'EVENT_REMINDER_24H', targetId: event.id
     });
     expect(await rows.countBy({ type: 'EVENT_REMINDER_24H', targetId: event.id })).toBe(1);
+    expect(await rows.countBy({ type: 'EVENT_REMINDER_24H', targetId: hiddenEvent.id })).toBe(0);
     expect(await rows.countBy({ recipientId: applicant.id, targetId: event.id })).toBe(0);
     await rows.update(reminder.id, { emailDueAt: new Date(0) });
     await notifications.startDeliveryWorker()();
@@ -1805,6 +1874,8 @@ describe('event management and feed with PostgreSQL', () => {
     await lifecycle.execute();
     await lifecycle.execute();
     expect(await rows.countBy({ type: 'REVIEW_REMINDER', targetId: event.id })).toBe(1);
+    expect(await rows.countBy({ type: 'REVIEW_REMINDER', targetId: hiddenEvent.id })).toBe(0);
+    expect((await events.findOneByOrFail({ id: hiddenEvent.id })).status).toBe('COMPLETED');
     expect(await rows.findOneByOrFail({ type: 'REVIEW_REMINDER', targetId: event.id })).toMatchObject({
       recipientId: attendee.id, emailDueAt: null
     });
@@ -2003,6 +2074,8 @@ describe('event management and feed with PostgreSQL', () => {
     const [owner, attendee] = await Promise.all([createUser(), createUser()]);
     const upcoming = await publishForFeed(owner, {});
     const completed = await publishForFeed(attendee, {});
+    const organizerHistory = await publishForFeed(owner, {});
+    await dataSource.getRepository(EventEntity).update(organizerHistory.id, { status: 'COMPLETED' });
     const discussionEvent = await publishForFeed(attendee, {});
     await dataSource.getRepository(EventEntity).update(discussionEvent.id, {
       firstStartsAt: new Date(Date.now() + 30 * 60_000),
@@ -2075,6 +2148,10 @@ describe('event management and feed with PostgreSQL', () => {
     expect(await dataSource.getRepository(EventOccurrenceEntity).findOneByOrFail({ eventId: upcoming.id }))
       .toMatchObject({ status: 'CANCELLED' });
     await api.get(`/users/${owner.id}`).expect(404);
+    const pendingOrganizer = await api.get(`/events/${organizerHistory.id}`).expect(200);
+    expect(pendingOrganizer.body.data.organizer).toMatchObject({ id: null, name: null, avatarUrl: null });
+    const pendingReviews = await api.get(`/events/${completed.id}/reviews`).expect(200);
+    expect(pendingReviews.body.data).toMatchObject([{ author: { id: null, name: null, avatarUrl: null } }]);
     const inbox = await api.get('/notifications').set('X-Test-User', attendee.id).expect(200);
     expect(inbox.body.data).toMatchObject([{ type: 'EVENT_CANCELLED', targetId: upcoming.id }]);
     for (let attempt = 0; attempt < 50 && received.length === 0; attempt++) {

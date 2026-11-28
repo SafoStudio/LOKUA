@@ -17,6 +17,7 @@ import { startEventLifecycleWorker } from './infrastructure/event-lifecycle.work
 import { EventLifecycleRepositoryAdapter } from './infrastructure/persistence/adapters/event-lifecycle.repository.adapter.js';
 import { DiscussionCommentRepositoryAdapter } from './infrastructure/persistence/adapters/discussion-comment.repository.adapter.js';
 import { EventReviewRepositoryAdapter } from './infrastructure/persistence/adapters/event-review.repository.adapter.js';
+import { EventFeedRepositoryAdapter } from './infrastructure/persistence/adapters/event-feed.repository.adapter.js';
 import type {
   AccessService,
   AuthUserProvider,
@@ -29,7 +30,7 @@ import {
   EventRepositoryAdapter,
   EventReviewEntity
 } from './infrastructure/index.js';
-import { CreateEventUseCase, GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
+import { GetEventsUseCase, GetEventByIdUseCase } from './application/index.js';
 import { createEventsController } from './presentation/http/events.controller.js';
 import { createDiscussionController } from './presentation/http/discussion.controller.js';
 import { createEventReviewController } from './presentation/http/event-review.controller.js';
@@ -65,7 +66,8 @@ export function createEventsModule({
   notifications,
   images
 }: CreateEventsModuleDependencies) {
-  const eventRepository = new EventRepositoryAdapter(dataSource.getRepository(EventEntity));
+  const eventRows = dataSource.getRepository(EventEntity);
+  const eventRepository = new EventRepositoryAdapter(eventRows);
 
   const unitOfWork = new TypeOrmUnitOfWork(dataSource);
   const clock = () => new Date();
@@ -113,8 +115,14 @@ export function createEventsModule({
     notifications,
     images
   );
-  const createEvent = new CreateEventUseCase(manageEvent);
-  const getEvents = new GetEventsUseCase(eventRepository, access, cities, profiles, blocks, clock);
+  const getEvents = new GetEventsUseCase(
+    new EventFeedRepositoryAdapter(eventRows),
+    access,
+    cities,
+    profiles,
+    blocks,
+    clock
+  );
   const getMyEvents = new GetMyEventsUseCase(eventRepository, access, blocks, clock);
   const getEventById = new GetEventByIdUseCase(
     eventRepository,
@@ -137,7 +145,6 @@ export function createEventsModule({
     listParticipation,
     manageParticipation,
     manageEvent,
-    createEvent,
     getEvents,
     getMyEvents,
     getEventById
@@ -157,7 +164,6 @@ export function createEventsModule({
       eventRepository.inTransaction(tx).lockOrganizer(id),
     cancelUpcomingForAccountDeletion:
       manageEvent.cancelUpcomingForAccountDeletion.bind(manageEvent),
-    createEvent,
     getEvents,
     getEventById,
     startLifecycleWorker: () => startEventLifecycleWorker(() => advanceEventLifecycle.execute()),

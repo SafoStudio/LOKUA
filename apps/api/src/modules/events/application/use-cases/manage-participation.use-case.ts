@@ -24,7 +24,7 @@ export class ManageParticipationUseCase {
   ) {}
 
   join(user: AuthUser, eventId: string, message?: string) {
-    return this.withEvent(eventId, async (events, event, now, tx) => {
+    return this.withEvent(user, eventId, async (events, event, now, tx, account) => {
       if (
         event.isHiddenByAdmin ||
         !this.access.canViewEvent(user, event.ageRestriction, now) ||
@@ -32,7 +32,10 @@ export class ManageParticipationUseCase {
       ) {
         throw new AppError('Event not found', 404);
       }
-      if (!this.access.canJoinEvent(user, event.ageRestriction, now)) {
+      if (
+        !this.access.canJoinEvent(user, event.ageRestriction, now) ||
+        !this.access.canJoinEvent(account, event.ageRestriction, now)
+      ) {
         throw new AppError('Event participation is not allowed for this account', 403);
       }
       this.ensureOpen(event, now);
@@ -83,7 +86,7 @@ export class ManageParticipationUseCase {
   }
 
   cancel(user: AuthUser, eventId: string) {
-    return this.withEvent(eventId, async (events, event, now, tx) => {
+    return this.withEvent(user, eventId, async (events, event, now, tx) => {
       if (event.organizerId === user.id) {
         throw new AppError('The organizer cannot cancel their own participation', 409);
       }
@@ -116,7 +119,7 @@ export class ManageParticipationUseCase {
     participationId: string,
     decision: 'APPROVED' | 'REJECTED'
   ) {
-    return this.withEvent(eventId, async (events, event, now, tx) => {
+    return this.withEvent(user, eventId, async (events, event, now, tx) => {
       this.ensureOwner(event, user);
       const participation = await this.findManagedParticipation(events, event, participationId);
       if (participation.status === decision) return participation;
@@ -159,7 +162,7 @@ export class ManageParticipationUseCase {
   }
 
   remove(user: AuthUser, eventId: string, participationId: string, reason?: string) {
-    return this.withEvent(eventId, async (events, event, now, tx) => {
+    return this.withEvent(user, eventId, async (events, event, now, tx) => {
       this.ensureOwner(event, user);
       const participation = await this.findManagedParticipation(events, event, participationId);
       if (participation.status === 'REMOVED_BY_ORGANIZER') return participation;
@@ -254,19 +257,29 @@ export class ManageParticipationUseCase {
   }
 
   private withEvent<T>(
+    user: AuthUser,
     id: string,
     run: (
       events: EventParticipationRepository,
       event: Event,
       now: Date,
-      tx: TransactionContext
+      tx: TransactionContext,
+      account: AuthUser
     ) => Promise<T>
   ): Promise<T> {
     return this.unitOfWork.run(async (tx) => {
+      const account = await this.users.findById(user.id, tx, true);
+      if (
+        !account ||
+        this.access.isBlocked(account) ||
+        account.sessionVersion !== user.sessionVersion
+      ) {
+        throw new AppError('Account is unavailable', 403);
+      }
       const events = this.repository.inTransaction(tx);
       const event = await events.lockEvent(id);
       if (!event || event.status === 'DRAFT') throw new AppError('Event not found', 404);
-      return run(events, event, this.clock(), tx);
+      return run(events, event, this.clock(), tx, account);
     });
   }
 }

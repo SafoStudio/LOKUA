@@ -1,7 +1,7 @@
 type: object
 required: [id, name, avatarUrl, age, photoUrls, cityId, interestIds, bio, languages, socialLinks]
 properties:
-  id: { type: string, format: uuid }
+  id: { type: [string, 'null'], format: uuid }
   name: { type: [string, 'null'] }
   avatarUrl: { type: [string, 'null'] }
   age: { type: [integer, 'null'] }

@@ -50,7 +50,7 @@
       - &feedByInterests
         name: byInterests
         in: query
-        description: Requires authentication and completed onboarding. Matches active profile interests by category name or event tag.
+        description: Requires authentication and completed onboarding. Matches active profile interests by stable category or tag keys initialized from the original labels.
         schema: { type: boolean, default: false }
       - name: categoryId
         in: query

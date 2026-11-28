@@ -5,8 +5,14 @@ import type { AuthUserProvider, UserRepository } from '../../../application/inde
 export class AuthUserProviderAdapter implements AuthUserProvider {
   constructor(private readonly repository: UserRepository) {}
 
-  async findById(id: string, tx?: TransactionContext): Promise<AuthUser | null> {
-    const user = await this.repository.findById(id, tx);
+  async findById(
+    id: string,
+    tx?: TransactionContext,
+    lockForUpdate?: boolean
+  ): Promise<AuthUser | null> {
+    const user = lockForUpdate
+      ? await this.repository.findById(id, tx, true)
+      : await this.repository.findById(id, tx);
     return user ? this.toAuthUser(user) : null;
   }
 

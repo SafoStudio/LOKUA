@@ -10,6 +10,7 @@ import type { EventLocationSnapshot } from '../ports/event.repository.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 import type { EventReviewsUseCase } from './event-reviews.use-case.js';
+import { eventPerson } from '../event-person.js';
 
 export class GetEventByIdUseCase {
   constructor(
@@ -139,11 +140,13 @@ export class GetEventByIdUseCase {
         : false
     ]);
     const exactLocation = !foreignPrivateLocation && (!event.hideExactAddress || canSeeExact);
-    const participantAvatars = await Promise.all(
-      participants.map(async ({ userId }) => ({
-        id: userId,
-        avatarUrl: (await this.profiles.findByUserId(userId))?.avatarUrl ?? null
-      }))
+    const participantProfiles = await Promise.all(
+      participants.map(async ({ userId }) =>
+        eventPerson(userId, await this.profiles.findByUserId(userId))
+      )
+    );
+    const participantAvatars = participantProfiles.flatMap(({ id, avatarUrl }) =>
+      id ? [{ id, avatarUrl }] : []
     );
     const availablePlaces =
       event.capacityLimit === null
@@ -169,9 +172,7 @@ export class GetEventByIdUseCase {
       event,
       tags,
       organizer: {
-        id: event.organizerId,
-        name: organizer?.name ?? null,
-        avatarUrl: organizer?.avatarUrl ?? null,
+        ...eventPerson(event.organizerId, organizer),
         ...rating
       },
       reviews,

@@ -1,3 +1,5 @@
+import type { TransactionContext } from '../../../../common/index.js';
+
 export type Category = {
   id: string;
   name: string;
@@ -8,7 +10,7 @@ export type Category = {
 };
 
 export interface CategoryProvider {
-  findById(id: string): Promise<Category | null>;
+  findById(id: string, tx?: TransactionContext): Promise<Category | null>;
   findBySlug(slug: string): Promise<Category | null>;
   listActive(): Promise<Category[]>;
 }

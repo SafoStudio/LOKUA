@@ -5,8 +5,9 @@ import type {
   NearbyLocationResult
 } from '../../../application/index.js';
 import type { Location } from '../../../domain/index.js';
-import type { Coordinates } from '../../../../../common/index.js';
-import type { LocationEntity } from '../entities/location.entity.js';
+import type { Coordinates, TransactionContext } from '../../../../../common/index.js';
+import { toEntityManager } from '../../../../../common/index.js';
+import { LocationEntity } from '../entities/location.entity.js';
 import { DistrictEntity } from '../entities/district.entity.js';
 
 // Both the current event location and its stored snapshot are private references.
@@ -22,8 +23,9 @@ const discoverableLocation = `NOT loc.is_private AND NOT EXISTS (
 export class LocationRepositoryAdapter implements LocationRepository {
   constructor(private readonly repository: Repository<LocationEntity>) {}
 
-  async findById(id: string): Promise<Location | null> {
-    const entity = await this.repository.findOne({ where: { id } });
+  async findById(id: string, tx?: TransactionContext): Promise<Location | null> {
+    const repo = tx ? toEntityManager(tx).getRepository(LocationEntity) : this.repository;
+    const entity = await repo.findOneBy({ id });
     return entity ? this.toDomain(entity) : null;
   }
 
