@@ -1,23 +1,18 @@
 import type { AuthUser } from '../../domain/index.js';
 import { calculateAge } from '../../domain/index.js';
+import { hasActiveCompletedProfile } from '../../domain/utils/profile-access.js';
 
 import type { AgeRestriction } from '../../../../common/index.js';
 
+const minimumAge: Record<AgeRestriction, number> = { ALL: 0, SIXTEEN_PLUS: 16, EIGHTEEN_PLUS: 18 };
+
 export class AccessService {
   canPostEventContent(user: AuthUser): boolean {
-    return (
-      user.role === 'USER' &&
-      user.status === 'ACTIVE' &&
-      user.emailVerified &&
-      user.onboardingCompleted
-    );
+    return user.role === 'USER' && hasActiveCompletedProfile(user);
   }
 
   canCreateEvent(user: AuthUser, now?: Date): boolean {
-    if (!this.canPostEventContent(user)) return false;
-
-    const age = calculateAge(user.birthDate, now);
-    return age !== null && age >= 16;
+    return this.canCreateEventWithRestriction(user, 'ALL', now);
   }
 
   canJoinEvent(user: AuthUser, restriction: AgeRestriction, now?: Date): boolean {
@@ -26,9 +21,7 @@ export class AccessService {
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
-    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
-    if (restriction === 'SIXTEEN_PLUS') return age >= 16;
-    return true;
+    return restriction === 'ALL' || age >= minimumAge[restriction];
   }
 
   canViewEvent(user: AuthUser | null, restriction: AgeRestriction, now?: Date): boolean {
@@ -39,19 +32,14 @@ export class AccessService {
     const age = calculateAge(user.birthDate, now);
     if (age === null) return false;
 
-    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
-    return age >= 16;
+    return age >= minimumAge[restriction];
   }
 
   canCreateEventWithRestriction(user: AuthUser, restriction: AgeRestriction, now?: Date): boolean {
-    if (!this.canCreateEvent(user, now)) return false;
+    if (!this.canPostEventContent(user)) return false;
 
     const age = calculateAge(user.birthDate, now);
-    if (age === null) return false;
-
-    if (restriction === 'EIGHTEEN_PLUS') return age >= 18;
-    if (restriction === 'SIXTEEN_PLUS') return age >= 16;
-    return true;
+    return age !== null && age >= Math.max(16, minimumAge[restriction]);
   }
 
   isBlocked(user: AuthUser): boolean {

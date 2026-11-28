@@ -1,10 +1,10 @@
-import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../../../common/index.js';
 import { validate } from '../../../../middlewares/index.js';
 import type { UserProfileProvider } from '../../application/index.js';
 import type { ProfileSettingsService } from '../../application/services/profile-settings.service.js';
+import { createPrivateUsersRouter, requireCurrentUserId } from './private-users-router.js';
 
 const settingsBody = z
   .strictObject({
@@ -32,21 +32,16 @@ export function createProfileSettingsRouter(
   profiles: UserProfileProvider,
   settings: ProfileSettingsService
 ) {
-  const router = Router();
-  router.use(requireAuth, (_req, res, next) => {
-    res.set('Cache-Control', 'private, no-store');
-    next();
-  });
+  const router = createPrivateUsersRouter(requireAuth);
   router.get('/', async (req, res) => {
-    if (!req.user) throw new AppError('Потрібна авторизація', 401);
-    const profile = await profiles.findByUserId(req.user.id);
+    const profile = await profiles.findByUserId(requireCurrentUserId(req));
     if (!profile) throw new AppError('Профіль не знайдено', 404);
     res.json({
       data: {
         name: profile.name,
         cityId: profile.cityId,
         interestIds: profile.interestIds,
-        birthDate: req.user.birthDate?.toISOString().slice(0, 10) ?? null,
+        birthDate: profile.birthDate?.toISOString().slice(0, 10) ?? null,
         photoUrls: profile.photoUrls ?? [],
         bio: profile.bio ?? null,
         languages: profile.languages ?? null,
@@ -55,8 +50,7 @@ export function createProfileSettingsRouter(
     });
   });
   router.patch('/', validate({ body: settingsBody }), async (req, res) => {
-    if (!req.user) throw new AppError('Потрібна авторизація', 401);
-    await settings.update(req.user.id, req.body);
+    await settings.update(requireCurrentUserId(req), req.body);
     res.status(204).end();
   });
   return router;

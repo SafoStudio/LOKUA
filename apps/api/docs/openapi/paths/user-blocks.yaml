@@ -48,7 +48,7 @@
       '401': *blockAuthRequired
       '403': *blockInactiveAccount
       '404':
-        description: User not found
+        description: User not found or account pending deletion
       '422':
         description: Cannot block oneself
   delete:

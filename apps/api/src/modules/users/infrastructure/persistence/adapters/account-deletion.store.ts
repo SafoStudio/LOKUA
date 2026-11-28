@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { toEntityManager } from '../../../../../common/index.js';
 import type { TransactionContext } from '../../../../../common/index.js';
 import type { AccountDeletionStore } from '../../../application/services/account-deletion.service.js';
@@ -6,15 +7,13 @@ import { UserEntity } from '../entities/user.entity.js';
 const deletedName = 'Видалений користувач';
 
 export class TypeOrmAccountDeletionStore implements AccountDeletionStore {
-  constructor(private readonly deleteImages: (ownerId: string) => Promise<void>) {}
-
   async request(userId: string, now: Date, tx: TransactionContext): Promise<boolean> {
     const manager = toEntityManager(tx);
     const result = await manager
       .getRepository(UserEntity)
       .update(
         { id: userId, status: 'ACTIVE' },
-        { status: 'PENDING_DELETION', deletionRequestedAt: now }
+        { status: 'PENDING_DELETION', deletionRequestedAt: now, sessionVersion: randomUUID() }
       );
     if (!result.affected) return false;
 
@@ -30,7 +29,7 @@ export class TypeOrmAccountDeletionStore implements AccountDeletionStore {
       .getRepository(UserEntity)
       .createQueryBuilder()
       .update()
-      .set({ status: 'ACTIVE' })
+      .set({ status: 'ACTIVE', deletionRequestedAt: null, sessionVersion: randomUUID() })
       .where('id = :userId AND status = :status', { userId, status: 'PENDING_DELETION' })
       .andWhere('deletion_requested_at = :requestedAt AND deletion_requested_at > :cutoff', {
         requestedAt,
@@ -40,7 +39,7 @@ export class TypeOrmAccountDeletionStore implements AccountDeletionStore {
     return Boolean(result.affected);
   }
 
-  async finalizeNext(cutoff: Date, tx: TransactionContext): Promise<boolean> {
+  async finalizeNext(cutoff: Date, now: Date, tx: TransactionContext): Promise<boolean> {
     const manager = toEntityManager(tx);
     const users = manager.getRepository(UserEntity);
     const user = await users
@@ -57,8 +56,6 @@ export class TypeOrmAccountDeletionStore implements AccountDeletionStore {
     if (!user) return false;
 
     const { id, email } = user;
-    await this.deleteImages(id);
-
     const userDataTables = [
       'password_credentials',
       'google_credentials',
@@ -114,8 +111,39 @@ export class TypeOrmAccountDeletionStore implements AccountDeletionStore {
       notificationSettings: null,
       blockedUntil: null,
       deletionRequestedAt: null,
+      sessionVersion: null,
+      mediaCleanupAt: now,
       role: 'USER'
     });
     return true;
+  }
+
+  async claimMediaCleanup(
+    now: Date,
+    retryAt: Date,
+    tx: TransactionContext
+  ): Promise<string | null> {
+    const [claimed] = await toEntityManager(tx).query<{ id: string }[]>(
+      `WITH candidate AS (
+         SELECT id FROM users
+         WHERE status = 'DELETED' AND media_cleanup_at <= $1
+         ORDER BY media_cleanup_at, id
+         LIMIT 1 FOR UPDATE SKIP LOCKED
+       ), claimed AS (
+         UPDATE users SET media_cleanup_at = $2
+         FROM candidate WHERE users.id = candidate.id
+         RETURNING users.id
+       )
+       SELECT id FROM claimed`,
+      [now, retryAt]
+    );
+    return claimed?.id ?? null;
+  }
+
+  async completeMediaCleanup(userId: string, tx: TransactionContext): Promise<void> {
+    await toEntityManager(tx).query(
+      "UPDATE users SET media_cleanup_at = NULL WHERE id = $1 AND status = 'DELETED'",
+      [userId]
+    );
   }
 }

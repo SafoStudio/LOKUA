@@ -77,14 +77,14 @@ export class SetOptionalProfileUseCase {
           throw new AppError('socialLinks must be an object', 400);
         }
         const entries = Object.entries(data.socialLinks as Record<string, unknown>);
-        const normalized: Record<string, string> = {};
-        for (const [key, value] of entries) {
-          if (typeof value !== 'string' || !/^https?:\/\//.test(value)) {
-            throw new AppError(`socialLinks.${key} must be a valid URL`, 400);
-          }
-          normalized[key] = value;
-        }
-        patch.socialLinks = normalized;
+        patch.socialLinks = Object.fromEntries(
+          entries.map(([key, value]) => {
+            if (typeof value !== 'string' || !/^https?:\/\//i.test(value) || !URL.canParse(value)) {
+              throw new AppError(`socialLinks.${key} must be a valid HTTP or HTTPS URL`, 400);
+            }
+            return [key, value];
+          })
+        );
       }
     }
 

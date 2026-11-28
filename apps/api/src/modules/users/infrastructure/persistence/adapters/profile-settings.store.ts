@@ -1,6 +1,7 @@
 import type { DataSource } from 'typeorm';
 import { AppError, toEntityManager, TypeOrmUnitOfWork } from '../../../../../common/index.js';
 import type { UserOnboardingProvider } from '../../../application/index.js';
+import { hasActiveCompletedProfile } from '../../../domain/utils/profile-access.js';
 import type {
   ProfileSettingsPatch,
   ProfileSettingsStore
@@ -22,9 +23,11 @@ export class TypeOrmProfileSettingsStore implements ProfileSettingsStore {
       const users = toEntityManager(tx).getRepository(UserEntity);
       const user = await users.findOne({
         where: { id: userId },
+        select: { status: true, emailVerified: true, onboardingCompleted: true },
         lock: { mode: 'pessimistic_write' }
       });
-      if (!user || user.status !== 'ACTIVE' || !user.emailVerified || !user.onboardingCompleted) {
+      if (!user) throw new AppError('User not found', 404);
+      if (!hasActiveCompletedProfile(user)) {
         throw new AppError('Підтвердьте email і завершіть онбординг', 403);
       }
       if (Object.keys(fields).length) await users.update(userId, fields);

@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/index.js';
+import { AppError, logger } from '../../../../common/index.js';
 import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
 import type { NotificationPublisher } from '../../../notifications/index.js';
 
@@ -12,10 +12,12 @@ export interface AccountDeletionStore {
     cutoff: Date,
     tx: TransactionContext
   ): Promise<boolean>;
-  finalizeNext(cutoff: Date, tx: TransactionContext): Promise<boolean>;
+  finalizeNext(cutoff: Date, now: Date, tx: TransactionContext): Promise<boolean>;
+  claimMediaCleanup(now: Date, retryAt: Date, tx: TransactionContext): Promise<string | null>;
+  completeMediaCleanup(userId: string, tx: TransactionContext): Promise<void>;
 }
 
-interface AccountDeletionEvents {
+export interface AccountDeletionEvents {
   lockOrganizerForAccountChange(userId: string, tx: TransactionContext): Promise<void>;
   cancelUpcomingForAccountDeletion(
     userId: string,
@@ -30,6 +32,7 @@ export class AccountDeletionService {
     private readonly store: AccountDeletionStore,
     private readonly events: AccountDeletionEvents,
     private readonly notifications: NotificationPublisher,
+    private readonly deleteImages: (userId: string) => Promise<void>,
     private readonly clock: () => Date = () => new Date()
   ) {}
 
@@ -62,8 +65,22 @@ export class AccountDeletionService {
     });
   }
 
-  finalizeNext(): Promise<boolean> {
-    const cutoff = new Date(this.clock().getTime() - accountRecoveryPeriodMs);
-    return this.unitOfWork.run((tx) => this.store.finalizeNext(cutoff, tx));
+  async finalizeNext(): Promise<boolean> {
+    const now = this.clock();
+    const cutoff = new Date(now.getTime() - accountRecoveryPeriodMs);
+    const finalized = await this.unitOfWork.run((tx) => this.store.finalizeNext(cutoff, now, tx));
+    const retryAt = new Date(now.getTime() + 5 * 60_000);
+    const userId = await this.unitOfWork.run((tx) =>
+      this.store.claimMediaCleanup(now, retryAt, tx)
+    );
+    if (!userId) return finalized;
+
+    try {
+      await this.deleteImages(userId);
+      await this.unitOfWork.run((tx) => this.store.completeMediaCleanup(userId, tx));
+    } catch (err) {
+      logger.error({ err, userId }, 'Account media cleanup failed');
+    }
+    return true;
   }
 }

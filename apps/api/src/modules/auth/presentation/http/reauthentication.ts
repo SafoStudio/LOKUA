@@ -18,7 +18,7 @@ const passkeyProof = z.strictObject({
 });
 
 export const reauthenticationProof = z.discriminatedUnion('method', [passwordProof, passkeyProof]);
-export const enrollmentProof = z.discriminatedUnion('method', [
+export const accountProof = z.discriminatedUnion('method', [
   passwordProof,
   passkeyProof,
   z.strictObject({ method: z.literal('email'), code: z.string().regex(/^[a-zA-Z0-9_-]{43}$/) })

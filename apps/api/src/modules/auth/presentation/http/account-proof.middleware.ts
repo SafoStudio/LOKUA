@@ -1,21 +1,21 @@
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../../../common/index.js';
-import type { AuthorizePasskeyEnrollmentUseCase } from '../../application/use-cases/authorize-passkey-enrollment.use-case.js';
-import { enrollmentProof } from './reauthentication.js';
+import type { AccountEmailCodeUseCase } from '../../application/use-cases/account-email-code.use-case.js';
+import { accountProof } from './reauthentication.js';
 import type { createReauthentication } from './reauthentication.js';
 
-const enrollmentSchema = z.strictObject({ proof: enrollmentProof });
+const proofSchema = z.strictObject({ proof: accountProof });
 
-export function createPasskeyEnrollmentHandlers(
-  enrollment: AuthorizePasskeyEnrollmentUseCase,
+export function createAccountProofHandlers(
+  emailCodes: AccountEmailCodeUseCase,
   reauthenticate: ReturnType<typeof createReauthentication>
 ) {
   const authorize: RequestHandler = async (req, _res, next) => {
     if (!req.user) throw new AppError('Authentication required', 401);
-    const { proof } = enrollmentSchema.parse(req.body);
+    const { proof } = proofSchema.parse(req.body);
     if (proof.method === 'email') {
-      await enrollment.verifyCode(req.user, proof.code);
+      await emailCodes.verifyCode(req.user, proof.code);
     } else {
       await reauthenticate(req, proof);
     }
@@ -24,7 +24,7 @@ export function createPasskeyEnrollmentHandlers(
 
   const requestCode: RequestHandler = async (req, res) => {
     if (!req.user) throw new AppError('Authentication required', 401);
-    await enrollment.requestCode(req.user);
+    await emailCodes.requestCode(req.user);
     res.set('Cache-Control', 'no-store').status(202).end();
   };
 

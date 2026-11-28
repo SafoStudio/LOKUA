@@ -7,7 +7,7 @@ import { env } from '../../../../config/env.js';
 import { validate } from '../../../../middlewares/index.js';
 import { clearAuthCookies } from './cookies.js';
 
-interface AccountDeletion {
+export interface AccountDeletion {
   request(userId: string): Promise<Date>;
   restore(userId: string, requestedAt: Date): Promise<void>;
 }
@@ -30,31 +30,44 @@ export async function createAccountRecoveryLink(userId: string, requestedAt: Dat
 
 export function createAccountDeletionRouter(
   requireAuth: RequestHandler,
-  accounts: AccountDeletion
+  accounts: AccountDeletion,
+  proof: {
+    authorize: RequestHandler;
+    requestCode: RequestHandler;
+    limitCode: RequestHandler;
+    limitProof: RequestHandler;
+    limitRestore: RequestHandler;
+  }
 ) {
   const router = Router();
 
-  router.delete('/account', requireAuth, async (req, res) => {
+  router.post('/account/deletion-code', requireAuth, proof.limitCode, proof.requestCode);
+  router.delete('/account', requireAuth, proof.limitProof, proof.authorize, async (req, res) => {
     if (!req.user) throw new AppError('Потрібна авторизація', 401);
     const recoverUntil = await accounts.request(req.user.id);
     clearAuthCookies(res);
     res.set('Cache-Control', 'no-store').status(202).json({ data: { recoverUntil } });
   });
 
-  router.post('/account/restore', validate({ body: restoreBody }), async (req, res) => {
-    const { token } = req.body as z.infer<typeof restoreBody>;
-    const verified = await jwtVerify(token, secret, {
-      algorithms: ['HS256'],
-      audience,
-      typ: 'lokua-account-recovery+jwt'
-    }).catch(() => null);
-    const claims = recoveryClaims.safeParse(verified?.payload);
-    if (!claims.success) {
-      throw new AppError('Посилання для відновлення недійсне або прострочене', 400);
+  router.post(
+    '/account/restore',
+    proof.limitRestore,
+    validate({ body: restoreBody }),
+    async (req, res) => {
+      const { token } = req.body as z.infer<typeof restoreBody>;
+      const verified = await jwtVerify(token, secret, {
+        algorithms: ['HS256'],
+        audience,
+        typ: 'lokua-account-recovery+jwt'
+      }).catch(() => null);
+      const claims = recoveryClaims.safeParse(verified?.payload);
+      if (!claims.success) {
+        throw new AppError('Посилання для відновлення недійсне або прострочене', 400);
+      }
+      await accounts.restore(claims.data.sub, new Date(claims.data.requestedAt));
+      res.set('Cache-Control', 'no-store').status(204).end();
     }
-    await accounts.restore(claims.data.sub, new Date(claims.data.requestedAt));
-    res.set('Cache-Control', 'no-store').status(204).end();
-  });
+  );
 
   return router;
 }

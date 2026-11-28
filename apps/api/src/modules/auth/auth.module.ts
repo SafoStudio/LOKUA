@@ -57,9 +57,11 @@ import { JwtEmailChangeTokens } from './infrastructure/crypto/email-change-token
 import { TypeOrmEmailChangeStore } from './infrastructure/persistence/adapters/email-change.store.js';
 import { createEmailChangeRouter } from './presentation/http/email-change.routes.js';
 import { createSharedAuthRateLimit } from './infrastructure/persistence/adapters/auth-rate-limit.js';
-import { AuthorizePasskeyEnrollmentUseCase } from './application/use-cases/authorize-passkey-enrollment.use-case.js';
+import { AccountEmailCodeUseCase } from './application/use-cases/account-email-code.use-case.js';
 import { createReauthentication } from './presentation/http/reauthentication.js';
-import { createPasskeyEnrollmentHandlers } from './presentation/http/passkey-enrollment.middleware.js';
+import { createAccountProofHandlers } from './presentation/http/account-proof.middleware.js';
+import { createAccountDeletionRouter } from './presentation/http/account-deletion.routes.js';
+import type { AccountDeletion } from './presentation/http/account-deletion.routes.js';
 import { parseTtlToMs } from './application/use-cases/parse-ttl.js';
 import { env } from '../../config/env.js';
 
@@ -276,14 +278,25 @@ export function createAuthModule({
 
   const rateLimit = createSharedAuthRateLimit(dataSource);
   const reauthenticate = createReauthentication(login, completePasskeyLogin);
-  const enrollment = new AuthorizePasskeyEnrollmentUseCase(passkeyChallenges, (to, code) =>
+  const enrollment = new AccountEmailCodeUseCase(
+    passkeyChallenges,
+    'ENROLLMENT_EMAIL',
+    (to, code) =>
+      emailService.sendNotificationEmail({
+        to,
+        title: 'Підтвердження додавання ключа доступу LOKUA',
+        message: `Код підтвердження: ${code}. Він дійсний 10 хвилин.`
+      })
+  );
+  const enrollmentHandlers = createAccountProofHandlers(enrollment, reauthenticate);
+  const deletion = new AccountEmailCodeUseCase(passkeyChallenges, 'DELETION_EMAIL', (to, code) =>
     emailService.sendNotificationEmail({
       to,
-      title: 'Підтвердження додавання ключа доступу LOKUA',
-      message: `Код підтвердження: ${code}. Він дійсний 10 хвилин.`
+      title: 'Підтвердження видалення акаунта LOKUA',
+      message: `Код підтвердження видалення: ${code}. Він дійсний 10 хвилин.`
     })
   );
-  const enrollmentHandlers = createPasskeyEnrollmentHandlers(enrollment, reauthenticate);
+  const deletionProof = createAccountProofHandlers(deletion, reauthenticate);
   const router = createAuthRouter(
     controller,
     {
@@ -329,6 +342,13 @@ export function createAuthModule({
   );
 
   return {
+    createAccountDeletionRouter: (accounts: AccountDeletion) =>
+      createAccountDeletionRouter(middleware.requireAuth, accounts, {
+        ...deletionProof,
+        limitCode: rateLimit('deletion-code', 3, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+        limitProof: rateLimit('deletion-proof', 5, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+        limitRestore: rateLimit('account-restore', 20, 15 * 60_000)
+      }),
     sendNotificationEmail: emailService.sendNotificationEmail.bind(emailService),
     router,
     access,

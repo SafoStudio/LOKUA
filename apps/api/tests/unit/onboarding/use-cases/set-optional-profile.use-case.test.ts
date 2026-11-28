@@ -81,11 +81,11 @@ describe('SetOptionalProfileUseCase', () => {
         ).rejects.toMatchObject({ statusCode: 422 });
     });
 
-    it('throws 400 for invalid social link URL', async () => {
+    it.each(['not-a-url', 'https://', 'mailto:example@example.com'])('throws 400 for invalid social link URL %s', async (url) => {
         await expect(
             useCase.execute(
                 { user: createMockAuthUser(), ip: null },
-                { socialLinks: { telegram: 'not-a-url' } }
+                { socialLinks: { telegram: url } }
             )
         ).rejects.toMatchObject({ statusCode: 400 });
     });

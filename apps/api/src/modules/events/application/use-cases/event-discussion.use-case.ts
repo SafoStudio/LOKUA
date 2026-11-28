@@ -243,6 +243,7 @@ export class EventDiscussionUseCase {
 
   private async author(id: string) {
     const profile = await this.profiles.findByUserId(id);
+    if (profile?.status === 'PENDING_DELETION' || profile?.status === 'DELETED') return null;
     return { id, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
   }
 }

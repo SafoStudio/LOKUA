@@ -24,7 +24,10 @@ export const optionalProfileSchema = z
   .object({
     bio: z.string().trim().max(300).nullable().optional(),
     languages: z.array(z.string().trim().min(1).max(10)).nullable().optional(),
-    socialLinks: z.record(z.string(), z.url()).nullable().optional()
+    socialLinks: z
+      .record(z.string(), z.url({ protocol: /^https?$/ }))
+      .nullable()
+      .optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one optional field required'

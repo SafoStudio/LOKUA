@@ -1,10 +1,8 @@
-import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
-import { AppError } from '../../../../common/index.js';
 import { validate } from '../../../../middlewares/index.js';
-import type { ImageOwnership } from '../../../storage/index.js';
-import type { UserPhotoProvider } from '../../application/ports/user-photo.provider.js';
+import type { ProfilePhotosService } from '../../application/services/profile-photos.service.js';
+import { createPrivateUsersRouter, requireCurrentUserId } from './private-users-router.js';
 
 const profilePhotosSchema = z.strictObject({
   photoUrls: z
@@ -16,26 +14,15 @@ const profilePhotosSchema = z.strictObject({
 
 export function createProfilePhotosRouter(
   requireAuth: RequestHandler,
-  photos: UserPhotoProvider,
-  images: ImageOwnership
+  photos: ProfilePhotosService
 ) {
-  const router = Router();
-  router.use(requireAuth, (_req, res, next) => {
-    res.set('Cache-Control', 'private, no-store');
-    next();
-  });
+  const router = createPrivateUsersRouter(requireAuth);
   router.get('/', async (req, res) => {
-    if (!req.user) throw new AppError('Authentication required', 401);
-    res.json({ data: { photoUrls: await photos.list(req.user.id) } });
+    res.json({ data: { photoUrls: await photos.list(requireCurrentUserId(req)) } });
   });
   router.put('/', validate({ body: profilePhotosSchema }), async (req, res) => {
-    if (!req.user) throw new AppError('Authentication required', 401);
     const { photoUrls } = req.body as z.infer<typeof profilePhotosSchema>;
-    const existing = new Set(await photos.list(req.user.id));
-    for (const url of photoUrls) {
-      if (!existing.has(url)) images.assertOwnedUrl(url, req.user.id, 'PROFILE');
-    }
-    await photos.replace(req.user.id, photoUrls);
+    await photos.replace(requireCurrentUserId(req), photoUrls);
     res.json({ data: { photoUrls } });
   });
   return router;

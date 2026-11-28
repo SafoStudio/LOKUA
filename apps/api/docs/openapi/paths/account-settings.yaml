@@ -135,4 +135,5 @@
       '400': { description: Invalid fields or immutable date of birth }
       '401': { description: Authentication required }
       '403': { description: Inactive account, unverified email, or incomplete onboarding }
+      '404': { description: Profile unavailable }
       '422': { description: Unavailable city or interests }

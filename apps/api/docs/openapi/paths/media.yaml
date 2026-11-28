@@ -118,6 +118,8 @@
       '401':
         description: Authentication required
       '403':
-        description: Inactive account or onboarding incomplete
+        description: Inactive account, unverified email, or incomplete onboarding
+      '404':
+        description: Profile unavailable
       '422':
         description: A new URL does not belong to the current user's PROFILE uploads

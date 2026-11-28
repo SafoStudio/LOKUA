@@ -10,15 +10,16 @@ import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
 import {
   AccessService,
-  AccountDeletionService,
-  TypeOrmAccountDeletionStore,
   createProfilePhotosRouter,
+  ProfilePhotosService,
   createProfileSettingsRouter,
   ProfileSettingsService,
   createUserBlocksRouter,
   createUsersModule
 } from '../../src/modules/users/index.js';
-import { createAccountDeletionRouter, createAccountRecoveryLink } from '../../src/modules/auth/index.js';
+import { createAuthModule, createAccountRecoveryLink } from '../../src/modules/auth/index.js';
+import { BcryptPasswordHasher, PasskeyChallengeEntity, PasskeyChallengeRepositoryAdapter, PasswordCredentialEntity } from '../../src/modules/auth/infrastructure/index.js';
+import { AccountEmailCodeUseCase } from '../../src/modules/auth/application/use-cases/account-email-code.use-case.js';
 import { JwtTokenService } from '../../src/modules/auth/infrastructure/crypto/jwt-token.service.js';
 import { createAuthMiddleware } from '../../src/modules/auth/presentation/http/auth.middleware.js';
 import { ChangeEmailUseCase } from '../../src/modules/auth/application/use-cases/change-email.use-case.js';
@@ -261,7 +262,12 @@ describe('event management and feed with PostgreSQL', () => {
       users.profiles,
       new ProfileSettingsService(users.profileSettings, cities, interests)
     ));
-    if (images) app.use('/users/me/photos', createProfilePhotosRouter(requireAuth, users.photos, images));
+    if (images) {
+      app.use('/users/me/photos', createProfilePhotosRouter(
+        requireAuth,
+        new ProfilePhotosService(users.photos, (url, userId) => images.assertOwnedUrl(url, userId, 'PROFILE'))
+      ));
+    }
     app.use('/notifications', notifications.router);
     app.use('/admin', moderation.adminUsersRouter);
     app.use('/reports', moderation.reportsRouter);
@@ -320,6 +326,8 @@ describe('event management and feed with PostgreSQL', () => {
     const restored = await api.get(`/events/${ownerEvent.id}`)
       .set('X-Test-User', participant.id).expect(200);
     expect(restored.body.data.participationStatus).toBe('APPROVED');
+    await dataSource.getRepository(UserEntity).update(participant.id, { status: 'PENDING_DELETION' });
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(404);
   });
 
   it('serves event details and protects private fields across event and geolocation routes', async () => {
@@ -1881,33 +1889,53 @@ describe('event management and feed with PostgreSQL', () => {
     const [owner, attendee] = await Promise.all([createUser(), createUser()]);
     const upcoming = await publishForFeed(owner, {});
     const completed = await publishForFeed(attendee, {});
+    const discussionEvent = await publishForFeed(attendee, {});
+    await dataSource.getRepository(EventEntity).update(discussionEvent.id, {
+      firstStartsAt: new Date(Date.now() + 30 * 60_000),
+      firstEndsAt: new Date(Date.now() + 60 * 60_000)
+    });
     await manageParticipation.join(attendee, upcoming.id);
     await dataSource.getRepository(EventEntity).update(completed.id, { status: 'COMPLETED' });
     const reviews = dataSource.getRepository(EventReviewEntity);
     await reviews.insert({ eventId: completed.id, authorId: owner.id, rating: 5 });
+    await dataSource.getRepository(DiscussionCommentEntity).insert({
+      eventId: discussionEvent.id,
+      authorId: owner.id,
+      text: 'A previous comment'
+    });
     const users = createUsersModule({ dataSource });
     const tokens = new JwtTokenService();
-    const { requireAuth } = createAuthMiddleware({
-      tokenService: tokens,
+    const auth = createAuthModule({
+      dataSource,
       users: users.authUsers,
-      access: users.access
+      access: users.access,
+      profiles: users.profiles
+    });
+    const password = 'A valid password 123';
+    await dataSource.getRepository(PasswordCredentialEntity).insert({
+      userId: owner.id,
+      passwordHash: await new BcryptPasswordHasher().hash(password)
     });
     const received: string[] = [];
     const { api, events, notifications } = createEventsTestContext([owner, attendee], async (mail) => {
       if (mail.to === owner.email) received.push(mail.message);
     });
     const removedImages: string[] = [];
+    let cleanupAttempts = 0;
     let clock = now;
-    const accounts = new AccountDeletionService(
-      new TypeOrmUnitOfWork(dataSource),
-      new TypeOrmAccountDeletionStore(async (id) => { removedImages.push(id); }),
+    const accounts = users.createAccountDeletion(
       events,
       notifications.publisher,
+      async (id) => {
+        cleanupAttempts++;
+        if (cleanupAttempts === 1) throw new Error('Temporary storage outage');
+        removedImages.push(id);
+      },
       () => clock
     );
     const app = express();
     app.use(express.json());
-    app.use(createAccountDeletionRouter(requireAuth, accounts));
+    app.use(auth.createAccountDeletionRouter(accounts));
     app.use(errorHandler);
     const accountApi = request(app);
     const originalToken = await tokens.signAccessToken({ userId: owner.id });
@@ -1916,8 +1944,11 @@ describe('event management and feed with PostgreSQL', () => {
       'INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
       [sessionId, owner.id, 'a'.repeat(64), new Date(Date.now() + 3_600_000)]
     );
-    const remove = (token: string) =>
-      accountApi.delete('/account').set('Authorization', `Bearer ${token}`);
+    const remove = (token: string, proof = { method: 'password', password }) =>
+      accountApi.delete('/account').set('Authorization', `Bearer ${token}`).send({ proof });
+    await accountApi.delete('/account').set('Authorization', `Bearer ${originalToken}`).expect(400);
+    await remove(originalToken, { method: 'password', password: 'wrong' }).expect(401);
+    expect((await users.authUsers.findById(owner.id))?.status).toBe('ACTIVE');
     const pending = await remove(originalToken).expect(202);
     const recoveryDeadline = new Date(pending.body.data.recoverUntil);
     expect(recoveryDeadline.getTime() - now.getTime()).toBe(30 * 86_400_000);
@@ -1951,24 +1982,47 @@ describe('event management and feed with PostgreSQL', () => {
       userId: owner.id,
       sessionVersion: restoredUser?.sessionVersion
     });
-    const second = await remove(freshToken).expect(202);
+    if (!restoredUser) throw new Error('Restored account missing');
+    const challenges = new PasskeyChallengeRepositoryAdapter(dataSource.getRepository(PasskeyChallengeEntity));
+    let emailCode = '';
+    const enrollmentCodes = new AccountEmailCodeUseCase(challenges, 'ENROLLMENT_EMAIL', async (_email, code) => {
+      emailCode = code;
+    });
+    const deletionCodes = new AccountEmailCodeUseCase(challenges, 'DELETION_EMAIL', async (_email, code) => {
+      emailCode = code;
+    });
+    const removeWithEmail = () => accountApi.delete('/account')
+      .set('Authorization', `Bearer ${freshToken}`).send({ proof: { method: 'email', code: emailCode } });
+    await enrollmentCodes.requestCode(restoredUser);
+    await removeWithEmail().expect(400);
+    await deletionCodes.requestCode(restoredUser);
+    const second = await removeWithEmail().expect(202);
     const secondLink = await createAccountRecoveryLink(owner.id, clock);
     const secondToken = new URLSearchParams(new URL(secondLink).hash.slice(1)).get('token');
     clock = new Date(second.body.data.recoverUntil);
     await accountApi.post('/account/restore').send({ token: secondToken }).expect(400);
     expect(await accounts.finalizeNext()).toBe(true);
     expect(await accounts.finalizeNext()).toBe(false);
-    expect(removedImages).toEqual([owner.id]);
+    expect(cleanupAttempts).toBe(1);
+    expect(removedImages).toEqual([]);
     const userRows = dataSource.getRepository(UserEntity);
     expect(await userRows.findOneBy({ email: owner.email })).toBeNull();
     expect(await userRows.findOneByOrFail({ id: owner.id })).toMatchObject({
       status: 'DELETED', name: 'Видалений користувач', birthDate: null
     });
+    clock = new Date(clock.getTime() + 5 * 60_000);
+    expect(await accounts.finalizeNext()).toBe(true);
+    expect(await accounts.finalizeNext()).toBe(false);
+    expect(removedImages).toEqual([owner.id]);
+    expect((await userRows.findOneByOrFail({ id: owner.id })).mediaCleanupAt).toBeNull();
     const archivedReviews = await api.get(`/events/${completed.id}/reviews`).expect(200);
     expect(archivedReviews.body.data).toMatchObject([{
       rating: 5,
       author: { id: null, name: 'Видалений користувач', avatarUrl: null }
     }]);
+    const discussion = await api.get(`/events/${discussionEvent.id}/comments`)
+      .set('X-Test-User', attendee.id).expect(200);
+    expect(discussion.body.data).toMatchObject([{ text: 'A previous comment', author: null }]);
   });
 
   it('manages dictionary records as an admin and exposes active choices publicly', async () => {
@@ -2136,6 +2190,13 @@ describe('event management and feed with PostgreSQL', () => {
     await putPhotos(reversed).expect(200);
     const profile = await api.get(`/users/${owner.id}`).expect(200);
     expect(profile.body.data).toMatchObject({ avatarUrl: reversed[0], photoUrls: reversed });
+    const ownerPhotos = () => api.get('/users/me/photos').set('X-Test-User', owner.id);
+    await putPhotos([coverUrl]).expect(422);
+    expect((await ownerPhotos().expect(200)).body.data.photoUrls).toEqual(reversed);
+    await dataSource.getRepository(UserEntity).update(owner.id, { emailVerified: false });
+    await putPhotos([coverUrl]).expect(403);
+    expect((await ownerPhotos().expect(200)).body.data.photoUrls).toEqual(reversed);
+    await dataSource.getRepository(UserEntity).update(owner.id, { emailVerified: true });
 
     const draft = await manageEvent.create(owner, eventData({ coverUrl: 'https://legacy.example.com/cover.jpg' }));
     const update = (patch: Record<string, unknown>) =>
