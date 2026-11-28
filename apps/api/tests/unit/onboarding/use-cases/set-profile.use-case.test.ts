@@ -6,7 +6,6 @@ import {
 } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockUnitOfWork
@@ -32,9 +31,9 @@ describe('SetProfileUseCase', () => {
         useCase = new SetProfileUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
-            audit
+            audit,
+            { assertOwnedUrl: vi.fn() }
         );
     });
 

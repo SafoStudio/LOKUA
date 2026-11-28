@@ -8,7 +8,7 @@ import {
   ManyToOne,
   JoinColumn
 } from 'typeorm';
-import type { ParticipationStatus } from '../../../domain/index.js';
+import type { ParticipationMode, ParticipationStatus } from '../../../domain/index.js';
 
 @Entity({ name: 'event_participations' })
 @Index('idx_participations_unique_pair', ['eventId', 'userId'], { unique: true })
@@ -35,6 +35,9 @@ export class EventParticipationEntity {
   @Index('idx_participations_status')
   @Column({ type: 'varchar', length: 30 })
   status!: ParticipationStatus;
+
+  @Column({ type: 'varchar', length: 10, name: 'entry_mode', nullable: true })
+  entryMode!: ParticipationMode | null;
 
   @Column({ type: 'varchar', length: 300, name: 'application_message', nullable: true })
   applicationMessage!: string | null;

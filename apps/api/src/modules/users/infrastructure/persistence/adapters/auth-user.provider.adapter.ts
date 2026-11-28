@@ -5,8 +5,14 @@ import type { AuthUserProvider, UserRepository } from '../../../application/inde
 export class AuthUserProviderAdapter implements AuthUserProvider {
   constructor(private readonly repository: UserRepository) {}
 
-  async findById(id: string, tx?: TransactionContext): Promise<AuthUser | null> {
-    const user = await this.repository.findById(id, tx);
+  async findById(
+    id: string,
+    tx?: TransactionContext,
+    lockForUpdate?: boolean
+  ): Promise<AuthUser | null> {
+    const user = lockForUpdate
+      ? await this.repository.findById(id, tx, true)
+      : await this.repository.findById(id, tx);
     return user ? this.toAuthUser(user) : null;
   }
 
@@ -23,6 +29,7 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
       emailVerified?: boolean;
       role?: AuthUser['role'];
       status?: AuthUser['status'];
+      termsAcceptedAt?: Date;
     },
     tx?: TransactionContext
   ): Promise<AuthUser> {
@@ -33,6 +40,7 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
         name: data.name,
         emailVerified: data.emailVerified ?? false,
         role: data.role,
+        termsAcceptedAt: data.termsAcceptedAt,
         status: data.status
       },
       tx
@@ -53,7 +61,16 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
       role: user.role,
       status: user.status,
       onboardingCompleted: user.onboardingCompleted,
-      birthDate: user.birthDate
+      birthDate: user.birthDate,
+      ...(user.deletionRequestedAt
+        ? {
+            sessionVersion: user.sessionVersion
+              ? `${user.sessionVersion}:${user.deletionRequestedAt.toISOString()}`
+              : user.deletionRequestedAt.toISOString()
+          }
+        : user.sessionVersion
+          ? { sessionVersion: user.sessionVersion }
+          : {})
     };
   }
 }

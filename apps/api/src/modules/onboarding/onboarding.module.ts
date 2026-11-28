@@ -1,6 +1,6 @@
 import type { DataSource } from 'typeorm';
 import type { RequestHandler } from 'express';
-import type { UserProvider, UserOnboardingProvider } from '../users/index.js';
+import type { UserOnboardingProvider } from '../users/index.js';
 import type { CityProvider, InterestProvider } from '../dictionaries/index.js';
 import type { AuditLogger } from '../moderation/index.js';
 import type { ImageOwnership } from '../storage/index.js';
@@ -20,18 +20,16 @@ import { TypeOrmUnitOfWork } from '../../common/index.js';
 
 export interface CreateOnboardingModuleDependencies {
   dataSource: DataSource;
-  users: UserProvider;
   onboardingUsers: UserOnboardingProvider;
   cities: CityProvider;
   interests: InterestProvider;
   audit: AuditLogger;
   requireAuth: RequestHandler;
-  images?: ImageOwnership;
+  images: ImageOwnership;
 }
 
 export function createOnboardingModule({
   dataSource,
-  users,
   onboardingUsers,
   cities,
   interests,
@@ -50,7 +48,6 @@ export function createOnboardingModule({
   const setDateOfBirth = new SetDateOfBirthUseCase(
     unitOfWork,
     stateRepository,
-    users,
     onboardingUsers,
     audit
   );
@@ -58,25 +55,16 @@ export function createOnboardingModule({
   const setProfile = new SetProfileUseCase(
     unitOfWork,
     stateRepository,
-    users,
     onboardingUsers,
     audit,
     images
   );
 
-  const setCity = new SetCityUseCase(
-    unitOfWork,
-    stateRepository,
-    users,
-    onboardingUsers,
-    cities,
-    audit
-  );
+  const setCity = new SetCityUseCase(unitOfWork, stateRepository, onboardingUsers, cities, audit);
 
   const setInterests = new SetInterestsUseCase(
     unitOfWork,
     stateRepository,
-    users,
     onboardingUsers,
     interests,
     audit
@@ -85,7 +73,6 @@ export function createOnboardingModule({
   const setOptionalProfile = new SetOptionalProfileUseCase(
     unitOfWork,
     stateRepository,
-    users,
     onboardingUsers,
     audit
   );
@@ -93,7 +80,6 @@ export function createOnboardingModule({
   const completeOnboarding = new CompleteOnboardingUseCase(
     unitOfWork,
     stateRepository,
-    users,
     onboardingUsers,
     audit
   );

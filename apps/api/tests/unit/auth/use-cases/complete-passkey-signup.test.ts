@@ -33,7 +33,8 @@ describe('CompletePasskeySignupUseCase', () => {
     revokeById: vi.fn(),
     rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
-    revokeAllByUserId: vi.fn()
+    revokeAllByUserId: vi.fn(),
+    revokeFamily: vi.fn()
   };
 
   const securityEvents: SecurityEventRepository = {
@@ -52,13 +53,15 @@ describe('CompletePasskeySignupUseCase', () => {
   );
 
   const context = { ip: '127.0.0.1', userAgent: 'vitest' };
+  const verification = { execute: vi.fn() };
 
   const useCase = new CompletePasskeySignupUseCase(
       challenges,
       passkey,
       signupTransaction,
       issueAuthTokens,
-      securityEvents
+      securityEvents,
+      verification
   );
 
   const mockChallenge = {
@@ -96,6 +99,7 @@ describe('CompletePasskeySignupUseCase', () => {
     const result = await useCase.execute(
         {
           challenge: 'ch-val-123',
+          termsAccepted: true,
           response: { id: 'cred-bob-1' }
         },
         context
@@ -104,6 +108,7 @@ describe('CompletePasskeySignupUseCase', () => {
     expect(result.user).toEqual(createdUser);
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toBe('refresh-token');
+    expect(verification.execute).toHaveBeenCalledWith(createdUser.id);
 
     expect(challenges.consume).toHaveBeenCalledWith({
       challenge: 'ch-val-123',
@@ -119,7 +124,8 @@ describe('CompletePasskeySignupUseCase', () => {
       userId: 'pre-generated-uuid',
       email: 'bob@example.com',
       name: 'Bob',
-      credential: mockCredentialData
+      credential: mockCredentialData,
+      termsAcceptedAt: expect.any(Date)
     });
 
     expect(securityEvents.record).toHaveBeenCalledWith(
@@ -138,6 +144,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'non-existing-ch',
+              termsAccepted: true,
               response: { id: 'cred' }
             },
             context
@@ -161,6 +168,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'ch-val-123',
+              termsAccepted: true,
               response: { id: 'cred' }
             },
             context
@@ -179,6 +187,7 @@ describe('CompletePasskeySignupUseCase', () => {
         useCase.execute(
             {
               challenge: 'ch-val-123',
+              termsAccepted: true,
               response: { id: 'bad-response' }
             },
             context

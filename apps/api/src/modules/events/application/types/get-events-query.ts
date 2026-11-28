@@ -23,4 +23,5 @@ export interface GetEventsQuery {
   participationMode?: ParticipationMode;
   availableOnly?: boolean;
   search?: string;
+  byInterests?: boolean;
 }

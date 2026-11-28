@@ -1,10 +1,11 @@
 allOf:
   - $ref: '#/components/schemas/OrganizerRating'
   - type: object
-    required: [id, name, avatarUrl, photoUrls, reviews]
+    required: [id, name, avatarUrl, photoUrls, reviews, history]
     properties:
       id: { type: string, format: uuid }
       name: { type: string }
+      age: { type: [integer, 'null'], description: Included for authenticated viewers. }
       avatarUrl: { type: [string, 'null'] }
       photoUrls:
         type: array
@@ -14,3 +15,6 @@ allOf:
       reviews:
         $ref: '#/components/schemas/EventReviewPage'
         description: First three visible reviews. Continue on the organizer reviews endpoint.
+      history:
+        $ref: '#/components/schemas/OrganizerEventHistoryPage'
+        description: First three visible completed events. Continue on the organizer events endpoint.

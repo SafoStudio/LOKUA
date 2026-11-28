@@ -1,0 +1,6 @@
+type: object
+required: [id, name, isActive]
+properties:
+  id: { type: string, format: uuid }
+  name: { type: string }
+  isActive: { type: boolean }

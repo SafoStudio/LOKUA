@@ -1,19 +1,23 @@
 import type { DataSource } from 'typeorm';
 import { toEntityManager } from '../../../../../common/index.js';
 import type { TransactionContext } from '../../../../../common/index.js';
-import type { ReportObjectType, ReportStatus } from '../../../domain/index.js';
+import type {
+  AccountStatus,
+  ContentType,
+  ReportObjectType,
+  ReportStatus
+} from '../../../domain/index.js';
+import type { ModerationStorePort } from '../../../application/index.js';
 import { ReportEntity } from '../entities/report.entity.js';
 import { readModerationTarget, setModerationVisibility } from './moderation-targets.js';
-import type { ContentType } from './moderation-targets.js';
 
-export type AccountStatus = 'ACTIVE' | 'BLOCKED_TEMPORARY' | 'BLOCKED_PERMANENT';
 interface AccountState {
   id: string;
   status: string;
   blockedUntil: Date | null;
 }
 
-export class ModerationStore {
+export class ModerationStore implements ModerationStorePort {
   constructor(private readonly dataSource: DataSource) {}
 
   target(type: ReportObjectType, id: string, tx?: TransactionContext) {
@@ -126,7 +130,8 @@ export class ModerationStore {
     tx: TransactionContext
   ) {
     await toEntityManager(tx).query(
-      'UPDATE users SET status = $2, blocked_until = $3, updated_at = now() WHERE id = $1',
+      `UPDATE users SET status = $2, blocked_until = $3,
+       session_version = uuid_generate_v4(), updated_at = now() WHERE id = $1`,
       [id, status, blockedUntil]
     );
   }

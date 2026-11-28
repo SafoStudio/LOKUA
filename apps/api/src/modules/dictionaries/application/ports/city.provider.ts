@@ -14,6 +14,6 @@ export type City = {
 
 export interface CityProvider {
   findById(id: string): Promise<City | null>;
-  findBySlug(slug: string): Promise<City | null>;
+  findBySlug(slug: string, countryCode: string): Promise<City | null>;
   listActive(): Promise<City[]>;
 }

@@ -1,6 +1,6 @@
 import { AppError } from '../../../../common/index.js';
 import type { IssueAuthTokensUseCase, AuthResult } from './issue-auth-tokens.use-case.js';
-import type { AuthUserProvider } from '../../../users/index.js';
+import type { AuthUser, AuthUserProvider } from '../../../users/index.js';
 import type { PasskeyChallengeRepository } from '../ports/passkey-challenge.repository.js';
 import type { PasskeyCredentialRepository } from '../ports/passkey-credential.repository.js';
 import type { PasskeyVerificationService } from '../ports/passkey-verification.service.js';
@@ -35,6 +35,15 @@ export class CompletePasskeyLoginUseCase {
     input: { challenge: string; response: unknown },
     context: SecurityContext
   ): Promise<AuthResult> {
+    const user = await this.verify(input, context);
+    return this.issueTokens.execute(user);
+  }
+
+  async verify(
+    input: { challenge: string; response: unknown },
+    context: SecurityContext,
+    expectedUserId?: string
+  ): Promise<AuthUser> {
     const credentialId = getCredentialId(input.response);
 
     const challenge = await this.challenges.consume({
@@ -46,7 +55,7 @@ export class CompletePasskeyLoginUseCase {
 
     const credential = await this.credentials.findByCredentialId(credentialId);
 
-    if (!credential) {
+    if (!credential || (expectedUserId && credential.userId !== expectedUserId)) {
       await this.securityEvents.record({
         userId: null,
         eventType: 'PASSKEY_LOGIN_FAILURE',
@@ -92,6 +101,6 @@ export class CompletePasskeyLoginUseCase {
       userAgent: context.userAgent
     });
 
-    return this.issueTokens.execute(user);
+    return user;
   }
 }

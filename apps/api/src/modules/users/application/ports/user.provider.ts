@@ -3,7 +3,7 @@ import type { CreateUserData } from '../types/create-user-data.js';
 import type { TransactionContext } from '../../../../common/index.js';
 
 export interface UserProvider {
-  findById(id: string): Promise<User | null>;
+  findById(id: string, tx?: TransactionContext, lockForUpdate?: boolean): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   create(data: CreateUserData): Promise<User>;
   markEmailVerified(id: string): Promise<void>;

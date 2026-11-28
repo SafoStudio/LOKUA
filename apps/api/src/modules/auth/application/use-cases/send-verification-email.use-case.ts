@@ -2,7 +2,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import type { AuthUserProvider } from '../../../users/index.js';
 import type { EmailVerificationTokenRepository } from '../ports/email-verification-token.repository.js';
 import type { EmailService } from '../ports/email.service.js';
-import { AppError } from '../../../../common/index.js';
+import { AppError, logger } from '../../../../common/index.js';
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -35,5 +35,16 @@ export class SendVerificationEmailUseCase {
       name: user.name,
       token
     });
+  }
+}
+
+export async function sendSignupVerification(
+  sender: Pick<SendVerificationEmailUseCase, 'execute'>,
+  userId: string
+): Promise<void> {
+  try {
+    await sender.execute(userId);
+  } catch (err) {
+    logger.error({ err, userId }, 'Failed to send verification email');
   }
 }

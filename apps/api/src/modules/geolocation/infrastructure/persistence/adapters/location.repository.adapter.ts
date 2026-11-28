@@ -5,11 +5,13 @@ import type {
   NearbyLocationResult
 } from '../../../application/index.js';
 import type { Location } from '../../../domain/index.js';
-import type { Coordinates } from '../../../../../common/index.js';
-import type { LocationEntity } from '../entities/location.entity.js';
+import type { Coordinates, TransactionContext } from '../../../../../common/index.js';
+import { toEntityManager } from '../../../../../common/index.js';
+import { LocationEntity } from '../entities/location.entity.js';
+import { DistrictEntity } from '../entities/district.entity.js';
 
 // Both the current event location and its stored snapshot are private references.
-const discoverableLocation = `NOT EXISTS (
+const discoverableLocation = `NOT loc.is_private AND NOT EXISTS (
   SELECT 1 FROM events event
   WHERE event.primary_location_id = loc.id AND event.hide_exact_address
 ) AND NOT EXISTS (
@@ -21,8 +23,9 @@ const discoverableLocation = `NOT EXISTS (
 export class LocationRepositoryAdapter implements LocationRepository {
   constructor(private readonly repository: Repository<LocationEntity>) {}
 
-  async findById(id: string): Promise<Location | null> {
-    const entity = await this.repository.findOne({ where: { id } });
+  async findById(id: string, tx?: TransactionContext): Promise<Location | null> {
+    const repo = tx ? toEntityManager(tx).getRepository(LocationEntity) : this.repository;
+    const entity = await repo.findOneBy({ id });
     return entity ? this.toDomain(entity) : null;
   }
 
@@ -31,6 +34,15 @@ export class LocationRepositoryAdapter implements LocationRepository {
       .createQueryBuilder('loc')
       .where('loc.id = :id', { id })
       .andWhere(discoverableLocation)
+      .getOne();
+    return entity ? this.toDomain(entity) : null;
+  }
+
+  async findExactById(id: string, viewerId: string): Promise<Location | null> {
+    const entity = await this.repository
+      .createQueryBuilder('loc')
+      .where('loc.id = :id', { id })
+      .andWhere(`(loc.created_by = :viewerId OR (${discoverableLocation}))`, { viewerId })
       .getOne();
     return entity ? this.toDomain(entity) : null;
   }
@@ -46,11 +58,18 @@ export class LocationRepositoryAdapter implements LocationRepository {
       publicCoordinates: input.publicCoordinates,
       provider: input.provider,
       providerPlaceId: input.providerPlaceId,
-      createdBy: input.createdBy
+      createdBy: input.createdBy,
+      isPrivate: input.createdBy !== null
     });
 
     const saved = await this.repository.save(entity);
     return this.toDomain(saved);
+  }
+
+  districtBelongsToCity(districtId: string, cityId: string): Promise<boolean> {
+    return this.repository.manager
+      .getRepository(DistrictEntity)
+      .existsBy({ id: districtId, cityId });
   }
 
   async findNearby(
@@ -58,26 +77,23 @@ export class LocationRepositoryAdapter implements LocationRepository {
     radiusMeters: number,
     limit: number
   ): Promise<NearbyLocationResult[]> {
-    const rawResults = await this.repository.query(
-      `SELECT loc.*,
-              ST_Distance(
-                loc.coordinates,
-                ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
-              ) AS distance_meters
-       FROM "locations" loc
-       WHERE ST_DWithin(
-         loc.coordinates,
-         ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-         $3
-       ) AND ${discoverableLocation}
-       ORDER BY distance_meters ASC
-       LIMIT $4`,
-      [coordinates.longitude, coordinates.latitude, radiusMeters, limit]
-    );
+    const origin = 'ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography';
+    const { entities, raw } = await this.repository
+      .createQueryBuilder('loc')
+      .addSelect(`ST_Distance(loc.public_coordinates, ${origin})`, 'distance_meters')
+      .where(`ST_DWithin(loc.public_coordinates, ${origin}, :radiusMeters)`, {
+        ...coordinates,
+        radiusMeters
+      })
+      .andWhere(discoverableLocation)
+      .orderBy('distance_meters', 'ASC')
+      .addOrderBy('loc.id', 'ASC')
+      .limit(limit)
+      .getRawAndEntities<{ distance_meters: number }>();
 
-    return rawResults.map((raw: LocationEntity & { distance_meters: string | number }) => ({
-      location: this.toDomain(raw),
-      distanceMeters: Number(raw.distance_meters)
+    return entities.map((entity, index) => ({
+      location: this.toDomain(entity),
+      distanceMeters: Number(raw[index].distance_meters)
     }));
   }
 
@@ -88,18 +104,19 @@ export class LocationRepositoryAdapter implements LocationRepository {
     maxLng: number,
     limit: number
   ): Promise<Location[]> {
-    const rawResults = await this.repository.query(
-      `SELECT loc.* FROM "locations" loc
-       WHERE ST_Intersects(
-         coordinates,
-         ST_MakeEnvelope($1, $2, $3, $4, 4326)::geography
-       ) AND ${discoverableLocation}
-       ORDER BY created_at DESC
-       LIMIT $5`,
-      [minLng, minLat, maxLng, maxLat, limit]
-    );
+    const entities = await this.repository
+      .createQueryBuilder('loc')
+      .where(
+        'ST_Intersects(loc.public_coordinates, ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326)::geography)',
+        { minLng, minLat, maxLng, maxLat }
+      )
+      .andWhere(discoverableLocation)
+      .orderBy('loc.created_at', 'DESC')
+      .addOrderBy('loc.id', 'ASC')
+      .limit(limit)
+      .getMany();
 
-    return rawResults.map((raw: LocationEntity) => this.toDomain(raw));
+    return entities.map((entity) => this.toDomain(entity));
   }
 
   async search(query: string, cityId: string | null, limit: number): Promise<Location[]> {

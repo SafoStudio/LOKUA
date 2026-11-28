@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { eventText } from './event-text.schema.js';
 
-const commentText = z.string().trim().min(1).max(1000);
+const commentText = eventText(1, 1000);
 
 export const createCommentSchema = z.strictObject({
   text: commentText,

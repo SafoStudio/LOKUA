@@ -21,5 +21,11 @@ export function createOrganizerProfilesRouter(
     validate({ params: organizerProfileParamsSchema, query: reviewPageSchema }),
     reviews.listForOrganizer
   );
+  router.get(
+    '/:id/events',
+    optionalAuth,
+    validate({ params: organizerProfileParamsSchema, query: reviewPageSchema }),
+    reviews.listOrganizerHistory
+  );
   return router;
 }

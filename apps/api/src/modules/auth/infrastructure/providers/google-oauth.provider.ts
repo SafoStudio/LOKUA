@@ -1,4 +1,5 @@
-import { OAuth2Client } from 'google-auth-library';
+import { createHash } from 'node:crypto';
+import { CodeChallengeMethod, OAuth2Client } from 'google-auth-library';
 import { env } from '../../../../config/env.js';
 import type { GoogleOAuthProvider, GoogleProfile } from '../../application/index.js';
 import { AppError } from '../../../../common/index.js';
@@ -14,17 +15,20 @@ export class GoogleOAuthProviderAdapter implements GoogleOAuthProvider {
     });
   }
 
-  buildAuthUrl(state: string): string {
+  buildAuthUrl(state: string, verifier: string): string {
     return this.client.generateAuthUrl({
       access_type: 'offline',
       scope: ['openid', 'email', 'profile'],
       state,
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+      code_challenge_method: CodeChallengeMethod.S256,
       prompt: 'select_account'
     });
   }
 
-  async exchangeCode(code: string): Promise<GoogleProfile> {
-    const { tokens } = await this.client.getToken(code);
+  async exchangeCode(code: string, verifier?: string): Promise<GoogleProfile> {
+    if (!verifier) throw new AppError('Invalid OAuth transaction', 400);
+    const { tokens } = await this.client.getToken({ code, codeVerifier: verifier });
 
     if (!tokens.id_token) throw new AppError('Google did not return id_token', 400);
 

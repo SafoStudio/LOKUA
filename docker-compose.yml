@@ -69,6 +69,18 @@ services:
       timeout: 5s
       retries: 10
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: lokua-mailpit
+    restart: unless-stopped
+    environment:
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+    volumes:
+      - lokua_mailpit_data:/data
+
   minio-init:
     image: minio/mc:latest
     container_name: lokua-minio-init
@@ -79,10 +91,12 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 lokua lokua_secret &&
       mc mb --ignore-existing local/lokua-uploads &&
-      echo 'MinIO bucket lokua-uploads ready.'
+      mc mb --ignore-existing local/lokua-uploads-test &&
+      echo 'MinIO development and test buckets ready.'
       "
 
 volumes:
   lokua_pgdata:
   lokua_pgadmin:
   lokua_minio_data:
+  lokua_mailpit_data:

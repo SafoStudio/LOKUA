@@ -1,5 +1,4 @@
 import { AppError } from '../../../../common/index.js';
-import { obfuscateCoordinates } from '../../../geolocation/index.js';
 import type { LocationProvider } from '../../../geolocation/index.js';
 import type {
   AccessService,
@@ -11,6 +10,7 @@ import type { EventLocationSnapshot } from '../ports/event.repository.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 import type { EventReviewsUseCase } from './event-reviews.use-case.js';
+import { eventPerson } from '../event-person.js';
 
 export class GetEventByIdUseCase {
   constructor(
@@ -60,17 +60,25 @@ export class GetEventByIdUseCase {
         kind: 'DRAFT' as const,
         event: { ...event, tags },
         location: location
-          ? this.toLocation({ ...location, coordinates: location.exactCoordinates }, true)
+          ? this.toLocation(
+              { ...location, districtName: null, coordinates: location.exactCoordinates },
+              true
+            )
           : null
       };
     }
 
     const now = this.clock();
-    const blockedIds = viewer ? await this.blocks.listRelatedUserIds(viewer.id) : [];
+    const [blockerIds, blockedIds] = viewer
+      ? await Promise.all([
+          this.blocks.listBlockerIds(viewer.id),
+          this.blocks.listRelatedUserIds(viewer.id)
+        ])
+      : [[], []];
     if (
       !privileged &&
       (event.isHiddenByAdmin ||
-        blockedIds.includes(event.organizerId) ||
+        blockerIds.includes(event.organizerId) ||
         !this.access.canViewEvent(viewer, event.ageRestriction, now))
     ) {
       throw new AppError('Event not found', 404);
@@ -132,11 +140,13 @@ export class GetEventByIdUseCase {
         : false
     ]);
     const exactLocation = !foreignPrivateLocation && (!event.hideExactAddress || canSeeExact);
-    const participantAvatars = await Promise.all(
-      participants.map(async ({ userId }) => ({
-        id: userId,
-        avatarUrl: (await this.profiles.findByUserId(userId))?.avatarUrl ?? null
-      }))
+    const participantProfiles = await Promise.all(
+      participants.map(async ({ userId }) =>
+        eventPerson(userId, await this.profiles.findByUserId(userId))
+      )
+    );
+    const participantAvatars = participantProfiles.flatMap(({ id, avatarUrl }) =>
+      id ? [{ id, avatarUrl }] : []
     );
     const availablePlaces =
       event.capacityLimit === null
@@ -152,7 +162,7 @@ export class GetEventByIdUseCase {
       !owner &&
       !event.isHiddenByAdmin &&
       open &&
-      !blockedIds.includes(event.organizerId) &&
+      !blockerIds.includes(event.organizerId) &&
       this.access.canViewEvent(viewer, event.ageRestriction, now) &&
       this.access.canJoinEvent(viewer, event.ageRestriction, now) &&
       participationStatus === null;
@@ -162,9 +172,7 @@ export class GetEventByIdUseCase {
       event,
       tags,
       organizer: {
-        id: event.organizerId,
-        name: organizer?.name ?? null,
-        avatarUrl: organizer?.avatarUrl ?? null,
+        ...eventPerson(event.organizerId, organizer),
         ...rating
       },
       reviews,
@@ -187,13 +195,14 @@ export class GetEventByIdUseCase {
   }
 
   private toLocation(snapshot: EventLocationSnapshot, exact: boolean) {
-    const { cityId, districtId, countryCode } = snapshot;
+    const { cityId, districtId, districtName, countryCode } = snapshot;
     return {
       cityId,
       districtId,
+      districtName,
       countryCode,
       isExact: exact,
-      coordinates: exact ? snapshot.coordinates : obfuscateCoordinates(snapshot.publicCoordinates),
+      coordinates: exact ? snapshot.coordinates : snapshot.publicCoordinates,
       name: exact ? snapshot.name : null,
       address: exact ? snapshot.address : null
     };

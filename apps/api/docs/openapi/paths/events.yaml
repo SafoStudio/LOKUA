@@ -1,11 +1,12 @@
 /api/v1/events:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: List upcoming events by start time
     description: >
       Lists future published and full events in ascending start-time order. The first page
       falls back to online events with DATE sorting when no city events match and format is unspecified.
-      Use the same filters on subsequent pages. Visibility depends on age, moderation and user blocks.
+      Use the same filters on subsequent pages. Visibility depends on age and moderation.
+      Signed-in viewers do not see events from organizers who have blocked them.
     security:
       - {}
       - CookieAuth: []
@@ -46,6 +47,11 @@
         in: query
         description: Case-insensitive substring of the title, description, or a tag.
         schema: { type: string, minLength: 1, maxLength: 200 }
+      - &feedByInterests
+        name: byInterests
+        in: query
+        description: Requires authentication and completed onboarding. Matches active profile interests by stable category or tag keys initialized from the original labels.
+        schema: { type: boolean, default: false }
       - name: categoryId
         in: query
         schema: { type: string, format: uuid }
@@ -92,21 +98,21 @@
                 - $ref: '#/components/schemas/ValidationErrorResponse'
                 - $ref: '#/components/schemas/ErrorResponse'
       '401': &eventUnauthorized
-        description: Invalid or expired credentials
+        description: Invalid or expired credentials, or authentication required for the interests view
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
       '403': &eventForbidden
-        description: Inactive account
+        description: Inactive account, or onboarding incomplete for the interests view
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Create an event draft
-    description: Requires an active account with verified email, completed onboarding, and the applicable minimum age.
+    description: Requires the USER role, an active account with verified email and completed onboarding, and the applicable minimum age.
     security:
       - CookieAuth: []
       - BearerAuth: []
@@ -154,7 +160,7 @@
 
 /api/v1/events/me:
   get:
-    tags: [Events]
+    tags: [My Events]
     summary: List the current user's events
     description: |
       GOING lists ongoing or upcoming events with approved participation.
@@ -216,7 +222,7 @@
 
 /api/v1/events/{id}:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: Get event details
     description: |
       Published, full and completed events follow age, blocking and moderation visibility rules.
@@ -265,7 +271,7 @@
               $ref: '#/components/schemas/ErrorResponse'
 
   patch:
-    tags: [Events]
+    tags: [Event Management]
     summary: Update your draft or active published event
     security: &eventOwnerSecurity
       - CookieAuth: []
@@ -314,7 +320,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   delete:
-    tags: [Events]
+    tags: [Event Management]
     summary: Delete your draft or active published event without pending applications or participant history
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -329,7 +335,7 @@
 
 /api/v1/events/{id}/publish:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Publish your draft
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -344,7 +350,7 @@
 
 /api/v1/events/{id}/cancel:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Cancel your event
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -368,7 +374,7 @@
 
 /api/v1/events/{id}/duplicate:
   post:
-    tags: [Events]
+    tags: [Event Management]
     summary: Duplicate your event as a draft without dates
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -391,12 +397,12 @@
 
 /api/v1/events/map:
   get:
-    tags: [Events]
+    tags: [Event Discovery]
     summary: List upcoming offline event markers within a viewport
     description: >
       Returns markers ordered by start time and ID. Bounds include their edges and may span
       up to five degrees per axis. The viewport determines the area when cityId is omitted.
-      Hidden addresses use rounded public coordinates for both matching and the marker.
+      Hidden addresses use the district center for bounds and markers, with the city center as a fallback.
       Use the same viewport and filters on subsequent pages.
     security:
       - {}
@@ -455,6 +461,7 @@
       - name: search
         in: query
         schema: { type: string, minLength: 1, maxLength: 200 }
+      - *feedByInterests
     responses:
       '200':
         description: Page of upcoming offline event markers
@@ -488,11 +495,12 @@
 /api/v1/events/{id}/comments:
   parameters: *eventIdParameters
   get:
-    tags: [Events]
+    tags: [Discussion]
     summary: List event comments or replies
     description: |
       Returns top-level comments by default, or replies to the selected top-level comment.
-      Active discussions follow event visibility rules and hide comments from blocked authors.
+      Active discussions follow event visibility rules. Viewers do not see comments from authors
+      they have blocked.
       After the event ends, the discussion is available to administrators through archive mode.
       Archive mode includes soft-deleted and moderation-hidden comments.
     security:
@@ -550,7 +558,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   post:
-    tags: [Events]
+    tags: [Discussion]
     summary: Post a comment or reply
     description: |
       Signed-in users with verified email and completed onboarding can post while the discussion is active.
@@ -607,7 +615,7 @@
       required: true
       schema: { type: string, format: uuid }
   patch:
-    tags: [Events]
+    tags: [Discussion]
     summary: Edit your comment
     security: *eventOwnerSecurity
     requestBody:
@@ -627,7 +635,7 @@
       '403': *commentForbidden
       '404': *discussionNotFound
   delete:
-    tags: [Events]
+    tags: [Discussion]
     summary: Remove a comment
     description: The author or event organizer can soft-delete a comment while the discussion is active.
     security: *eventOwnerSecurity
@@ -641,12 +649,13 @@
 
 /api/v1/events/{id}/participations:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Join an event or submit an application
     description: >
       FREE approves immediately. REQUEST creates a pending application even when all places are
       occupied. Repeating an approved or pending request returns that participation.
-      Schedule overlaps are returned as warnings.
+      Schedule overlaps are returned as warnings. Requires the USER role. Each account may
+      make up to 30 participation requests per hour across all events.
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
     requestBody:
@@ -695,10 +704,20 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: The participation request limit was reached
+        headers:
+          Retry-After:
+            description: Seconds until the account can retry.
+            schema: { type: integer, minimum: 1 }
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 /api/v1/events/{id}/participations/me:
   delete:
-    tags: [Events]
+    tags: [Participation]
     summary: Cancel your participation before the event starts
     security: *eventOwnerSecurity
     parameters: *eventIdParameters
@@ -731,7 +750,7 @@
 
 /api/v1/events/{id}/applications:
   get:
-    tags: [Events]
+    tags: [Participation]
     summary: List pending applications as the organizer
     security: *eventOwnerSecurity
     parameters: &eventParticipationPageParameters
@@ -747,7 +766,7 @@
         schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
     responses:
       '200':
-        description: Pending applications with their application messages
+        description: Pending applications with their application messages and profile details
         content:
           application/json:
             schema:
@@ -776,7 +795,7 @@
 
 /api/v1/events/{id}/applications/{participationId}/approve:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Approve a pending application as the organizer
     security: *eventOwnerSecurity
     parameters: &eventParticipationIdParameters
@@ -812,7 +831,7 @@
 
 /api/v1/events/{id}/applications/{participationId}/reject:
   post:
-    tags: [Events]
+    tags: [Participation]
     summary: Reject a pending application as the organizer
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters
@@ -820,7 +839,7 @@
 
 /api/v1/events/{id}/participants:
   get:
-    tags: [Events]
+    tags: [Participation]
     summary: List approved participants and the organizer
     description: Available to the organizer, approved participants and active administrators.
     security: *eventOwnerSecurity
@@ -850,7 +869,7 @@
 
 /api/v1/events/{id}/participants/{participationId}:
   delete:
-    tags: [Events]
+    tags: [Participation]
     summary: Remove an approved participant as the organizer before the event starts
     security: *eventOwnerSecurity
     parameters: *eventParticipationIdParameters

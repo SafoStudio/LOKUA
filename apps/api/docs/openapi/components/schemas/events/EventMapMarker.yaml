@@ -1,5 +1,6 @@
 type: object
-required: [id, title, categoryId, firstStartsAt, status, hasAvailablePlaces, coordinates]
+required:
+  [id, title, categoryId, firstStartsAt, status, hasAvailablePlaces, coordinates, districtName]
 properties:
   id: { type: string, format: uuid }
   title: { type: string }
@@ -7,6 +8,7 @@ properties:
   firstStartsAt: { type: string, format: date-time }
   status: { type: string, enum: [PUBLISHED, FULL] }
   hasAvailablePlaces: { type: boolean }
+  districtName: { type: [string, 'null'] }
   coordinates:
     type: object
     required: [latitude, longitude]

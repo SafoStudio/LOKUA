@@ -1,0 +1,43 @@
+/api/v1/admin/statistics:
+  get:
+    tags: [Admin / Statistics]
+    summary: Count registrations, event publications and applications in a period
+    description: >
+      Counts retained records by registration, publication and application time.
+      Applications use the participation mode at entry. Historical rows are classified
+      by stored request evidence or the event mode at migration time.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    parameters:
+      - name: from
+        in: query
+        required: true
+        description: Inclusive start of the period.
+        schema: { type: string, format: date-time }
+      - name: to
+        in: query
+        required: true
+        description: Exclusive end of the period.
+        schema: { type: string, format: date-time }
+    responses:
+      '200':
+        description: Aggregate statistics for the period
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [from, to, users, events, applications]
+                  properties:
+                    from: { type: string, format: date-time }
+                    to: { type: string, format: date-time }
+                    users: { type: integer, minimum: 0 }
+                    events: { type: integer, minimum: 0 }
+                    applications: { type: integer, minimum: 0 }
+      '400': { description: Invalid or empty time range }
+      '401': { description: Authentication required }
+      '403': { description: Active administrator required }

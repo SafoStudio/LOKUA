@@ -1,12 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { AppError } from '../../../../src/common/index.js';
 import { CompletePasskeyRegistrationUseCase } from '../../../../src/modules/auth/application/index.js';
 import type {
   PasskeyChallengeRepository,
   PasskeyCredentialRepository,
   PasskeyVerificationService
 } from '../../../../src/modules/auth/application/index.js';
-
-
 describe('CompletePasskeyRegistrationUseCase', () => {
   const challenges: PasskeyChallengeRepository = {
     create: vi.fn(),
@@ -123,16 +122,12 @@ describe('CompletePasskeyRegistrationUseCase', () => {
     expect(credentials.create).not.toHaveBeenCalled();
   });
 
-  it('throws AppError 409 when passkey is already registered (unique constraint code 23505)', async () => {
+  it('propagates the credential repository conflict when the passkey is already registered', async () => {
     vi.mocked(challenges.consume).mockResolvedValueOnce(mockChallenge);
     vi.mocked(passkey.verifyRegistration).mockResolvedValueOnce(mockCredentialData);
 
-    const uniqueError = {
-      driverError: {
-        code: '23505'
-      }
-    };
-    vi.mocked(credentials.create).mockRejectedValueOnce(uniqueError);
+    const conflict = new AppError('Passkey already registered', 409);
+    vi.mocked(credentials.create).mockRejectedValueOnce(conflict);
 
     await expect(
       useCase.execute({
@@ -140,9 +135,6 @@ describe('CompletePasskeyRegistrationUseCase', () => {
         challenge: 'reg-ch-val',
         response: { id: 'new-cred-123' }
       })
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: 'Passkey already registered'
-    });
+    ).rejects.toBe(conflict);
   });
 });

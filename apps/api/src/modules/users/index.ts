@@ -1,5 +1,9 @@
 export { createUsersModule } from './users.module.js';
+export { createProfileSettingsRouter } from './presentation/http/profile-settings.routes.js';
+export { ProfileSettingsService } from './application/services/profile-settings.service.js';
+export { createUserBlocksRouter } from './presentation/http/user-blocks.routes.js';
 export { createProfilePhotosRouter } from './presentation/http/profile-photos.routes.js';
+export { ProfilePhotosService } from './application/services/profile-photos.service.js';
 export type { UsersModule } from './users.module.js';
 
 export type { User, UserRole, UserStatus, AuthUser } from './domain/index.js';

@@ -62,6 +62,12 @@ export class UserEntity {
   @Column({ type: 'timestamptz', name: 'deletion_requested_at', nullable: true })
   deletionRequestedAt!: Date | null;
 
+  @Column({ type: 'uuid', name: 'session_version', nullable: true })
+  sessionVersion!: string | null;
+
+  @Column({ type: 'timestamptz', name: 'media_cleanup_at', nullable: true })
+  mediaCleanupAt!: Date | null;
+
   @Column({ type: 'jsonb', name: 'notification_settings', nullable: true })
   notificationSettings!: Record<string, unknown> | null;
 

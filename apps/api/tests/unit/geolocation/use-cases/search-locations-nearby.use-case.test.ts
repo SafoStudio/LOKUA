@@ -6,6 +6,7 @@ import { InvalidCoordinatesError } from '../../../../src/modules/geolocation/ind
 describe('SearchLocationsNearbyUseCase', () => {
   const mockLocationRepo: LocationRepository = {
     findById: vi.fn(),
+    districtBelongsToCity: vi.fn(),
     create: vi.fn(),
     findNearby: vi.fn().mockResolvedValue([
       {

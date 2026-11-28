@@ -14,6 +14,7 @@ export class TypeOrmRegistrationTransaction implements RegistrationTransaction {
   async createUserWithPasswordCredential(data: {
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     passwordHash: string;
   }): Promise<AuthUser> {
     try {
@@ -25,6 +26,7 @@ export class TypeOrmRegistrationTransaction implements RegistrationTransaction {
         const user = await this.users.create(
           {
             email: data.email,
+            termsAcceptedAt: data.termsAcceptedAt,
             name: data.name
           },
           manager as unknown as TransactionContext

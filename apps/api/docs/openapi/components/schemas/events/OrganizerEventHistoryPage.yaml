@@ -1,0 +1,24 @@
+type: object
+required: [data, pagination]
+properties:
+  data:
+    type: array
+    items:
+      type: object
+      required:
+        [id, title, categoryId, coverUrl, format, ageRestriction, firstStartsAt, firstEndsAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        categoryId: { type: string, format: uuid }
+        coverUrl: { type: [string, 'null'], format: uri }
+        format: { type: string, enum: [OFFLINE, ONLINE] }
+        ageRestriction: { type: string, enum: [ALL, SIXTEEN_PLUS, EIGHTEEN_PLUS] }
+        firstStartsAt: { type: [string, 'null'], format: date-time }
+        firstEndsAt: { type: string, format: date-time }
+  pagination:
+    type: object
+    required: [nextCursor, hasMore]
+    properties:
+      nextCursor: { type: [string, 'null'], format: uuid }
+      hasMore: { type: boolean }

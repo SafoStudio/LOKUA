@@ -20,7 +20,8 @@ describe('IssueAuthTokensUseCase', () => {
     revokeById: vi.fn(),
     rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
-    revokeAllByUserId: vi.fn()
+    revokeAllByUserId: vi.fn(),
+    revokeFamily: vi.fn()
   };
 
   const useCase = new IssueAuthTokensUseCase(tokenService, refreshSessions, 7 * 24 * 60 * 60 * 1000);

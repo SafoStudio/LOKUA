@@ -1,17 +1,18 @@
 import { z } from 'zod';
+import { eventText } from './event-text.schema.js';
 
 export const rejectApplicationBodySchema = z.strictObject({}).default({});
 
 export const participationBodySchema = z
   .object({
-    message: z.string().trim().max(300).optional()
+    message: eventText(0, 300).optional()
   })
   .strict()
   .default({});
 
 export const participationReasonSchema = z
   .object({
-    reason: z.string().trim().max(300).optional()
+    reason: eventText(0, 300).optional()
   })
   .strict()
   .default({});

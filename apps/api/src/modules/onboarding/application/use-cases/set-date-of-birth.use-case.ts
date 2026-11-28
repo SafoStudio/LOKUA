@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import { calculateAge } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
@@ -11,12 +11,12 @@ import {
   OnboardingStepImmutableError
 } from '../../domain/index.js';
 import { ensureOnboardingState } from './ensure-onboarding-state.js';
+import { advanceStep } from '../../domain/advance-step.js';
 
 export class SetDateOfBirthUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly audit: AuditLogger
   ) {}
@@ -36,7 +36,11 @@ export class SetDateOfBirthUseCase {
     }
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
+      if (state.dateOfBirth || state.completedSteps.includes('DATE_OF_BIRTH')) {
+        throw new OnboardingStepImmutableError('DATE_OF_BIRTH');
+      }
 
       await this.onboardingUsers.applyDateOfBirth(context.user.id, birthDate, tx);
 
@@ -44,8 +48,7 @@ export class SetDateOfBirthUseCase {
         state.id,
         {
           dateOfBirth: birthDate,
-          currentStep: 'PROFILE',
-          completedSteps: [...state.completedSteps, 'DATE_OF_BIRTH']
+          ...advanceStep(state, 'DATE_OF_BIRTH')
         },
         tx
       );

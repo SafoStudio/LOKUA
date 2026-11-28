@@ -6,17 +6,35 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError, TypeOrmUnitOfWork } from '../../src/common/index.js';
 import { errorHandler } from '../../src/middlewares/index.js';
 import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
+import { CityEntity, CityRepositoryAdapter } from '../../src/modules/dictionaries/infrastructure/index.js';
 import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
+import { GeocodeAddressUseCase } from '../../src/modules/geolocation/application/index.js';
+import { GeocodingCacheEntity, GeocodingCacheRepositoryAdapter } from '../../src/modules/geolocation/infrastructure/index.js';
+import { reserveGeocodingSlot } from '../../src/modules/geolocation/infrastructure/persistence/adapters/geocoding-request-slot.js';
 import {
   AccessService,
   createProfilePhotosRouter,
+  ProfilePhotosService,
+  createProfileSettingsRouter,
+  ProfileSettingsService,
+  createUserBlocksRouter,
   createUsersModule
 } from '../../src/modules/users/index.js';
+import { createAuthModule, createAccountRecoveryLink } from '../../src/modules/auth/index.js';
+import { BcryptPasswordHasher, PasskeyChallengeEntity, PasskeyChallengeRepositoryAdapter, PasswordCredentialEntity } from '../../src/modules/auth/infrastructure/index.js';
+import { AccountEmailCodeUseCase } from '../../src/modules/auth/application/use-cases/account-email-code.use-case.js';
+import { JwtTokenService } from '../../src/modules/auth/infrastructure/crypto/jwt-token.service.js';
+import { createAuthMiddleware } from '../../src/modules/auth/presentation/http/auth.middleware.js';
+import { ChangeEmailUseCase } from '../../src/modules/auth/application/use-cases/change-email.use-case.js';
+import { JwtEmailChangeTokens } from '../../src/modules/auth/infrastructure/crypto/email-change-tokens.js';
+import { TypeOrmEmailChangeStore } from '../../src/modules/auth/infrastructure/persistence/adapters/email-change.store.js';
+import { createEmailChangeRouter } from '../../src/modules/auth/presentation/http/email-change.routes.js';
 import type { ImageOwnership } from '../../src/modules/storage/index.js';
 import type { AuthUser } from '../../src/modules/users/index.js';
 import { UserBlockEntity, UserEntity, UserRepositoryAdapter } from '../../src/modules/users/infrastructure/index.js';
 import { GetEventsUseCase } from '../../src/modules/events/application/index.js';
+import { EventFeedRepositoryAdapter } from '../../src/modules/events/infrastructure/persistence/adapters/event-feed.repository.adapter.js';
 import { createEventsModule } from '../../src/modules/events/index.js';
 import { createNotificationsModule } from '../../src/modules/notifications/index.js';
 import type { CreateNotificationsModuleDependencies } from '../../src/modules/notifications/index.js';
@@ -50,6 +68,9 @@ describe('event management and feed with PostgreSQL', () => {
   let kyivId: string;
   let lvivId: string;
   const locationIds: string[] = [];
+  const districtIds: string[] = [];
+  const categoryIds: string[] = [];
+  const interestIds: string[] = [];
 
   let listParticipation: ListEventParticipationUseCase;
   let manageParticipation: ManageParticipationUseCase;
@@ -76,8 +97,8 @@ describe('event management and feed with PostgreSQL', () => {
       users.blocks,
       () => now
     );
-    const kyiv = await cities.findBySlug('kyiv');
-    const lviv = await cities.findBySlug('lviv');
+    const kyiv = await cities.findBySlug('kyiv', 'UA');
+    const lviv = await cities.findBySlug('lviv', 'UA');
     if (!kyiv || !lviv) throw new Error('Test cities are missing');
     kyivId = kyiv.id;
     lvivId = lviv.id;
@@ -89,7 +110,7 @@ describe('event management and feed with PostgreSQL', () => {
       requireAuth: (_req, _res, next) => next()
     }).locations;
     getEvents = new GetEventsUseCase(
-      new EventRepositoryAdapter(dataSource.getRepository(EventEntity)),
+      new EventFeedRepositoryAdapter(dataSource.getRepository(EventEntity)),
       users.access,
       cities,
       users.profiles,
@@ -117,6 +138,15 @@ describe('event management and feed with PostgreSQL', () => {
       }
       if (locationIds.length) {
         await dataSource.query('DELETE FROM locations WHERE id = ANY($1::uuid[])', [locationIds]);
+      }
+      if (districtIds.length) {
+        await dataSource.query('DELETE FROM districts WHERE id = ANY($1::uuid[])', [districtIds]);
+      }
+      if (categoryIds.length) {
+        await dataSource.query('DELETE FROM categories WHERE id = ANY($1::uuid[])', [categoryIds]);
+      }
+      if (interestIds.length) {
+        await dataSource.query('DELETE FROM interests WHERE id = ANY($1::uuid[])', [interestIds]);
       }
     } finally {
       await dataSource.destroy();
@@ -183,7 +213,8 @@ describe('event management and feed with PostgreSQL', () => {
         else res.sendStatus(401);
       });
     };
-    const { categories, cities, countries } = createDictionariesModule({ dataSource });
+    const dictionaries = createDictionariesModule({ dataSource });
+    const { categories, cities, countries, interests } = dictionaries;
     const users = createUsersModule({ dataSource });
     const geo = createGeolocationModule({
       dataSource,
@@ -195,7 +226,8 @@ describe('event management and feed with PostgreSQL', () => {
     const notifications = createNotificationsModule({
       dataSource,
       requireAuth,
-      sendEmail: sendEmail ?? (async () => {})
+      sendEmail: sendEmail ?? (async () => {}),
+      accountRecoveryLink: createAccountRecoveryLink
     });
     const moderation = createModerationModule({
       dataSource,
@@ -224,17 +256,84 @@ describe('event management and feed with PostgreSQL', () => {
       images
     });
     const app = express();
+    moderation.adminUsersRouter.use(dictionaries.adminRouter);
     app.use(express.json());
+    app.use('/dictionaries', dictionaries.router);
     app.use('/events', events.router);
     app.use('/users', events.profilesRouter);
-    if (images) app.use('/users/me/photos', createProfilePhotosRouter(requireAuth, users.photos, images));
+    app.use('/users/me/blocks', createUserBlocksRouter(requireAuth, users.blockSettings));
+    app.use('/users/me/profile', createProfileSettingsRouter(
+      requireAuth,
+      users.profiles,
+      new ProfileSettingsService(users.profileSettings, cities, interests)
+    ));
+    if (images) {
+      app.use('/users/me/photos', createProfilePhotosRouter(
+        requireAuth,
+        new ProfilePhotosService(users.photos, (url, userId) => images.assertOwnedUrl(url, userId, 'PROFILE'))
+      ));
+    }
     app.use('/notifications', notifications.router);
     app.use('/admin', moderation.adminUsersRouter);
     app.use('/reports', moderation.reportsRouter);
     app.use('/geo', geo.router);
     app.use(errorHandler);
-    return { api: request(app), notifications, moderation };
+    return { api: request(app), notifications, moderation, events };
   }
+
+  it('enforces administrator event permissions and caps participation requests per account', async () => {
+    const [owner, viewer, staff] = await Promise.all([createUser(), createUser(), createUser()]);
+    const api = createEventsTestApi([owner, viewer, { ...staff, role: 'ADMIN', birthDate: null }]);
+    const event = await publishForFeed(owner, { ageRestriction: 'EIGHTEEN_PLUS' });
+    await dataSource.getRepository(EventEntity).update(event.id, {
+      firstStartsAt: new Date(Date.now() + 3_600_000),
+      firstEndsAt: new Date(Date.now() + 7_200_000)
+    });
+    const feed = await api.get('/events').query({ format: 'ONLINE', limit: 50 })
+      .set('X-Test-User', staff.id).expect(200);
+    expect(feed.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: event.id })]));
+    await api.post('/events').set('X-Test-User', staff.id).send(eventData()).expect(403);
+    const path = `/events/${event.id}/participations`;
+    await api.post(path).set('X-Test-User', staff.id).send({}).expect(403);
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await api.post(path).set('X-Test-User', viewer.id).send({ unexpected: true }).expect(400);
+    }
+    await api.post(`/events/${randomUUID()}/participations`).set('X-Test-User', viewer.id)
+      .send({}).expect(429).expect('Retry-After', /^[1-9]\d*$/);
+    await api.post(path).set('X-Test-User', staff.id).send({}).expect(403);
+  });
+
+  it('manages outgoing blocks without changing an existing approval', async () => {
+    const [owner, participant] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, participant]);
+    const ownerEvent = await publishForFeed(owner, {});
+    const participantEvent = await publishForFeed(participant, {});
+    await manageParticipation.join(participant, ownerEvent.id);
+    const path = '/users/me/blocks';
+
+    await api.get(path).expect(401);
+    await api.put(`${path}/${owner.id.toUpperCase()}`).set('X-Test-User', owner.id).expect(422);
+    await api.put(`${path}/${randomUUID()}`).set('X-Test-User', owner.id).expect(404);
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    const outgoing = await api.get(path).set('X-Test-User', owner.id).expect(200);
+    expect(outgoing.body.data).toEqual([
+      { userId: participant.id, createdAt: expect.any(String) }
+    ]);
+    const incoming = await api.get(path).set('X-Test-User', participant.id).expect(200);
+    expect(incoming.body.data).toEqual([]);
+    await api.delete(`${path}/${owner.id}`).set('X-Test-User', participant.id).expect(204);
+    await api.get(`/events/${ownerEvent.id}`).set('X-Test-User', participant.id).expect(404);
+    await api.get(`/events/${participantEvent.id}`).set('X-Test-User', owner.id).expect(200);
+
+    await api.delete(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    await api.delete(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(204);
+    const restored = await api.get(`/events/${ownerEvent.id}`)
+      .set('X-Test-User', participant.id).expect(200);
+    expect(restored.body.data.participationStatus).toBe('APPROVED');
+    await dataSource.getRepository(UserEntity).update(participant.id, { status: 'PENDING_DELETION' });
+    await api.put(`${path}/${participant.id}`).set('X-Test-User', owner.id).expect(404);
+  });
 
   it('serves event details and protects private fields across event and geolocation routes', async () => {
     const [owner, applicant, participant, other, adminUser] = await Promise.all([
@@ -292,12 +391,12 @@ describe('event management and feed with PostgreSQL', () => {
     await get(onlineDraft.id, minor).expect(404);
     await get(onlineDraft.id, participant).expect(200);
     const blocks = dataSource.getRepository(UserBlockEntity);
-    for (const [blockerId, blockedId] of [
-      [owner.id, participant.id],
-      [participant.id, owner.id]
-    ]) {
+    for (const [blockerId, blockedId, expectedStatus] of [
+      [owner.id, participant.id, 404],
+      [participant.id, owner.id, 200]
+    ] as const) {
       await blocks.insert({ blockerId, blockedId });
-      await get(onlineDraft.id, participant).expect(404);
+      await get(onlineDraft.id, participant).expect(expectedStatus);
       await blocks.delete({ blockerId, blockedId });
       await get(onlineDraft.id, participant).expect(200);
     }
@@ -360,11 +459,12 @@ describe('event management and feed with PostgreSQL', () => {
     const publicCard = await get(offline.id).expect(200);
     expect(publicCard.body.data).not.toHaveProperty('primaryLocationId');
     expect(publicCard.body.data.location).toMatchObject({
-      coordinates: obfuscateCoordinates(exactCoordinates),
       address: null,
       name: null,
       isExact: false
     });
+    expect(publicCard.body.data.location.coordinates).not.toEqual(exactCoordinates);
+    expect(sharedCard.body.data.location.coordinates).toEqual(publicCard.body.data.location.coordinates);
     for (const viewer of [owner, participant, admin]) {
       const privateCard = await get(offline.id, viewer).expect(200);
       expect(privateCard.body.data.location).toMatchObject({
@@ -394,6 +494,116 @@ describe('event management and feed with PostgreSQL', () => {
     expect(bbox.body.data).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: location.id })])
     );
+  });
+
+  it('preserves the provider identifier through concurrent geocoding cache writes', async () => {
+    const repository = dataSource.getRepository(GeocodingCacheEntity);
+    const providerName = `test-${randomUUID()}`;
+    const result = {
+      formattedAddress: 'Kyiv, Ukraine',
+      city: 'Kyiv',
+      district: null,
+      countryCode: 'UA',
+      coordinates: { latitude: 50.4501, longitude: 30.5234 },
+      provider: providerName,
+      providerPlaceId: '42'
+    };
+    let upstreamCalls = 0;
+    const useCase = new GeocodeAddressUseCase({
+      providerName,
+      async geocode() {
+        upstreamCalls++;
+        return result;
+      }
+    }, new GeocodingCacheRepositoryAdapter(repository), { cacheTtlSeconds: 60 });
+    try {
+      const query = { address: 'Kyiv', countryCode: 'UA' };
+      await expect(Promise.all([useCase.execute(query), useCase.execute(query)])).resolves.toEqual([result, result]);
+      expect(await repository.countBy({ provider: providerName })).toBe(1);
+      const callsBeforeCacheHit = upstreamCalls;
+      await expect(useCase.execute({ address: ' kyiv ', countryCode: 'ua' })).resolves.toEqual(result);
+      expect(upstreamCalls).toBe(callsBeforeCacheHit);
+    } finally {
+      await repository.delete({ provider: providerName });
+    }
+  });
+
+  it('admits only one provider request across PostgreSQL connections', async () => {
+    await dataSource.query('DELETE FROM geocoding_request_slot');
+    const allowed = await Promise.all([
+      reserveGeocodingSlot(dataSource),
+      reserveGeocodingSlot(dataSource),
+      reserveGeocodingSlot(dataSource)
+    ]);
+    expect(allowed.filter(Boolean)).toHaveLength(1);
+    await dataSource.query("UPDATE geocoding_request_slot SET next_request_at = now() - interval '1 second'");
+    await expect(reserveGeocodingSlot(dataSource)).resolves.toBe(true);
+  });
+
+  it('uses public points for searches and restricts account-owned locations', async () => {
+    const [owner, outsider] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, outsider]);
+    const exactCoordinates = { latitude: 50.4548, longitude: 30.5248 };
+    const publicCoordinates = { latitude: 50.45, longitude: 30.52 };
+    const catalog = await locations.create({
+      name: 'Catalog venue',
+      address: 'Catalog address',
+      cityId: kyivId,
+      districtId: null,
+      countryCode: 'UA',
+      exactCoordinates,
+      publicCoordinates,
+      provider: 'manual',
+      providerPlaceId: null,
+      createdBy: null
+    });
+    locationIds.push(catalog.id);
+    const created = await api.post('/geo/locations').set('X-Test-User', owner.id).send({
+      name: 'Private venue',
+      address: 'Private address',
+      cityId: kyivId,
+      exactCoordinates,
+      publicCoordinates: exactCoordinates
+    }).expect(201);
+    const privateId = created.body.data.id as string;
+    locationIds.push(privateId);
+    expect(created.body.data.publicCoordinates).toEqual(publicCoordinates);
+    await api.get(`/geo/locations/${privateId}`).expect(404);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', outsider.id).expect(404);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', owner.id).expect(200);
+    await expect(manageEvent.create(outsider, eventData({ primaryLocationId: privateId })))
+      .rejects.toMatchObject({ statusCode: 422 });
+    await api.post('/geo/locations').set('X-Test-User', owner.id).send({
+      name: 'Wrong district',
+      address: 'An address',
+      cityId: kyivId,
+      districtId: randomUUID(),
+      exactCoordinates
+    }).expect(400);
+    await api.get('/geo/locations/nearby').query({ latitude: '', longitude: '30.52' }).expect(400);
+    await api.post('/geo/reverse-geocode').send({ latitude: null, longitude: 30.52 }).expect(400);
+    const nearby = await api.get('/geo/locations/nearby').query({ ...publicCoordinates, radiusMeters: 100 }).expect(200);
+    expect(nearby.body.data).toContainEqual({
+      location: {
+        id: catalog.id,
+        name: catalog.name,
+        cityId: kyivId,
+        districtId: null,
+        countryCode: 'UA',
+        coordinates: publicCoordinates,
+        isExact: false
+      },
+      distanceMeters: 0
+    });
+    expect(nearby.body.data).not.toContainEqual(expect.objectContaining({
+      location: expect.objectContaining({ id: privateId })
+    }));
+    const bbox = await api.get('/geo/locations/bbox')
+      .query({ minLat: 50.449, minLng: 30.519, maxLat: 50.451, maxLng: 30.521 }).expect(200);
+    expect(bbox.body.data).toContainEqual(expect.objectContaining({ id: catalog.id }));
+    expect(bbox.body.data).not.toContainEqual(expect.objectContaining({ id: privateId }));
+    await dataSource.query('UPDATE locations SET created_by = NULL WHERE id = $1', [privateId]);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', outsider.id).expect(404);
   });
 
   it('lists personal events by tab with private, stable cursor pagination', async () => {
@@ -671,7 +881,7 @@ describe('event management and feed with PostgreSQL', () => {
     const hidden = await publishForFeed(owner, base);
     const past = await publishForFeed(owner, base);
     const paid = await publishForFeed(owner, { ...base, isFree: false, priceText: '10 UAH' });
-    await publishForFeed(blockedByViewer, base);
+    const outgoingBlockEvent = await publishForFeed(blockedByViewer, base);
     await publishForFeed(blockingViewer, base);
 
     const events = dataSource.getRepository(EventEntity);
@@ -696,14 +906,19 @@ describe('event management and feed with PostgreSQL', () => {
       { ...query, cursor: firstPage.nextCursor ?? undefined },
       viewer
     );
-    const items = [...firstPage.items, ...secondPage.items];
-    expect(items.map((event) => event.id)).toEqual([open.id, full.id].sort());
-    expect(secondPage.nextCursor).toBeNull();
+    expect(secondPage.nextCursor).not.toBeNull();
+    const thirdPage = await getEvents.execute(
+      { ...query, cursor: secondPage.nextCursor ?? undefined },
+      viewer
+    );
+    const items = [...firstPage.items, ...secondPage.items, ...thirdPage.items];
+    expect(items.map((event) => event.id)).toEqual([open.id, full.id, outgoingBlockEvent.id].sort());
+    expect(thirdPage.nextCursor).toBeNull();
     expect(items.find((event) => event.id === full.id)?.hasAvailablePlaces).toBe(false);
     expect(toFeedEventView(items[0])).not.toHaveProperty('onlineUrl');
 
-    const onlyAvailable = await getEvents.execute({ ...query, availableOnly: true }, viewer);
-    expect(onlyAvailable.items.map((event) => event.id)).toEqual([open.id]);
+    const onlyAvailable = await getEvents.execute({ ...query, limit: 3, availableOnly: true }, viewer);
+    expect(onlyAvailable.items.map((event) => event.id)).toEqual([open.id, outgoingBlockEvent.id].sort());
     expect(items.map((event) => event.id)).not.toContain(restricted.id);
     expect(items.map((event) => event.id)).not.toContain(paid.id);
   });
@@ -761,15 +976,24 @@ describe('event management and feed with PostgreSQL', () => {
     const owner = await createUser();
     const tag = randomUUID().replaceAll('-', '').slice(0, 30);
     const exactCoordinates = { latitude: 50.454321, longitude: 30.524321 };
-    const origin = obfuscateCoordinates(exactCoordinates);
+    const origin = { latitude: 50.4498, longitude: 30.5198 };
+    const districtId = randomUUID();
+    const districtName = `District fixture ${districtId}`;
+    districtIds.push(districtId);
+    await dataSource.query(
+      `INSERT INTO districts (id, city_id, name, center, boundary)
+       VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
+         ST_MakeEnvelope(30.519, 50.449, 30.525, 50.455, 4326)::geography)`,
+      [districtId, kyivId, districtName, origin.longitude, origin.latitude]
+    );
     const location = await locations.create({
       name: 'Hidden map venue',
       address: 'Private venue address',
       cityId: kyivId,
-      districtId: null,
+      districtId,
       countryCode: 'UA',
       exactCoordinates,
-      publicCoordinates: origin,
+      publicCoordinates: exactCoordinates,
       provider: 'manual',
       providerPlaceId: null,
       createdBy: null
@@ -805,7 +1029,12 @@ describe('event management and feed with PostgreSQL', () => {
     );
     const markers = [...firstMap.items, ...secondMap.items].map(toMapEventView);
     expect(markers.map((marker) => marker.id)).toEqual([hidden.id, tied.id].sort());
-    expect(markers[0]).toMatchObject({ coordinates: origin });
+    expect(markers[0]).toMatchObject({ coordinates: origin, districtName });
+    const api = createEventsTestApi([owner]);
+    const card = await api.get(`/events/${hidden.id}`).expect(200);
+    expect(card.body.data.location).toMatchObject({
+      coordinates: origin, districtId, districtName, address: null, isExact: false
+    });
     expect(markers[0]).not.toHaveProperty('primaryLocationId');
     expect(markers[0]).not.toHaveProperty('address');
     expect(secondMap.nextCursor).toBeNull();
@@ -833,11 +1062,79 @@ describe('event management and feed with PostgreSQL', () => {
     expect(secondDistance.items[0].distanceMeters).toBe(0);
     expect(thirdDistance.items[0].id).toBe(visible.id);
     expect(thirdDistance.items[0].distanceMeters).toBeGreaterThan(0);
+    const otherOwner = await createUser();
+    await dataSource.query('UPDATE locations SET created_by = $2, is_private = true WHERE id = $1', [
+      location.id, otherOwner.id
+    ]);
+    const privateViewport = await getEvents.execute({ ...mapQuery, limit: 10 }, null);
+    expect(privateViewport.items.map(toMapEventView)).toContainEqual(expect.objectContaining({
+      id: visible.id, coordinates: origin
+    }));
+    const privateCard = await api.get(`/events/${visible.id}`).expect(200);
+    expect(privateCard.body.data.location).toMatchObject({ coordinates: origin, isExact: false });
     expect(thirdDistance.nextCursor).toBeNull();
     await expect(getEvents.execute({
       ...mapQuery,
       cursor: firstDistance.nextCursor ?? undefined
     }, null)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('filters future events by active interests matching a category or tag', async () => {
+    const [owner, viewer] = await Promise.all([createUser(), createUser()]);
+    const { categories, interests } = createDictionariesModule({ dataSource });
+    const category = (await categories.listActive()).find(({ slug }) => slug === 'board-games')!;
+    const interest = (await interests.listActive()).find(({ name }) => name === category.name)!;
+    await dataSource.query('INSERT INTO user_interests (user_id, interest_id) VALUES ($1, $2)', [
+      viewer.id, interest.id
+    ]);
+    const categoryMatch = await publishForFeed(owner, { categoryId: category.id });
+    const tagMatch = await publishForFeed(owner, { tags: [interest.name] });
+    const unrelated = await publishForFeed(owner, {});
+    const hidden = await publishForFeed(owner, { tags: [interest.name] });
+    const events = dataSource.getRepository(EventEntity);
+    await events.update([categoryMatch.id, tagMatch.id, unrelated.id, hidden.id], {
+      firstStartsAt: new Date(Date.now() + 3_600_000),
+      firstEndsAt: new Date(Date.now() + 7_200_000)
+    });
+    await events.update(hidden.id, { isHiddenByAdmin: true });
+    const api = createEventsTestApi([owner, viewer]);
+    const query = { byInterests: true, format: 'ONLINE' };
+    await api.get('/events').query(query).expect(401);
+    const empty = await api.get('/events').query(query).set('X-Test-User', owner.id).expect(200);
+    expect(empty.body.data).toEqual([]);
+    const personalized = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+    expect(personalized.body.data.map(({ id }: { id: string }) => id).sort())
+      .toEqual([categoryMatch.id, tagMatch.id].sort());
+
+    const updatedLabel = `Renamed ${randomUUID()}`;
+    const originalTag = interest.name.trim().toLowerCase();
+    const [tag] = await dataSource.query<{ id: string }[]>('SELECT id FROM tags WHERE name = $1', [originalTag]);
+    try {
+      await dataSource.query('UPDATE categories SET name = $2 WHERE id = $1', [category.id, updatedLabel]);
+      await dataSource.query('UPDATE tags SET name = $2 WHERE id = $1', [tag.id, updatedLabel]);
+      await dataSource.query('UPDATE interests SET name = $2 WHERE id = $1', [interest.id, `${updatedLabel} interest`]);
+      const afterRename = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+      expect(afterRename.body.data.map(({ id }: { id: string }) => id).sort())
+        .toEqual([categoryMatch.id, tagMatch.id].sort());
+      await dataSource.query('UPDATE interests SET is_active = false WHERE id = $1', [interest.id]);
+      const afterDeactivation = await api.get('/events').query(query).set('X-Test-User', viewer.id).expect(200);
+      expect(afterDeactivation.body.data).toEqual([]);
+    } finally {
+      await dataSource.query('UPDATE interests SET name = $2, is_active = true WHERE id = $1', [interest.id, interest.name]);
+      await dataSource.query('UPDATE tags SET name = $2 WHERE id = $1', [tag.id, originalTag]);
+      await dataSource.query('UPDATE categories SET name = $2 WHERE id = $1', [category.id, category.name]);
+    }
+  });
+
+  it('rejects an unrepresentable capacity, invalid datetimes and null characters before writes', async () => {
+    const owner = await createUser();
+    const api = createEventsTestApi([owner]);
+    const create = (patch: object) =>
+      api.post('/events').set('X-Test-User', owner.id).send({ ...eventData(), ...patch });
+    await create({ capacityLimit: 2_147_483_648 }).expect(400);
+    await create({ firstStartsAt: true, firstEndsAt: 2_000 }).expect(400);
+    await create({ title: 'invalid\0title' }).expect(400);
+    expect(await dataSource.getRepository(EventEntity).countBy({ organizerId: owner.id })).toBe(0);
   });
 
   it('serializes free joins, releases a place, and remembers the first approval', async () => {
@@ -889,6 +1186,29 @@ describe('event management and feed with PostgreSQL', () => {
     });
   });
 
+  it('rejects participation writes authorized before the session was revoked', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const event = await publishForFeed(owner, {});
+    await dataSource.getRepository(UserEntity).update(attendee.id, { sessionVersion: randomUUID() });
+    await expect(manageParticipation.join(attendee, event.id))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(await dataSource.getRepository(EventParticipationEntity).findOneBy({
+      eventId: event.id, userId: attendee.id
+    })).toBeNull();
+  });
+
+  it('reports a schedule conflict when one attendee joins overlapping events concurrently', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const first = await publishForFeed(owner, {});
+    const second = await publishForFeed(owner, {});
+    const results = await Promise.all([
+      manageParticipation.join(attendee, first.id),
+      manageParticipation.join(attendee, second.id)
+    ]);
+    expect(results.map(({ warnings }) => warnings.length).sort()).toEqual([0, 1]);
+    expect(results.flatMap(({ warnings }) => warnings)).toEqual(['SCHEDULE_CONFLICT']);
+  });
+
   it('applies age, block and event access before joining and warns about schedule conflicts', async () => {
     const owner = await createUser();
     const viewer = await createUser();
@@ -906,10 +1226,10 @@ describe('event management and feed with PostgreSQL', () => {
     await expect(manageParticipation.join(viewer, restricted.id))
       .rejects.toMatchObject({ statusCode: 404 });
     await blocks.delete({ blockerId: owner.id, blockedId: viewer.id });
-    await blocks.insert({ blockerId: viewer.id, blockedId: owner.id });
-    await expect(manageParticipation.join(viewer, restricted.id))
-      .rejects.toMatchObject({ statusCode: 404 });
-    await blocks.delete({ blockerId: viewer.id, blockedId: owner.id });
+    const reverseViewer = await createUser();
+    await blocks.insert({ blockerId: reverseViewer.id, blockedId: owner.id });
+    await expect(manageParticipation.join(reverseViewer, restricted.id))
+      .resolves.toMatchObject({ participation: { status: 'APPROVED' } });
 
     const request = await publishForFeed(owner, { participationMode: 'REQUEST' });
     await expect(manageParticipation.join(viewer, request.id)).resolves.toMatchObject({
@@ -993,7 +1313,7 @@ describe('event management and feed with PostgreSQL', () => {
     const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
     const { participation } = await manageParticipation.join(applicant, event.id, 'Hello');
     const blocks = dataSource.getRepository(UserBlockEntity);
-    await blocks.insert({ blockerId: applicant.id, blockedId: owner.id });
+    await blocks.insert({ blockerId: owner.id, blockedId: applicant.id });
     await expect(manageParticipation.decide(owner, event.id, participation.id, 'APPROVED'))
       .rejects.toMatchObject({ statusCode: 409 });
 
@@ -1005,7 +1325,7 @@ describe('event management and feed with PostgreSQL', () => {
     );
     expect(rejected).toMatchObject({ status: 'REJECTED', removalReason: null });
     expect(toOwnParticipationView(rejected)).not.toHaveProperty('removalReason');
-    await blocks.delete({ blockerId: applicant.id, blockedId: owner.id });
+    await blocks.delete({ blockerId: owner.id, blockedId: applicant.id });
     await expect(manageParticipation.join(applicant, event.id)).rejects.toMatchObject({
       statusCode: 409
     });
@@ -1215,6 +1535,12 @@ describe('event management and feed with PostgreSQL', () => {
     await blocks.insert({ blockerId: outsider.id, blockedId: participant.id });
     const filteredThread = await list(outsider).query({ parentId: root.id }).expect(200);
     expect(filteredThread.body.data).toEqual([]);
+    const outsiderReply = (await post(outsider, 'Reply from the blocker', root.id).expect(201))
+      .body.data;
+    const reverseThread = await list(participant).query({ parentId: root.id }).expect(200);
+    expect(reverseThread.body.data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: outsiderReply.id })])
+    );
 
     const replyPath = `${path}/${reply.id}`;
     await api.delete(`${path}/${root.id}`).set('X-Test-User', outsider.id).expect(403);
@@ -1227,6 +1553,7 @@ describe('event management and feed with PostgreSQL', () => {
     expect(edited.body.data).toMatchObject({ text: 'Updated reply', isEdited: true });
     await api.delete(replyPath).set('X-Test-User', outsider.id).expect(404);
     await api.delete(replyPath).set('X-Test-User', owner.id).expect(204);
+    await api.delete(`${path}/${outsiderReply.id}`).set('X-Test-User', outsider.id).expect(204);
     await api.delete(`${path}/${secondRoot.id}`).set('X-Test-User', participant.id).expect(204);
     await api.patch(replyPath).set('X-Test-User', participant.id).send({ text: 'Changed' }).expect(404);
     const afterRemoval = await list().query({ parentId: root.id }).expect(200);
@@ -1256,9 +1583,15 @@ describe('event management and feed with PostgreSQL', () => {
       { id: secondRoot.id, isArchived: true }
     ]);
     const archivedThread = await list(admin).query({ archive: true, parentId: root.id }).expect(200);
-    expect(archivedThread.body.data).toMatchObject([
-      { id: reply.id, isArchived: true, text: 'Updated reply' }
-    ]);
+    expect(archivedThread.body.data).toHaveLength(2);
+    expect(archivedThread.body.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: reply.id, isArchived: true, text: 'Updated reply' }),
+      expect.objectContaining({
+        id: outsiderReply.id,
+        isArchived: true,
+        text: 'Reply from the blocker'
+      })
+    ]));
   });
 
   it('enforces the rolling comment quota across events and concurrent requests', async () => {
@@ -1521,12 +1854,17 @@ describe('event management and feed with PostgreSQL', () => {
       new TypeOrmUnitOfWork(dataSource),
       () => cutoff
     );
+    const hiddenEvent = await publishForFeed(owner, {});
+    await events.update(hiddenEvent.id, { firstStartsAt: start, firstEndsAt: end });
+    await manageParticipation.join(attendee, hiddenEvent.id);
+    await events.update(hiddenEvent.id, { isHiddenByAdmin: true });
     await lifecycle.execute();
     await lifecycle.execute();
     const reminder = await rows.findOneByOrFail({
       recipientId: attendee.id, type: 'EVENT_REMINDER_24H', targetId: event.id
     });
     expect(await rows.countBy({ type: 'EVENT_REMINDER_24H', targetId: event.id })).toBe(1);
+    expect(await rows.countBy({ type: 'EVENT_REMINDER_24H', targetId: hiddenEvent.id })).toBe(0);
     expect(await rows.countBy({ recipientId: applicant.id, targetId: event.id })).toBe(0);
     await rows.update(reminder.id, { emailDueAt: new Date(0) });
     await notifications.startDeliveryWorker()();
@@ -1536,6 +1874,8 @@ describe('event management and feed with PostgreSQL', () => {
     await lifecycle.execute();
     await lifecycle.execute();
     expect(await rows.countBy({ type: 'REVIEW_REMINDER', targetId: event.id })).toBe(1);
+    expect(await rows.countBy({ type: 'REVIEW_REMINDER', targetId: hiddenEvent.id })).toBe(0);
+    expect((await events.findOneByOrFail({ id: hiddenEvent.id })).status).toBe('COMPLETED');
     expect(await rows.findOneByOrFail({ type: 'REVIEW_REMINDER', targetId: event.id })).toMatchObject({
       recipientId: attendee.id, emailDueAt: null
     });
@@ -1554,6 +1894,442 @@ describe('event management and feed with PostgreSQL', () => {
     expect(cancellations.map(({ message }) => message)).toEqual([
       expect.stringContaining('Weather'), expect.stringContaining('Weather')
     ]);
+  });
+
+  it('shares full profiles with the organizer and approved participants', async () => {
+    const [owner, applicant, attendee, outsider, staff] = await Promise.all([
+      createUser(), createUser(), createUser(), createUser(), createUser()
+    ]);
+    const admin = { ...staff, role: 'ADMIN' as const };
+    const api = createEventsTestApi([owner, applicant, attendee, outsider, admin]);
+    const event = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const first = (await manageParticipation.join(applicant, event.id, 'Hello')).participation;
+    const second = (await manageParticipation.join(attendee, event.id)).participation;
+    await manageParticipation.decide(owner, event.id, second.id, 'APPROVED');
+    await dataSource.getRepository(UserEntity).update(applicant.id, {
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com', legacy: 'javascript:void(0)' }
+    });
+    const applications = `/events/${event.id}/applications`;
+    const participants = `/events/${event.id}/participants`;
+    const get = (path: string, user: AuthUser) => api.get(path).set('X-Test-User', user.id);
+    await api.get(participants).expect(401);
+    await get(applications, attendee).expect(404);
+    await get(participants, applicant).expect(403);
+    await get(participants, outsider).expect(403);
+    const pending = await get(applications, owner).expect(200);
+    const profile = pending.body.data[0].user;
+    expect(profile).toMatchObject({
+      id: applicant.id,
+      age: expect.any(Number),
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    });
+    expect(profile.socialLinks).not.toHaveProperty('legacy');
+    expect(profile).not.toHaveProperty('birthDate');
+    expect(profile).not.toHaveProperty('email');
+    await manageParticipation.decide(owner, event.id, first.id, 'APPROVED');
+    for (const viewer of [attendee, admin]) {
+      const roster = await get(participants, viewer).expect(200);
+      expect(roster.body.data.find(({ user }: { user: { id: string } }) => user.id === applicant.id)?.user)
+        .toEqual(profile);
+    }
+    await dataSource.getRepository(UserBlockEntity).insert({
+      blockerId: applicant.id,
+      blockedId: attendee.id
+    });
+    const filtered = await get(participants, attendee).expect(200);
+    expect(filtered.body.data.map(({ user }: { user: { id: string } }) => user.id))
+      .toEqual([attendee.id]);
+  });
+
+  it('paginates public organizer history and filters age, hidden events, and blocks', async () => {
+    const [owner, viewer] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, viewer]);
+    const [first, second, restricted, hidden, cancelled, future] = await Promise.all([
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, { ageRestriction: 'EIGHTEEN_PLUS' }),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {}),
+      publishForFeed(owner, {})
+    ]);
+    const events = dataSource.getRepository(EventEntity);
+    await events.update([first.id, second.id, restricted.id, hidden.id], { status: 'COMPLETED' });
+    await events.update(hidden.id, { isHiddenByAdmin: true });
+    await events.update(cancelled.id, { status: 'CANCELLED' });
+    const path = `/users/${owner.id}`;
+    const expected = [first.id, second.id].sort().reverse();
+    const profile = await api.get(path).expect(200);
+    expect(profile.body.data).not.toHaveProperty('age');
+    expect(profile.body.data.history.data.map(({ id }: { id: string }) => id)).toEqual(expected);
+    const page = await api.get(`${path}/events`).query({ limit: 1 }).expect(200);
+    expect(page.body.pagination).toEqual({ nextCursor: expected[0], hasMore: true });
+    expect(page.body.data[0]).not.toHaveProperty('onlineUrl');
+    expect(page.body.data[0]).not.toHaveProperty('primaryLocationId');
+    const next = await api.get(`${path}/events`).query({ limit: 1, cursor: expected[0] }).expect(200);
+    expect(next.body.data).toMatchObject([{ id: expected[1] }]);
+    expect(next.body.pagination).toEqual({ nextCursor: null, hasMore: false });
+    const authenticated = await api.get(path).set('X-Test-User', viewer.id).expect(200);
+    expect(authenticated.body.data.age).toEqual(expect.any(Number));
+    expect(authenticated.body.data.history.data.map(({ id }: { id: string }) => id).sort())
+      .toEqual([...expected, restricted.id].sort());
+    expect(authenticated.body.data.history.data.map(({ id }: { id: string }) => id))
+      .not.toContain(future.id);
+    await dataSource.getRepository(UserBlockEntity).insert({ blockerId: owner.id, blockedId: viewer.id });
+    await api.get(`${path}/events`).set('X-Test-User', viewer.id).expect(404);
+  });
+
+  it('edits the private profile while enforcing immutable and required fields', async () => {
+    const user = await createUser();
+    const api = createEventsTestApi([user]);
+    const { interests } = createDictionariesModule({ dataSource });
+    const interestIds = (await interests.listActive()).slice(0, 3).map(({ id }) => id);
+    const path = '/users/me/profile';
+    const patch = (body: object) => api.patch(path).set('X-Test-User', user.id).send(body);
+    await api.get(path).expect(401);
+    await patch({ birthDate: '1999-01-01' }).expect(400);
+    await patch({ cityId: randomUUID() }).expect(422);
+    await patch({ interestIds: [interestIds[0], interestIds[0], interestIds[1]] }).expect(422);
+    await patch({
+      name: '  Олена  ',
+      cityId: kyivId,
+      interestIds,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    }).expect(204);
+    const profile = await api.get(path).set('X-Test-User', user.id).expect(200);
+    expect(profile.body.data).toMatchObject({
+      name: 'Олена',
+      birthDate: '2000-01-01',
+      cityId: kyivId,
+      bio: 'Люблю настільні ігри',
+      languages: ['uk'],
+      socialLinks: { website: 'https://example.com' }
+    });
+    expect([...profile.body.data.interestIds].sort()).toEqual([...interestIds].sort());
+    await patch({ bio: null }).expect(204);
+    await dataSource.getRepository(UserEntity).update(user.id, { emailVerified: false });
+    await patch({ name: 'Інше ім’я' }).expect(403);
+  });
+
+  it('changes email only after confirmation by the account that requested it', async () => {
+    const [user, other] = await Promise.all([createUser(), createUser()]);
+    const users = createUsersModule({ dataSource });
+    const tokens = new JwtTokenService();
+    const { requireAuth } = createAuthMiddleware({ tokenService: tokens, users: users.authUsers, access: users.access });
+    const messages: { email: string; token: string }[] = [];
+    const previousAddresses: string[] = [];
+    const changeEmail = new ChangeEmailUseCase(
+      new TypeOrmEmailChangeStore(dataSource),
+      new JwtEmailChangeTokens('test-only-email-change-secret'),
+      async (email, token) => { messages.push({ email, token }); },
+      async (email) => { previousAddresses.push(email); }
+    );
+    const app = express();
+    app.use(express.json());
+    app.use(createEmailChangeRouter(
+      requireAuth,
+      changeEmail,
+      {
+        async execute({ email, password }) {
+          const account = await users.authUsers.findByEmail(email);
+          if (!account || password !== 'valid-password') throw new AppError('Invalid credentials', 401);
+          return account;
+        }
+      },
+      { async verify() { throw new Error('Passkey verification was not expected'); } }
+    ));
+    app.use(errorHandler);
+    const api = request(app);
+    const [ownerToken, otherToken] = await Promise.all(
+      [user, other].map(({ id }) => tokens.signAccessToken({ userId: id }))
+    );
+    const start = (email: string, password = 'valid-password') =>
+      api.post('/change-email').set('Authorization', `Bearer ${ownerToken}`)
+        .send({ email, proof: { method: 'password', password } });
+    const confirm = (session: string, token: string) =>
+      api.post('/change-email/confirm').set('Authorization', `Bearer ${session}`).send({ token });
+    await start(other.email).expect(409);
+    const email = `${randomUUID()}@example.net`;
+    await start(email, 'incorrect-password').expect(401);
+    await start(email.toUpperCase()).expect(202);
+    expect(messages).toEqual([{ email, token: expect.any(String) }]);
+    expect((await users.authUsers.findById(user.id))?.email).toBe(user.email);
+    const { token } = messages[0];
+    await confirm(otherToken, token).expect(400);
+    await confirm(ownerToken, token).expect(204);
+    expect(previousAddresses).toEqual([user.email]);
+    await confirm(ownerToken, token).expect(400);
+    expect(await users.authUsers.findById(user.id)).toMatchObject({ email, emailVerified: true });
+    expect(await users.authUsers.findByEmail(user.email)).toBeNull();
+  });
+
+  it('cancels upcoming events on account deletion, restores once, and anonymizes expired accounts', async () => {
+    const [owner, attendee] = await Promise.all([createUser(), createUser()]);
+    const upcoming = await publishForFeed(owner, {});
+    const completed = await publishForFeed(attendee, {});
+    const organizerHistory = await publishForFeed(owner, {});
+    await dataSource.getRepository(EventEntity).update(organizerHistory.id, { status: 'COMPLETED' });
+    const discussionEvent = await publishForFeed(attendee, {});
+    await dataSource.getRepository(EventEntity).update(discussionEvent.id, {
+      firstStartsAt: new Date(Date.now() + 30 * 60_000),
+      firstEndsAt: new Date(Date.now() + 60 * 60_000)
+    });
+    await manageParticipation.join(attendee, upcoming.id);
+    await dataSource.getRepository(EventEntity).update(completed.id, { status: 'COMPLETED' });
+    const reviews = dataSource.getRepository(EventReviewEntity);
+    await reviews.insert({ eventId: completed.id, authorId: owner.id, rating: 5 });
+    await dataSource.getRepository(DiscussionCommentEntity).insert({
+      eventId: discussionEvent.id,
+      authorId: owner.id,
+      text: 'A previous comment'
+    });
+    const users = createUsersModule({ dataSource });
+    const tokens = new JwtTokenService();
+    const auth = createAuthModule({
+      dataSource,
+      users: users.authUsers,
+      access: users.access,
+      profiles: users.profiles
+    });
+    const password = 'A valid password 123';
+    await dataSource.getRepository(PasswordCredentialEntity).insert({
+      userId: owner.id,
+      passwordHash: await new BcryptPasswordHasher().hash(password)
+    });
+    const received: string[] = [];
+    const { api, events, notifications } = createEventsTestContext([owner, attendee], async (mail) => {
+      if (mail.to === owner.email) received.push(mail.message);
+    });
+    const removedImages: string[] = [];
+    let cleanupAttempts = 0;
+    let clock = now;
+    const accounts = users.createAccountDeletion(
+      events,
+      notifications.publisher,
+      async (id) => {
+        cleanupAttempts++;
+        if (cleanupAttempts === 1) throw new Error('Temporary storage outage');
+        removedImages.push(id);
+      },
+      () => clock
+    );
+    const app = express();
+    app.use(express.json());
+    app.use(auth.createAccountDeletionRouter(accounts));
+    app.use(errorHandler);
+    const accountApi = request(app);
+    const originalToken = await tokens.signAccessToken({ userId: owner.id });
+    const sessionId = randomUUID();
+    await dataSource.query(
+      'INSERT INTO refresh_sessions (id, user_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
+      [sessionId, owner.id, 'a'.repeat(64), new Date(Date.now() + 3_600_000)]
+    );
+    const remove = (token: string, proof = { method: 'password', password }) =>
+      accountApi.delete('/account').set('Authorization', `Bearer ${token}`).send({ proof });
+    await accountApi.delete('/account').set('Authorization', `Bearer ${originalToken}`).expect(400);
+    await remove(originalToken, { method: 'password', password: 'wrong' }).expect(401);
+    expect((await users.authUsers.findById(owner.id))?.status).toBe('ACTIVE');
+    const pending = await remove(originalToken).expect(202);
+    const recoveryDeadline = new Date(pending.body.data.recoverUntil);
+    expect(recoveryDeadline.getTime() - now.getTime()).toBe(30 * 86_400_000);
+    const [session] = await dataSource.query<{ revoked_at: Date }[]>(
+      'SELECT revoked_at FROM refresh_sessions WHERE id = $1', [sessionId]
+    );
+    expect(session.revoked_at).toEqual(now);
+    const eventRows = dataSource.getRepository(EventEntity);
+    expect(await eventRows.findOneByOrFail({ id: upcoming.id })).toMatchObject({ status: 'CANCELLED' });
+    expect(await dataSource.getRepository(EventOccurrenceEntity).findOneByOrFail({ eventId: upcoming.id }))
+      .toMatchObject({ status: 'CANCELLED' });
+    await api.get(`/users/${owner.id}`).expect(404);
+    const pendingOrganizer = await api.get(`/events/${organizerHistory.id}`).expect(200);
+    expect(pendingOrganizer.body.data.organizer).toMatchObject({ id: null, name: null, avatarUrl: null });
+    const pendingReviews = await api.get(`/events/${completed.id}/reviews`).expect(200);
+    expect(pendingReviews.body.data).toMatchObject([{ author: { id: null, name: null, avatarUrl: null } }]);
+    const inbox = await api.get('/notifications').set('X-Test-User', attendee.id).expect(200);
+    expect(inbox.body.data).toMatchObject([{ type: 'EVENT_CANCELLED', targetId: upcoming.id }]);
+    for (let attempt = 0; attempt < 50 && received.length === 0; attempt++) {
+      await notifications.startDeliveryWorker()();
+    }
+    const link = received.find((message) => message.includes('Відновити акаунт: '))
+      ?.split('Відновити акаунт: ')[1];
+    expect(link).toBeDefined();
+    const recoveryToken = new URLSearchParams(new URL(link!).hash.slice(1)).get('token');
+    await accountApi.post('/account/restore').send({ token: recoveryToken }).expect(204);
+    await accountApi.post('/account/restore').send({ token: recoveryToken }).expect(400);
+    await remove(originalToken).expect(401);
+    await api.get(`/users/${owner.id}`).expect(200);
+    expect(await eventRows.findOneByOrFail({ id: upcoming.id })).toMatchObject({ status: 'CANCELLED' });
+
+    clock = new Date(now.getTime() + 1000);
+    const restoredUser = await users.authUsers.findById(owner.id);
+    const freshToken = await tokens.signAccessToken({
+      userId: owner.id,
+      sessionVersion: restoredUser?.sessionVersion
+    });
+    if (!restoredUser) throw new Error('Restored account missing');
+    const challenges = new PasskeyChallengeRepositoryAdapter(dataSource.getRepository(PasskeyChallengeEntity));
+    let emailCode = '';
+    const enrollmentCodes = new AccountEmailCodeUseCase(challenges, 'ENROLLMENT_EMAIL', async (_email, code) => {
+      emailCode = code;
+    });
+    const deletionCodes = new AccountEmailCodeUseCase(challenges, 'DELETION_EMAIL', async (_email, code) => {
+      emailCode = code;
+    });
+    const removeWithEmail = () => accountApi.delete('/account')
+      .set('Authorization', `Bearer ${freshToken}`).send({ proof: { method: 'email', code: emailCode } });
+    await enrollmentCodes.requestCode(restoredUser);
+    await removeWithEmail().expect(400);
+    await deletionCodes.requestCode(restoredUser);
+    const second = await removeWithEmail().expect(202);
+    const secondLink = await createAccountRecoveryLink(owner.id, clock);
+    const secondToken = new URLSearchParams(new URL(secondLink).hash.slice(1)).get('token');
+    clock = new Date(second.body.data.recoverUntil);
+    await accountApi.post('/account/restore').send({ token: secondToken }).expect(400);
+    expect(await accounts.finalizeNext()).toBe(true);
+    expect(await accounts.finalizeNext()).toBe(false);
+    expect(cleanupAttempts).toBe(1);
+    expect(removedImages).toEqual([]);
+    const userRows = dataSource.getRepository(UserEntity);
+    expect(await userRows.findOneBy({ email: owner.email })).toBeNull();
+    expect(await userRows.findOneByOrFail({ id: owner.id })).toMatchObject({
+      status: 'DELETED', name: 'Видалений користувач', birthDate: null
+    });
+    clock = new Date(clock.getTime() + 5 * 60_000);
+    expect(await accounts.finalizeNext()).toBe(true);
+    expect(await accounts.finalizeNext()).toBe(false);
+    expect(removedImages).toEqual([owner.id]);
+    expect((await userRows.findOneByOrFail({ id: owner.id })).mediaCleanupAt).toBeNull();
+    const archivedReviews = await api.get(`/events/${completed.id}/reviews`).expect(200);
+    expect(archivedReviews.body.data).toMatchObject([{
+      rating: 5,
+      author: { id: null, name: 'Видалений користувач', avatarUrl: null }
+    }]);
+    const discussion = await api.get(`/events/${discussionEvent.id}/comments`)
+      .set('X-Test-User', attendee.id).expect(200);
+    expect(discussion.body.data).toMatchObject([{ text: 'A previous comment', author: null }]);
+  });
+
+  it('resolves city slugs within their country', async () => {
+    await dataSource.transaction(async (manager) => {
+      await manager.query("INSERT INTO countries (code, name) VALUES ('XZ', 'Test Country')");
+      const cities = manager.getRepository(CityEntity);
+      const other = await cities.save(cities.create({
+        country_code: 'XZ',
+        slug: 'kyiv',
+        name: 'Other Kyiv',
+        latitude: 0,
+        longitude: 0
+      }));
+      const provider = new CityRepositoryAdapter(cities);
+      await expect(provider.findBySlug('kyiv', 'UA')).resolves.toMatchObject({ id: kyivId });
+      await expect(provider.findBySlug('kyiv', 'XZ')).resolves.toMatchObject({ id: other.id });
+      await cities.delete(other.id);
+      await manager.query("DELETE FROM countries WHERE code = 'XZ'");
+    });
+  });
+
+  it('manages dictionary records as an admin and exposes active choices publicly', async () => {
+    const [owner, staff] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, { ...staff, role: 'ADMIN' }]);
+    const slug = `category-${randomUUID()}`;
+    const category = { name: slug, slug, orderNum: 20, icon: '🎲' };
+    const admin = (path: string) => api.get(path).set('X-Test-User', staff.id);
+    await api.get('/admin/categories').expect(401);
+    await api.post('/admin/categories').set('X-Test-User', owner.id).send(category).expect(403);
+    const createCategory = (body: object) => api.post('/admin/categories')
+      .set('X-Test-User', staff.id).send(body);
+    const [first, second] = await Promise.all([createCategory(category), createCategory(category)]);
+    expect([first.status, second.status].sort()).toEqual([201, 409]);
+    const created = first.status === 201 ? first : second;
+    const categoryId = created.body.data.id;
+    categoryIds.push(categoryId);
+    expect(created.body.data).toMatchObject({ ...category, isActive: true });
+    await createCategory({ ...category, name: 'bad\0name' }).expect(400);
+    const other = await createCategory({ ...category, name: `${slug}-other`, slug: `${slug}-other` }).expect(201);
+    categoryIds.push(other.body.data.id);
+    const patchCategory = (id: string, body: object) =>
+      api.patch(`/admin/categories/${id}`).set('X-Test-User', staff.id).send(body);
+    await patchCategory(other.body.data.id, { slug }).expect(409);
+    await patchCategory(categoryId, {}).expect(400);
+    await patchCategory(randomUUID(), { isActive: false }).expect(404);
+    const publicCategories = await api.get('/dictionaries/categories').expect(200);
+    expect(publicCategories.body.data).toContainEqual(created.body.data);
+    const event = await publishForFeed(owner, { categoryId });
+    const changed = await api.patch(`/admin/categories/${categoryId}`).set('X-Test-User', staff.id)
+      .send({ orderNum: 21, icon: null, isActive: false }).expect(200);
+    expect(changed.body.data).toMatchObject({ orderNum: 21, icon: null, isActive: false });
+    expect((await api.get('/dictionaries/categories').expect(200)).body.data)
+      .not.toContainEqual(expect.objectContaining({ id: categoryId }));
+    expect((await admin('/admin/categories').expect(200)).body.data).toContainEqual(changed.body.data);
+    await expect(manageEvent.create(owner, eventData({ categoryId })))
+      .rejects.toMatchObject({ statusCode: 422 });
+    await expect(manageEvent.update(owner, event.id, { title: 'Updated existing event' }))
+      .resolves.toMatchObject({ categoryId });
+
+    const interest = await api.post('/admin/interests').set('X-Test-User', staff.id)
+      .send({ name: `Interest ${randomUUID()}` }).expect(201);
+    const interestId = interest.body.data.id;
+    interestIds.push(interestId);
+    await api.post('/admin/interests').set('X-Test-User', staff.id)
+      .send({ name: interest.body.data.name }).expect(409);
+    const { interests } = createDictionariesModule({ dataSource });
+    const currentIds = [interestId, ...(await interests.listActive())
+      .filter(({ id }) => id !== interestId).slice(0, 2).map(({ id }) => id)];
+    const profile = () => api.get('/users/me/profile').set('X-Test-User', owner.id);
+    const updateInterests = (ids: string[]) =>
+      api.patch('/users/me/profile').set('X-Test-User', owner.id).send({ interestIds: ids });
+    await updateInterests(currentIds).expect(204);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .toContainEqual(interest.body.data);
+    await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
+      .send({ isActive: false }).expect(200);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .not.toContainEqual(expect.objectContaining({ id: interestId }));
+    expect((await admin('/admin/interests').expect(200)).body.data)
+      .toContainEqual(expect.objectContaining({ id: interestId, isActive: false }));
+    await updateInterests(currentIds).expect(422);
+    expect((await profile().expect(200)).body.data.interestIds).toContain(interestId);
+    await api.patch(`/admin/interests/${interestId}`).set('X-Test-User', staff.id)
+      .send({ isActive: true }).expect(200);
+    expect((await api.get('/dictionaries/interests').expect(200)).body.data)
+      .toContainEqual(interest.body.data);
+  });
+
+  it('counts only registrations, publications and request entries in the half-open period', async () => {
+    const [owner, attendee, staff] = await Promise.all([createUser(), createUser(), createUser()]);
+    const api = createEventsTestApi([owner, attendee, { ...staff, role: 'ADMIN' }]);
+    const from = '2040-08-01T00:00:00.000Z';
+    const to = '2040-08-02T00:00:00.000Z';
+    const users = dataSource.getRepository(UserEntity);
+    await users.update(owner.id, { createdAt: new Date(from) });
+    await users.update(attendee.id, { createdAt: new Date(to) });
+    const requestEvent = await publishForFeed(owner, { participationMode: 'REQUEST' });
+    const freeEvent = await publishForFeed(owner, {});
+    const draft = await manageEvent.create(owner, eventData());
+    const application = (await manageParticipation.join(attendee, requestEvent.id)).participation;
+    const freeEntry = (await manageParticipation.join(attendee, freeEvent.id)).participation;
+    expect(application.entryMode).toBe('REQUEST');
+    expect(freeEntry.entryMode).toBe('FREE');
+    const events = dataSource.getRepository(EventEntity);
+    await events.update(requestEvent.id, { participationMode: 'FREE', publishedAt: new Date(from) });
+    await events.update(freeEvent.id, { participationMode: 'REQUEST', publishedAt: new Date(to) });
+    await events.update(draft.id, { createdAt: new Date(from) });
+    await dataSource.getRepository(EventParticipationEntity)
+      .update([application.id, freeEntry.id], { createdAt: new Date(from) });
+    const path = '/admin/statistics';
+    await api.get(path).query({ from, to }).expect(401);
+    await api.get(path).query({ from, to }).set('X-Test-User', owner.id).expect(403);
+    await api.get(path).query({ from: to, to: from }).set('X-Test-User', staff.id).expect(400);
+    const response = await api.get(path).query({ from, to }).set('X-Test-User', staff.id).expect(200);
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.body.data).toEqual({ from, to, users: 1, events: 1, applications: 1 });
   });
 
   it('moderates reported content and accounts with an audit trail', async () => {
@@ -1600,16 +2376,19 @@ describe('event management and feed with PostgreSQL', () => {
 
     const statusPath = `/admin/users/${organizer.id}/status`;
     const blockedUntil = new Date(Date.now() + 60_000);
+    const users = dataSource.getRepository(UserEntity);
+    const initialSessionVersion = (await users.findOneByOrFail({ id: organizer.id })).sessionVersion;
     await api.patch(statusPath).set('X-Test-User', administrator.id)
       .send({ status: 'BLOCKED_TEMPORARY', reason: 'Report decision', blockedUntil }).expect(200);
-    const users = dataSource.getRepository(UserEntity);
-    expect(await users.findOneByOrFail({ id: organizer.id }))
-      .toMatchObject({ status: 'BLOCKED_TEMPORARY', blockedUntil });
+    const blockedUser = await users.findOneByOrFail({ id: organizer.id });
+    expect(blockedUser.sessionVersion).not.toBe(initialSessionVersion);
+    expect(blockedUser).toMatchObject({ status: 'BLOCKED_TEMPORARY', blockedUntil });
     await users.update(organizer.id, { blockedUntil: new Date(Date.now() - 1) });
     const stop = moderation.startBlockExpiryWorker();
     await stop();
-    expect(await users.findOneByOrFail({ id: organizer.id }))
-      .toMatchObject({ status: 'ACTIVE', blockedUntil: null });
+    const unblockedUser = await users.findOneByOrFail({ id: organizer.id });
+    expect(unblockedUser).toMatchObject({ status: 'ACTIVE', blockedUntil: null });
+    expect(unblockedUser.sessionVersion).not.toBe(blockedUser.sessionVersion);
     expect(await dataSource.getRepository(NotificationEntity).countBy({
       recipientId: organizer.id, type: 'ACCOUNT_STATUS_CHANGED'
     })).toBe(2);
@@ -1645,6 +2424,13 @@ describe('event management and feed with PostgreSQL', () => {
     await putPhotos(reversed).expect(200);
     const profile = await api.get(`/users/${owner.id}`).expect(200);
     expect(profile.body.data).toMatchObject({ avatarUrl: reversed[0], photoUrls: reversed });
+    const ownerPhotos = () => api.get('/users/me/photos').set('X-Test-User', owner.id);
+    await putPhotos([coverUrl]).expect(422);
+    expect((await ownerPhotos().expect(200)).body.data.photoUrls).toEqual(reversed);
+    await dataSource.getRepository(UserEntity).update(owner.id, { emailVerified: false });
+    await putPhotos([coverUrl]).expect(403);
+    expect((await ownerPhotos().expect(200)).body.data.photoUrls).toEqual(reversed);
+    await dataSource.getRepository(UserEntity).update(owner.id, { emailVerified: true });
 
     const draft = await manageEvent.create(owner, eventData({ coverUrl: 'https://legacy.example.com/cover.jpg' }));
     const update = (patch: Record<string, unknown>) =>

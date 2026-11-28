@@ -1,5 +1,5 @@
 import type { Location } from '../../domain/index.js';
-import type { Coordinates } from '../../../../common/index.js';
+import type { Coordinates, TransactionContext } from '../../../../common/index.js';
 
 export interface CreateLocationInput {
   name: string;
@@ -20,8 +20,9 @@ export interface NearbyLocationResult {
 }
 
 export interface LocationRepository {
-  findById(id: string): Promise<Location | null>;
+  findById(id: string, tx?: TransactionContext): Promise<Location | null>;
   create(input: CreateLocationInput): Promise<Location>;
+  districtBelongsToCity(districtId: string, cityId: string): Promise<boolean>;
   findNearby(
     coordinates: Coordinates,
     radiusMeters: number,

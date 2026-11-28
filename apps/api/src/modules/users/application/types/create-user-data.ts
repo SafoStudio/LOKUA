@@ -9,4 +9,5 @@ export interface CreateUserData {
   role?: UserRole;
   status?: UserStatus;
   cityId?: string | null;
+  termsAcceptedAt?: Date;
 }

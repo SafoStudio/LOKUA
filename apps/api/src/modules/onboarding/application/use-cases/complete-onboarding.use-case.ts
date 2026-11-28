@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
@@ -11,7 +11,6 @@ export class CompleteOnboardingUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly audit: AuditLogger
   ) {}
@@ -22,6 +21,7 @@ export class CompleteOnboardingUseCase {
     }
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await this.stateRepository.findByUserId(context.user.id, tx);
       if (!state) {
         throw new AppError('Onboarding not started', 400);

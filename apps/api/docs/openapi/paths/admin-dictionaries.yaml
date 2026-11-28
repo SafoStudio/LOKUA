@@ -1,0 +1,169 @@
+/api/v1/dictionaries/categories:
+  get:
+    tags: [Dictionaries]
+    summary: List active categories for event forms and filters
+    responses:
+      '200': &categoryListResponse
+        description: Category list, ordered by display order and name
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: array
+                  items: { $ref: '#/components/schemas/Category' }
+/api/v1/dictionaries/interests:
+  get:
+    tags: [Dictionaries]
+    summary: List active interests for onboarding and profile settings
+    responses:
+      '200': &interestListResponse
+        description: Interests ordered by name
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: array
+                  items: { $ref: '#/components/schemas/Interest' }
+/api/v1/admin/categories:
+  get:
+    tags: [Admin / Dictionaries]
+    summary: List all categories including inactive records
+    security: &adminDictionarySecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '200': *categoryListResponse
+      '401': &adminDictionaryUnauthorized { description: Authentication required }
+      '403': &adminDictionaryForbidden { description: Active administrator required }
+  post:
+    tags: [Admin / Dictionaries]
+    summary: Create a category
+    security: *adminDictionarySecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, slug]
+            additionalProperties: false
+            properties: &categoryWriteProperties
+              name: { type: string, minLength: 1, maxLength: 100 }
+              slug:
+                {
+                  type: string,
+                  minLength: 1,
+                  maxLength: 100,
+                  pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+                }
+              icon: { type: [string, 'null'], minLength: 1, maxLength: 100 }
+              orderNum: { type: integer, minimum: 0, maximum: 2147483647 }
+              isActive: { type: boolean }
+    responses:
+      '201': &categoryWriteResponse
+        description: Saved category
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: { $ref: '#/components/schemas/Category' }
+      '400': &adminDictionaryValidation { description: Invalid request data }
+      '401': *adminDictionaryUnauthorized
+      '403': *adminDictionaryForbidden
+      '409': &adminDictionaryConflict { description: Name or slug already exists }
+/api/v1/admin/categories/{id}:
+  parameters: &adminDictionaryId
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  patch:
+    tags: [Admin / Dictionaries]
+    summary: Edit, deactivate, or reactivate a category
+    description: Deactivation removes the category from public choices and preserves existing event references.
+    security: *adminDictionarySecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            additionalProperties: false
+            properties: *categoryWriteProperties
+    responses:
+      '200': *categoryWriteResponse
+      '400': *adminDictionaryValidation
+      '401': *adminDictionaryUnauthorized
+      '403': *adminDictionaryForbidden
+      '404': &adminDictionaryNotFound { description: Dictionary record unavailable }
+      '409': *adminDictionaryConflict
+/api/v1/admin/interests:
+  get:
+    tags: [Admin / Dictionaries]
+    summary: List all interests including inactive records
+    security: *adminDictionarySecurity
+    responses:
+      '200': *interestListResponse
+      '401': *adminDictionaryUnauthorized
+      '403': *adminDictionaryForbidden
+  post:
+    tags: [Admin / Dictionaries]
+    summary: Create an interest
+    security: *adminDictionarySecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name]
+            additionalProperties: false
+            properties: &interestWriteProperties
+              name: { type: string, minLength: 1, maxLength: 100 }
+              isActive: { type: boolean }
+    responses:
+      '201': &interestWriteResponse
+        description: Saved interest
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: { $ref: '#/components/schemas/Interest' }
+      '400': *adminDictionaryValidation
+      '401': *adminDictionaryUnauthorized
+      '403': *adminDictionaryForbidden
+      '409': &adminInterestConflict { description: Interest name already exists }
+/api/v1/admin/interests/{id}:
+  parameters: *adminDictionaryId
+  patch:
+    tags: [Admin / Dictionaries]
+    summary: Edit, deactivate, or reactivate an interest
+    description: Deactivation removes the interest from public choices and preserves existing profile references.
+    security: *adminDictionarySecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            additionalProperties: false
+            properties: *interestWriteProperties
+    responses:
+      '200': *interestWriteResponse
+      '400': *adminDictionaryValidation
+      '401': *adminDictionaryUnauthorized
+      '403': *adminDictionaryForbidden
+      '404': *adminDictionaryNotFound
+      '409': *adminInterestConflict

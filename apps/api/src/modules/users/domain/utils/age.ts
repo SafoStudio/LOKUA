@@ -7,10 +7,10 @@ export function calculateAge(
   const birth = typeof birthDate === 'string' ? new Date(birthDate) : birthDate;
   if (!(birth instanceof Date) || Number.isNaN(birth.getTime())) return null;
 
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - birth.getUTCMonth();
 
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < birth.getUTCDate())) {
     age--;
   }
 

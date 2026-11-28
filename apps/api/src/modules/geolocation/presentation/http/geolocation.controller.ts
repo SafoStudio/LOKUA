@@ -2,19 +2,21 @@ import type { Request, Response } from 'express';
 import { AppError } from '../../../../common/index.js';
 import type {
   CreateLocationUseCase,
-  FindLocationByIdUseCase,
   FindPublicLocationByIdUseCase,
   SearchLocationsNearbyUseCase,
   SearchLocationsInBBoxUseCase,
   GeocodeAddressUseCase,
   ReverseGeocodeUseCase
 } from '../../application/index.js';
-import { toLocationView, toNearbyLocationItemView } from './location.view.js';
+import type { Location } from '../../domain/index.js';
+import { LocationNotFoundError } from '../../domain/index.js';
+import { toLocationView } from './location.view.js';
 import { toGeocodeView } from './geocode.view.js';
+import type { NearbyQuery, BBoxQuery } from './geolocation.schema.js';
 
 interface GeolocationControllerDependencies {
   createLocation: CreateLocationUseCase;
-  findLocationById: FindLocationByIdUseCase;
+  findExactById(id: string, viewerId: string): Promise<Location | null>;
   findPublicLocationById: FindPublicLocationByIdUseCase;
   searchNearby: SearchLocationsNearbyUseCase;
   searchInBBox: SearchLocationsInBBoxUseCase;
@@ -24,7 +26,7 @@ interface GeolocationControllerDependencies {
 
 export function createGeolocationController({
   createLocation,
-  findLocationById,
+  findExactById,
   findPublicLocationById,
   searchNearby,
   searchInBBox,
@@ -34,7 +36,12 @@ export function createGeolocationController({
   return {
     async create(req: Request, res: Response): Promise<void> {
       if (!req.user) throw new AppError('Authentication required', 401);
-      const location = await createLocation.execute({ ...req.body, createdBy: req.user.id });
+      const location = await createLocation.execute({
+        ...req.body,
+        districtId: req.body.districtId ?? null,
+        createdBy: req.user.id
+      });
+      res.set('Cache-Control', 'private, no-store');
       res.status(201).json({ data: toLocationView(location) });
     },
 
@@ -44,7 +51,9 @@ export function createGeolocationController({
       res.set('Cache-Control', 'private, no-store');
 
       if (precision === 'EXACT') {
-        const location = await findLocationById.execute({ id });
+        if (!req.user) throw new AppError('Authentication required', 401);
+        const location = await findExactById(id, req.user.id);
+        if (!location) throw new LocationNotFoundError(id);
         res.status(200).json({ data: toLocationView(location) });
         return;
       }
@@ -54,48 +63,26 @@ export function createGeolocationController({
     },
 
     async nearby(req: Request, res: Response): Promise<void> {
-      const { latitude, longitude, radiusMeters, limit } = req.query as {
-        latitude: string;
-        longitude: string;
-        radiusMeters?: string;
-        limit?: string;
-      };
+      const { latitude, longitude, radiusMeters, limit } = req.query as unknown as NearbyQuery;
 
       const results = await searchNearby.execute({
-        coordinates: {
-          latitude: Number(latitude),
-          longitude: Number(longitude)
-        },
-        radiusMeters: radiusMeters ? Number(radiusMeters) : undefined,
-        limit: limit ? Number(limit) : undefined
-      });
-
-      res.status(200).json({ data: results.map(toNearbyLocationItemView) });
-    },
-
-    async inBBox(req: Request, res: Response): Promise<void> {
-      const { minLat, minLng, maxLat, maxLng, limit } = req.query as {
-        minLat: string;
-        minLng: string;
-        maxLat: string;
-        maxLng: string;
-        limit?: string;
-      };
-
-      const results = await searchInBBox.execute({
-        minLat: Number(minLat),
-        minLng: Number(minLng),
-        maxLat: Number(maxLat),
-        maxLng: Number(maxLng),
-        limit: limit ? Number(limit) : undefined
+        coordinates: { latitude, longitude },
+        radiusMeters,
+        limit
       });
 
       res.status(200).json({ data: results });
     },
 
+    async inBBox(req: Request, res: Response): Promise<void> {
+      const results = await searchInBBox.execute(req.query as unknown as BBoxQuery);
+
+      res.status(200).json({ data: results });
+    },
+
     async geocode(req: Request, res: Response): Promise<void> {
-      const { address, city } = req.body;
-      const result = await geocodeAddress.execute({ address, city });
+      res.set('Cache-Control', 'private, no-store');
+      const result = await geocodeAddress.execute(req.body);
 
       if (!result) throw new AppError('Address could not be geocoded', 404);
 
@@ -103,11 +90,8 @@ export function createGeolocationController({
     },
 
     async reverse(req: Request, res: Response): Promise<void> {
-      const { latitude, longitude } = req.body;
-      const result = await reverseGeocode.execute({
-        latitude: Number(latitude),
-        longitude: Number(longitude)
-      });
+      res.set('Cache-Control', 'private, no-store');
+      const result = await reverseGeocode.execute(req.body);
 
       if (!result) throw new AppError('Coordinates could not be reverse-geocoded', 404);
 

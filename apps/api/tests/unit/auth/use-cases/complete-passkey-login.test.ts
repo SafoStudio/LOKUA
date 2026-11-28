@@ -47,7 +47,8 @@ describe('CompletePasskeyLoginUseCase', () => {
     revokeById: vi.fn(),
     rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
-    revokeAllByUserId: vi.fn()
+    revokeAllByUserId: vi.fn(),
+    revokeFamily: vi.fn()
   };
 
   const securityEvents: SecurityEventRepository = {

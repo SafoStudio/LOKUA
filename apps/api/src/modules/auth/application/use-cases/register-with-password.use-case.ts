@@ -5,13 +5,15 @@ import type { RegistrationTransaction } from '../ports/registration-transaction.
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
 import type { SecurityContext } from '../security-context.js';
 import type { SendVerificationEmailUseCase } from './send-verification-email.use-case.js';
-import { AppError, logger } from '../../../../common/index.js';
+import { AppError } from '../../../../common/index.js';
+import { sendSignupVerification } from './send-verification-email.use-case.js';
 import { validatePasswordLength } from '../validation/password.validation.js';
 
 export interface RegisterWithPasswordInput {
   email: string;
   name: string;
   password: string;
+  termsAccepted: true;
 }
 
 export class RegisterWithPasswordUseCase {
@@ -24,6 +26,8 @@ export class RegisterWithPasswordUseCase {
   ) {}
 
   async execute(input: RegisterWithPasswordInput, context: SecurityContext): Promise<AuthUser> {
+    if (input.termsAccepted !== true)
+      throw new AppError('Потрібно прийняти умови та політику конфіденційності', 400);
     const email = input.email.trim().toLowerCase();
 
     const existingUser = await this.users.findByEmail(email);
@@ -36,14 +40,11 @@ export class RegisterWithPasswordUseCase {
     const user = await this.registrationTransaction.createUserWithPasswordCredential({
       email,
       name: input.name.trim(),
-      passwordHash
+      passwordHash,
+      termsAcceptedAt: new Date()
     });
 
-    try {
-      await this.sendVerificationEmail.execute(user.id);
-    } catch (err) {
-      logger.error({ err, userId: user.id }, 'Failed to send verification email');
-    }
+    await sendSignupVerification(this.sendVerificationEmail, user.id);
 
     await this.securityEvents.record({
       userId: user.id,

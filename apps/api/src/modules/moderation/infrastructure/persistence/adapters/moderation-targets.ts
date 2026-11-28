@@ -1,26 +1,12 @@
 import type { EntityManager } from 'typeorm';
-import type { ReportObjectType } from '../../../domain/index.js';
-import type { AgeRestriction } from '../../../../../common/index.js';
-
-export type ContentType = Exclude<ReportObjectType, 'PROFILE'>;
+import type { ContentType, ReportObjectType } from '../../../domain/index.js';
+import type { ModerationTarget } from '../../../application/index.js';
 
 const contentTables = {
   EVENT: 'events',
   COMMENT: 'discussion_comments',
   REVIEW: 'event_reviews'
 } as const;
-
-export interface ModerationTarget {
-  id: string;
-  ownerId: string;
-  eventId: string | null;
-  organizerId: string | null;
-  eventStatus: string | null;
-  ageRestriction: AgeRestriction | null;
-  eventHidden: boolean;
-  visible: boolean;
-  content: Record<string, unknown>;
-}
 
 export async function readModerationTarget(
   manager: EntityManager,

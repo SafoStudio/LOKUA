@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
+const normalizedId = z.uuid().transform((id) => id.toLowerCase());
+
 export const dateOfBirthSchema = z.object({
-  birthDate: z.coerce.date()
+  birthDate: z.iso.date().transform((value) => new Date(`${value}T00:00:00.000Z`))
 });
 
 export const profileSchema = z.object({
@@ -10,12 +12,12 @@ export const profileSchema = z.object({
 });
 
 export const citySchema = z.object({
-  cityId: z.uuid()
+  cityId: normalizedId
 });
 
 export const interestsSchema = z.object({
   interestIds: z
-    .array(z.uuid())
+    .array(normalizedId)
     .min(3, 'At least 3 interests required')
     .max(20, 'Maximum 20 interests allowed')
 });
@@ -24,7 +26,10 @@ export const optionalProfileSchema = z
   .object({
     bio: z.string().trim().max(300).nullable().optional(),
     languages: z.array(z.string().trim().min(1).max(10)).nullable().optional(),
-    socialLinks: z.record(z.string(), z.url()).nullable().optional()
+    socialLinks: z
+      .record(z.string(), z.url({ protocol: /^https?$/ }))
+      .nullable()
+      .optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one optional field required'

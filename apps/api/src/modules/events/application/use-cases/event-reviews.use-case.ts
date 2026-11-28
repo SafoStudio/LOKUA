@@ -1,4 +1,5 @@
 import { AppError } from '../../../../common/index.js';
+import { calculateAge } from '../../../users/index.js';
 import type { TransactionContext, UnitOfWork } from '../../../../common/index.js';
 import type {
   AccessService,
@@ -9,9 +10,11 @@ import type {
 import type { AgeRestriction, Event } from '../../domain/index.js';
 import type { EventReview } from '../../domain/models/event-review.js';
 import type { EventManagementRepository } from '../ports/event-management.repository.js';
+import type { EventRepository } from '../ports/event.repository.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
 import type { NotificationPublisher } from '../../../notifications/index.js';
 import { publishEventNotification } from '../publish-event-notification.js';
+import { eventPerson } from '../event-person.js';
 import type {
   EventReviewRepository,
   ReviewListQuery,
@@ -25,12 +28,13 @@ const reviewAgeRestrictions: AgeRestriction[] = ['ALL', 'SIXTEEN_PLUS', 'EIGHTEE
 
 export class EventReviewsUseCase {
   constructor(
-    private readonly events: Pick<EventParticipationRepository, 'findEvent'> & {
-      inTransaction(
-        tx: TransactionContext
-      ): Pick<EventParticipationRepository, 'lockEvent' | 'findParticipation'> &
-        Pick<EventManagementRepository, 'lockOrganizer'>;
-    },
+    private readonly events: Pick<EventParticipationRepository, 'findEvent'> &
+      Pick<EventRepository, 'findOrganizerHistory'> & {
+        inTransaction(
+          tx: TransactionContext
+        ): Pick<EventParticipationRepository, 'lockEvent' | 'findParticipation'> &
+          Pick<EventManagementRepository, 'lockOrganizer'>;
+      },
     private readonly reviews: EventReviewRepository,
     private readonly unitOfWork: UnitOfWork,
     private readonly access: AccessService,
@@ -77,18 +81,38 @@ export class EventReviewsUseCase {
   async listForEvent(eventId: string, user: AuthUser | null, query: ReviewPageQuery) {
     const event = await this.events.findEvent(eventId);
     if (!event || event.status !== 'COMPLETED') throw new AppError('Event not found', 404);
-    const blockedAuthorIds = user ? await this.blocks.listRelatedUserIds(user.id) : [];
-    this.ensureEventVisibility(event, user, blockedAuthorIds, this.clock());
+    const [blockerIds, blockedAuthorIds] = user
+      ? await Promise.all([
+          this.blocks.listBlockerIds(user.id),
+          this.blocks.listRelatedUserIds(user.id)
+        ])
+      : [[], []];
+    this.ensureEventVisibility(event, user, blockerIds, this.clock());
     return this.page({ ...query, organizerId: event.organizerId, eventId, blockedAuthorIds });
   }
 
   async profile(organizerId: string, user: AuthUser | null) {
     const { profile, filters } = await this.profileContext(organizerId, user);
-    const [rating, reviews] = await Promise.all([
+    const [rating, reviews, history] = await Promise.all([
       this.rating(organizerId),
-      this.page({ ...filters, limit: previewLimit })
+      this.page({ ...filters, limit: previewLimit }),
+      this.events.findOrganizerHistory({
+        organizerId,
+        ageRestrictions: filters.ageRestrictions,
+        limit: previewLimit
+      })
     ]);
-    return { profile, rating, reviews };
+    const age = user ? calculateAge(profile.birthDate ?? null, this.clock()) : undefined;
+    return { profile, age, rating, reviews, history };
+  }
+
+  async listOrganizerHistory(organizerId: string, user: AuthUser | null, query: ReviewPageQuery) {
+    const { filters } = await this.profileContext(organizerId, user);
+    return this.events.findOrganizerHistory({
+      ...query,
+      organizerId,
+      ageRestrictions: filters.ageRestrictions
+    });
   }
 
   async listForOrganizer(organizerId: string, user: AuthUser | null, query: ReviewPageQuery) {
@@ -187,7 +211,9 @@ export class EventReviewsUseCase {
     const blockedAuthorIds = user ? await this.blocks.listRelatedUserIds(user.id) : [];
     if (blockedAuthorIds.includes(organizerId)) throw new AppError('Profile not found', 404);
     const profile = await this.profiles.findByUserId(organizerId);
-    if (!profile) throw new AppError('Profile not found', 404);
+    if (!profile || profile.status === 'PENDING_DELETION' || profile.status === 'DELETED') {
+      throw new AppError('Profile not found', 404);
+    }
     const ageRestrictions = this.visibleAgeRestrictions(organizerId, user, this.clock());
     return { profile, filters: { organizerId, blockedAuthorIds, ageRestrictions } };
   }
@@ -203,7 +229,7 @@ export class EventReviewsUseCase {
   private async reviewContext(user: AuthUser, eventId: string, tx: TransactionContext) {
     const { event, events } = await this.lockCompletedEvent(eventId, tx);
     const now = this.clock();
-    const blockedIds = await this.blocks.listRelatedUserIds(user.id, tx);
+    const blockedIds = await this.blocks.listBlockerIds(user.id, tx);
     this.ensureEventVisibility(event, user, blockedIds, now);
     if (
       !this.access.canPostEventContent(user) ||
@@ -274,6 +300,6 @@ export class EventReviewsUseCase {
 
   private async author(id: string) {
     const profile = await this.profiles.findByUserId(id);
-    return { id, name: profile?.name ?? null, avatarUrl: profile?.avatarUrl ?? null };
+    return eventPerson(id, profile);
   }
 }

@@ -5,7 +5,7 @@ export function toReviewView({
   author
 }: {
   review: EventReview & { eventTitle?: string };
-  author: { id: string; name: string | null; avatarUrl: string | null };
+  author: { id: string | null; name: string | null; avatarUrl: string | null };
 }) {
   return {
     id: review.id,

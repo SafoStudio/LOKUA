@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import type { InterestProvider } from '../../../dictionaries/index.js';
 import { AppError, assertString } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
@@ -11,12 +11,12 @@ import {
   OnboardingStepOutOfOrderError
 } from '../../domain/index.js';
 import { ensureOnboardingState } from './ensure-onboarding-state.js';
+import { advanceStep } from '../../domain/advance-step.js';
 
 export class SetInterestsUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly interests: InterestProvider,
     private readonly audit: AuditLogger
@@ -45,7 +45,7 @@ export class SetInterestsUseCase {
       throw new AppError('Maximum 20 interests allowed', 422);
     }
 
-    const found = await this.interests.findByIds(uniqueIds);
+    const found = await this.interests.findActiveByIds(uniqueIds);
     if (found.length !== uniqueIds.length) {
       const foundSet = new Set(found.map((i) => i.id));
       const missing = uniqueIds.filter((id) => !foundSet.has(id));
@@ -53,6 +53,7 @@ export class SetInterestsUseCase {
     }
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('CITY')) {
@@ -61,16 +62,11 @@ export class SetInterestsUseCase {
 
       await this.onboardingUsers.applyInterests(context.user.id, uniqueIds, tx);
 
-      const nextCompleted = state.completedSteps.includes('INTERESTS')
-        ? state.completedSteps
-        : [...state.completedSteps, 'INTERESTS' as const];
-
       const updated = await this.stateRepository.updateStep(
         state.id,
         {
           interestIds: uniqueIds,
-          currentStep: 'OPTIONAL',
-          completedSteps: nextCompleted
+          ...advanceStep(state, 'INTERESTS')
         },
         tx
       );

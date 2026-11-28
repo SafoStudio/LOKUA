@@ -23,7 +23,7 @@ export class RequestPasswordResetUseCase {
 
     const user = await this.users.findByEmail(normalizedEmail);
 
-    if (!user) return;
+    if (!user || user.status === 'PENDING_DELETION' || user.status === 'DELETED') return;
 
     const credential = await this.passwordCredentials.findByUserId(user.id);
 

@@ -1,5 +1,4 @@
-import type { Location, PublicLocationView } from '../../domain/index.js';
-import type { NearbySearchResultItem } from '../../application/index.js';
+import type { Location } from '../../domain/index.js';
 
 export interface LocationView {
   id: string;
@@ -15,11 +14,6 @@ export interface LocationView {
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface NearbyLocationItemView {
-  location: PublicLocationView;
-  distanceMeters: number;
 }
 
 export function toLocationView(location: Location): LocationView {
@@ -43,12 +37,5 @@ export function toLocationView(location: Location): LocationView {
       location.updatedAt instanceof Date
         ? location.updatedAt.toISOString()
         : String(location.updatedAt)
-  };
-}
-
-export function toNearbyLocationItemView(item: NearbySearchResultItem): NearbyLocationItemView {
-  return {
-    location: item.location,
-    distanceMeters: item.distanceMeters
   };
 }

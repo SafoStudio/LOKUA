@@ -6,6 +6,7 @@ import { AppError } from '../../../../common/index.js';
 const AUTH_GOOGLE_PATH = '/api/v1/auth/google';
 
 export const GOOGLE_STATE_COOKIE = 'googleOAuthState';
+export const GOOGLE_VERIFIER_COOKIE = 'googleOAuthVerifier';
 
 const googleStateBaseCookieOptions: CookieOptions = {
   httpOnly: true,
@@ -19,8 +20,9 @@ export const googleStateCookieOptions: CookieOptions = {
   maxAge: 5 * 60 * 1000
 };
 
-export function createGoogleState(): string {
-  return randomBytes(32).toString('hex');
+export function createGoogleState(termsAccepted = false): string {
+  const nonce = randomBytes(32).toString('hex');
+  return termsAccepted ? `consent.${nonce}` : nonce;
 }
 
 export function setGoogleStateCookie(res: Response, state: string): void {
@@ -29,6 +31,21 @@ export function setGoogleStateCookie(res: Response, state: string): void {
 
 export function clearGoogleStateCookie(res: Response): void {
   res.clearCookie(GOOGLE_STATE_COOKIE, googleStateBaseCookieOptions);
+  res.clearCookie(GOOGLE_VERIFIER_COOKIE, googleStateBaseCookieOptions);
+}
+
+export function setGoogleVerifierCookie(res: Response): string {
+  const verifier = randomBytes(32).toString('base64url');
+  res.cookie(GOOGLE_VERIFIER_COOKIE, verifier, googleStateCookieOptions);
+  return verifier;
+}
+
+export function requireGoogleVerifier(req: Request): string {
+  const verifier = req.cookies?.[GOOGLE_VERIFIER_COOKIE];
+  if (typeof verifier !== 'string' || !/^[\w-]{43}$/.test(verifier)) {
+    throw new AppError('Invalid OAuth transaction', 400);
+  }
+  return verifier;
 }
 
 export function verifyGoogleState(req: Request, receivedState: unknown): void {

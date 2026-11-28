@@ -1,4 +1,5 @@
 import { AppError } from '../../../../common/index.js';
+import { calculateAge } from '../../../users/index.js';
 import type {
   AccessService,
   AuthUser,
@@ -6,6 +7,7 @@ import type {
   UserProfileProvider
 } from '../../../users/index.js';
 import type { EventParticipationRepository } from '../ports/event-participation.repository.js';
+import { eventPerson } from '../event-person.js';
 
 export interface ParticipationPageQuery {
   limit: number;
@@ -32,6 +34,7 @@ export class ListEventParticipationUseCase {
 
     const owner = event.organizerId === user.id;
     const admin = this.access.canAccessAdmin(user, 'ADMIN');
+    const now = this.clock();
     const applications = kind === 'APPLICATIONS';
     let blockedUserIds: string[] = [];
     if (applications) {
@@ -39,10 +42,10 @@ export class ListEventParticipationUseCase {
     } else if (!admin) {
       if (event.isHiddenByAdmin) throw new AppError('Event not found', 404);
       if (!owner) {
-        blockedUserIds = await this.blocks.listRelatedUserIds(user.id);
+        const blockerIds = await this.blocks.listBlockerIds(user.id);
         if (
-          blockedUserIds.includes(event.organizerId) ||
-          !this.access.canViewEvent(user, event.ageRestriction, this.clock())
+          blockerIds.includes(event.organizerId) ||
+          !this.access.canViewEvent(user, event.ageRestriction, now)
         ) {
           throw new AppError('Event not found', 404);
         }
@@ -50,6 +53,7 @@ export class ListEventParticipationUseCase {
         if (ownParticipation?.status !== 'APPROVED') {
           throw new AppError('Participant access is required', 403);
         }
+        blockedUserIds = await this.blocks.listRelatedUserIds(user.id);
       }
     }
 
@@ -65,10 +69,10 @@ export class ListEventParticipationUseCase {
       Promise.all(
         page.map(async (participation) => ({
           participation,
-          profile: await this.profile(participation.userId)
+          profile: await this.profile(participation.userId, now)
         }))
       ),
-      applications ? null : this.profile(event.organizerId)
+      applications ? null : this.profile(event.organizerId, now)
     ]);
     return {
       items,
@@ -77,12 +81,26 @@ export class ListEventParticipationUseCase {
     };
   }
 
-  private async profile(userId: string) {
+  private async profile(userId: string, now: Date) {
     const profile = await this.profiles.findByUserId(userId);
+    const person = eventPerson(userId, profile);
+    const details = profile?.status === 'ACTIVE' ? profile : null;
+    const socialLinks = details?.socialLinks;
     return {
-      id: userId,
-      name: profile?.name ?? null,
-      avatarUrl: profile?.avatarUrl ?? null
+      id: person.id,
+      name: details?.name ?? (profile?.status === 'DELETED' ? person.name : null),
+      avatarUrl: details?.avatarUrl ?? null,
+      age: calculateAge(details?.birthDate ?? null, now),
+      photoUrls: details?.photoUrls ?? [],
+      cityId: details?.cityId ?? null,
+      interestIds: details?.interestIds ?? [],
+      bio: details?.bio ?? null,
+      languages: details?.languages ?? null,
+      socialLinks: socialLinks
+        ? Object.fromEntries(
+            Object.entries(socialLinks).filter(([, url]) => /^https?:\/\//i.test(url))
+          )
+        : null
     };
   }
 }

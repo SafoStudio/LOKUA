@@ -47,8 +47,7 @@ describe('google.state', () => {
     });
 
     clearGoogleStateCookie(resMock);
-    expect(clearCalls).toHaveLength(1);
-    expect(clearCalls[0].name).toBe(GOOGLE_STATE_COOKIE);
+    expect(clearCalls.map(({ name }) => name)).toEqual([GOOGLE_STATE_COOKIE, 'googleOAuthVerifier']);
   });
 
   it('verifies state successfully when cookie matches received state', () => {

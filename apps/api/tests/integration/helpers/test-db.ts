@@ -47,6 +47,10 @@ import { NotificationEntity } from '../../../src/modules/notifications/infrastru
 import { OnboardingStateEntity } from '../../../src/modules/onboarding/infrastructure/index.js';
 
 import { InitialSchema1794056977895 } from '../../../src/db/migrations/1794056977895-InitialSchema.js';
+import { HardenAuthSessions1795784659656 } from '../../../src/db/migrations/1795784659656-HardenAuthSessions.js';
+import { QueueDeletedAccountMedia1795784659657 } from '../../../src/db/migrations/1795784659657-QueueDeletedAccountMedia.js';
+import { ProtectLocationPrivacyAndCache1795784659658 } from '../../../src/db/migrations/1795784659658-ProtectLocationPrivacyAndCache.js';
+import { StabilizeEventInterestMatching1795784659659 } from '../../../src/db/migrations/1795784659659-StabilizeEventInterestMatching.js';
 import { FullSchema1794817225368 } from '../../../src/db/migrations/1794817225368-FullSchema.js';
 import { SeedDictionaries1794817300000 } from '../../../src/db/migrations/1794817300000-SeedDictionaries.js';
 import { AddOnboardingSchema1794923437553 } from '../../../src/db/migrations/1794923437553-AddOnboardingSchema.js';
@@ -57,6 +61,8 @@ import { SeedEventsData1795000000000 } from '../../../src/db/migrations/17950000
 import { TrackApprovedEventParticipants1795010000000 } from '../../../src/db/migrations/1795010000000-TrackApprovedEventParticipants.js';
 import { AddDiscussionCommentQuotas1795020000000 } from '../../../src/db/migrations/1795020000000-AddDiscussionCommentQuotas.js';
 import { AddNotificationDelivery1795030000000 } from '../../../src/db/migrations/1795030000000-AddNotificationDelivery.js';
+import { SeedKyivDistricts1795040000000 } from '../../../src/db/migrations/1795040000000-SeedKyivDistricts.js';
+import { TrackParticipationEntryMode1795784659655 } from '../../../src/db/migrations/1795784659655-TrackParticipationEntryMode.js';
 
 export const TEST_DATABASE_URL =
     process.env.TEST_DATABASE_URL ?? 'postgres://lokua:lokua@localhost:5433/lokua_test';
@@ -65,9 +71,9 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
   const parsed = new URL(url);
   const dbName = parsed.pathname.replace(/^\//, '');
 
-  if (dbName === 'lokua' && !process.env.ALLOW_UNSAFE_TEST_DB) {
+  if (dbName !== 'lokua_test' || !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
     throw new Error(
-        `Refusing to run integration tests against '${dbName}'. Test database must be separate (e.g. lokua_test).`
+        'Integration tests require a loopback connection to the dedicated lokua_test database.'
     );
   }
 
@@ -126,7 +132,13 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
       SeedEventsData1795000000000,
       TrackApprovedEventParticipants1795010000000,
       AddDiscussionCommentQuotas1795020000000,
-      AddNotificationDelivery1795030000000
+      AddNotificationDelivery1795030000000,
+      SeedKyivDistricts1795040000000,
+      TrackParticipationEntryMode1795784659655,
+      HardenAuthSessions1795784659656,
+      QueueDeletedAccountMedia1795784659657,
+      ProtectLocationPrivacyAndCache1795784659658,
+      StabilizeEventInterestMatching1795784659659
     ]
   });
 }
@@ -144,6 +156,7 @@ export async function isDatabaseReachable(dataSource: DataSource): Promise<boole
 export async function clearAllTables(dataSource: DataSource): Promise<void> {
   await dataSource.query(`
     TRUNCATE TABLE
+      "auth_rate_limits",
       "security_events",
       "refresh_sessions",
       "password_reset_tokens",

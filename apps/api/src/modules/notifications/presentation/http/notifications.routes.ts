@@ -3,7 +3,7 @@ import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { AppError } from '../../../../common/index.js';
 import { validate } from '../../../../middlewares/index.js';
-import type { NotificationStore } from '../../infrastructure/notification.store.js';
+import type { NotificationReader } from '../../application/index.js';
 
 const pageSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -12,10 +12,7 @@ const pageSchema = z.object({
 const preferenceSchema = z.strictObject({ emailEnabled: z.boolean() });
 const notificationParams = z.object({ id: z.uuid() });
 
-export function createNotificationsRouter(
-  requireAuth: RequestHandler,
-  store: Pick<NotificationStore, 'list' | 'getPreferences' | 'setPreferences' | 'markRead'>
-) {
+export function createNotificationsRouter(requireAuth: RequestHandler, store: NotificationReader) {
   const router = Router();
   router.use(requireAuth, (_req, res, next) => {
     res.set('Cache-Control', 'private, no-store');

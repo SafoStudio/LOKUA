@@ -9,6 +9,9 @@ export class TagEntity {
   @Column({ type: 'varchar', length: 50 })
   name!: string;
 
+  @Column({ type: 'text', name: 'feed_key', insert: false, update: false, select: false })
+  feedKey!: string;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 }

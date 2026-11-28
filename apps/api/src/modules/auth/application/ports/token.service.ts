@@ -1,9 +1,9 @@
 export interface TokenPayload {
   userId: string;
+  sessionVersion?: string;
 }
 
-export interface RefreshTokenPayload {
-  userId: string;
+export interface RefreshTokenPayload extends TokenPayload {
   jti: string;
 }
 

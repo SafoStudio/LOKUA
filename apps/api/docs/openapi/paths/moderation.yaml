@@ -1,6 +1,6 @@
 /api/v1/reports:
   post:
-    tags: [Moderation]
+    tags: [Reports]
     summary: Report visible content or a profile
     description: A user may submit up to ten reports per rolling hour and have one active report per target.
     security: &moderationSecurity
@@ -76,7 +76,7 @@
 
 /api/v1/admin/reports:
   get:
-    tags: [Moderation]
+    tags: [Admin / Moderation]
     summary: List reports as an administrator
     security: *moderationSecurity
     parameters:
@@ -118,7 +118,7 @@
       required: true
       schema: { type: string, format: uuid }
   get:
-    tags: [Moderation]
+    tags: [Admin / Moderation]
     summary: Inspect a report and its target, including hidden content
     security: *moderationSecurity
     responses:
@@ -148,7 +148,7 @@
       '403': *moderationForbidden
       '404': *moderationNotFound
   patch:
-    tags: [Moderation]
+    tags: [Admin / Moderation]
     summary: Start or close a report as an administrator
     description: Start a new report before closing it. RESOLVED means action taken. REJECTED means no violation.
     security: *moderationSecurity
@@ -187,7 +187,7 @@
 
 /api/v1/admin/content/{type}/{id}/visibility:
   patch:
-    tags: [Moderation]
+    tags: [Admin / Moderation]
     summary: Hide or restore event content as an administrator
     security: *moderationSecurity
     parameters:
@@ -233,8 +233,9 @@
 /api/v1/admin/users/{id}/status:
   parameters: *moderationId
   patch:
-    tags: [Moderation]
+    tags: [Admin / Users]
     summary: Block or unblock an account as an administrator
+    description: Changing the account status invalidates the user's existing access and refresh tokens.
     security: *moderationSecurity
     requestBody:
       required: true

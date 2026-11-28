@@ -1,7 +1,15 @@
 import type { DataSource } from 'typeorm';
+import { startBatchWorker } from '../common/start-batch-worker.js';
 import { createDictionariesModule } from '../modules/dictionaries/index.js';
-import { createProfilePhotosRouter, createUsersModule } from '../modules/users/index.js';
-import { createAuthModule } from '../modules/auth/index.js';
+import {
+  createProfilePhotosRouter,
+  ProfilePhotosService,
+  createProfileSettingsRouter,
+  createUserBlocksRouter,
+  createUsersModule,
+  ProfileSettingsService
+} from '../modules/users/index.js';
+import { createAccountRecoveryLink, createAuthModule } from '../modules/auth/index.js';
 import { createStorageModule } from '../modules/storage/index.js';
 import { createGeolocationModule } from '../modules/geolocation/index.js';
 import { createEventsModule } from '../modules/events/index.js';
@@ -24,14 +32,16 @@ export function createModules(dataSource: DataSource) {
   const imageMedia = storageModule.createImageMedia(authModule.requireAuth);
   const profilePhotosRouter = createProfilePhotosRouter(
     authModule.requireAuth,
-    usersModule.photos,
-    imageMedia.images
+    new ProfilePhotosService(usersModule.photos, (url, userId) =>
+      imageMedia.images.assertOwnedUrl(url, userId, 'PROFILE')
+    )
   );
 
   const notificationsModule = createNotificationsModule({
     dataSource,
     requireAuth: authModule.requireAuth,
-    sendEmail: authModule.sendNotificationEmail
+    sendEmail: authModule.sendNotificationEmail,
+    accountRecoveryLink: createAccountRecoveryLink
   });
 
   const moderationModule = createModerationModule({
@@ -43,10 +53,10 @@ export function createModules(dataSource: DataSource) {
     requireAuth: authModule.requireAuth,
     requireRole: authModule.requireRole
   });
+  moderationModule.adminUsersRouter.use(dictionariesModule.adminRouter);
 
   const onboardingModule = createOnboardingModule({
     dataSource,
-    users: usersModule.users,
     onboardingUsers: usersModule.onboarding,
     cities: dictionariesModule.cities,
     interests: dictionariesModule.interests,
@@ -78,12 +88,31 @@ export function createModules(dataSource: DataSource) {
     images: imageMedia.images
   });
 
+  const accountDeletion = usersModule.createAccountDeletion(
+    eventsModule,
+    notificationsModule.publisher,
+    storageModule.deleteAccountImages
+  );
+
   return {
     dictionaries: dictionariesModule,
     users: usersModule,
     auth: authModule,
+    accountDeletionRouter: authModule.createAccountDeletionRouter(accountDeletion),
+    startAccountDeletionWorker: () =>
+      startBatchWorker(() => accountDeletion.finalizeNext(), 60_000, 'Account deletion failed'),
     storage: { ...storageModule, imageMediaRouter: imageMedia.router },
     profilePhotosRouter,
+    profileSettingsRouter: createProfileSettingsRouter(
+      authModule.requireAuth,
+      usersModule.profiles,
+      new ProfileSettingsService(
+        usersModule.profileSettings,
+        dictionariesModule.cities,
+        dictionariesModule.interests
+      )
+    ),
+    userBlocksRouter: createUserBlocksRouter(authModule.requireAuth, usersModule.blockSettings),
     moderation: moderationModule,
     onboarding: onboardingModule,
     geolocation: geolocationModule,

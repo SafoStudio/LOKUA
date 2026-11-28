@@ -7,18 +7,23 @@ import { logger } from './common/index.js';
 import { env } from './config/env.js';
 import { notFound, errorHandler } from './middlewares/index.js';
 import { createDocsRouter } from './docs/index.js';
+import { requireTrustedCookieOrigin } from './modules/auth/index.js';
 
 interface AppDependencies {
   authRouter: express.Router;
   onboardingRouter?: express.Router;
   geolocationRouter?: express.Router;
   adminUsersRouter?: express.Router;
+  dictionariesRouter?: express.Router;
   eventsRouter: express.Router;
   profilesRouter?: express.Router;
   notificationsRouter?: express.Router;
   reportsRouter?: express.Router;
   imageMediaRouter?: express.Router;
   profilePhotosRouter?: express.Router;
+  profileSettingsRouter?: express.Router;
+  userBlocksRouter?: express.Router;
+  accountDeletionRouter?: express.Router;
 }
 
 const API_PREFIX = '/api/v1';
@@ -28,14 +33,19 @@ export function createApp({
   onboardingRouter,
   geolocationRouter,
   adminUsersRouter,
+  dictionariesRouter,
   eventsRouter,
   profilesRouter,
   notificationsRouter,
   reportsRouter,
   imageMediaRouter,
-  profilePhotosRouter
+  profilePhotosRouter,
+  profileSettingsRouter,
+  userBlocksRouter,
+  accountDeletionRouter
 }: AppDependencies) {
   const app = express();
+  if (env.TRUST_PROXY_HOPS > 0) app.set('trust proxy', env.TRUST_PROXY_HOPS);
 
   app.use(
     pinoHttp({
@@ -84,6 +94,7 @@ export function createApp({
 
   app.use(express.json());
   app.use(cookieParser());
+  app.use(API_PREFIX, requireTrustedCookieOrigin);
 
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
@@ -100,6 +111,7 @@ export function createApp({
   app.use('/docs', createDocsRouter());
 
   app.use(`${API_PREFIX}/auth`, authRouter);
+  if (accountDeletionRouter) app.use(`${API_PREFIX}/auth`, accountDeletionRouter);
 
   if (onboardingRouter) {
     app.use(`${API_PREFIX}/onboarding`, onboardingRouter);
@@ -112,6 +124,7 @@ export function createApp({
   if (adminUsersRouter) {
     app.use(`${API_PREFIX}/admin`, adminUsersRouter);
   }
+  if (dictionariesRouter) app.use(`${API_PREFIX}/dictionaries`, dictionariesRouter);
 
   if (eventsRouter) {
     app.use(`${API_PREFIX}/events`, eventsRouter);
@@ -125,6 +138,8 @@ export function createApp({
   if (reportsRouter) app.use(`${API_PREFIX}/reports`, reportsRouter);
   if (imageMediaRouter) app.use(`${API_PREFIX}/media`, imageMediaRouter);
   if (profilePhotosRouter) app.use(`${API_PREFIX}/users/me/photos`, profilePhotosRouter);
+  if (profileSettingsRouter) app.use(`${API_PREFIX}/users/me/profile`, profileSettingsRouter);
+  if (userBlocksRouter) app.use(`${API_PREFIX}/users/me/blocks`, userBlocksRouter);
 
   app.use(notFound);
   app.use(errorHandler);

@@ -17,16 +17,18 @@ export class BrevoEmailService implements EmailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
+      host: env.LOCAL_SMTP_PORT ? '127.0.0.1' : 'smtp-relay.brevo.com',
+      port: env.LOCAL_SMTP_PORT ?? 587,
       secure: false,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
       socketTimeout: 15_000,
-      auth: {
-        user: env.BREVO_SMTP_USER,
-        pass: env.BREVO_SMTP_KEY
-      }
+      auth: env.LOCAL_SMTP_PORT
+        ? undefined
+        : {
+            user: env.BREVO_SMTP_USER,
+            pass: env.BREVO_SMTP_KEY
+          }
     });
   }
 

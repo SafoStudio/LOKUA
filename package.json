@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "api": "pnpm --filter api dev",
+    "setup:local": "node scripts/setup-local.mjs",
     "web": "pnpm --filter web dev",
     "build:api": "pnpm --filter api build",
     "test:api": "pnpm --filter api test",

@@ -38,12 +38,12 @@ export class ManageEventUseCase {
 
   async create(user: AuthUser, data: CreateEventData): Promise<Event> {
     this.assertNewImages(user.id, data);
-    await this.validate(user, data);
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
+      await this.lockActiveOrganizer(events, user.id);
+      const { tags } = await this.validate(user, data, tx);
       await this.ensureLocationAvailable(events, user.id, data.primaryLocationId);
       const event = await events.create(user.id, data);
-      const tags = validateEventTags(data.tags ?? []);
       await events.replaceTags(event.id, tags);
       return { ...event, tags };
     });
@@ -59,7 +59,12 @@ export class ManageEventUseCase {
       this.assertNewImages(user.id, patch, event);
       const published = event.status !== 'DRAFT';
       if (patch.isFree && patch.priceText === undefined) next.priceText = null;
-      const location = await this.validate(user, { ...next, mediaUrls: patch.mediaUrls });
+      const { location, tags } = await this.validate(
+        user,
+        { ...next, mediaUrls: patch.mediaUrls },
+        tx,
+        event.categoryId
+      );
       if (next.primaryLocationId !== event.primaryLocationId) {
         await this.ensureLocationAvailable(events, user.id, next.primaryLocationId);
       }
@@ -119,16 +124,16 @@ export class ManageEventUseCase {
         }
       }
       if (patch.tags !== undefined) {
-        await events.replaceTags(id, validateEventTags(patch.tags));
+        await events.replaceTags(id, tags);
       }
       return { ...saved, tags: await events.readTags(id) };
     });
   }
 
   publish(user: AuthUser, id: string): Promise<Event> {
-    return this.change(user, id, async (events, event, now) => {
+    return this.change(user, id, async (events, event, now, tx) => {
       if (event.status !== 'DRAFT') throw new AppError('Only drafts can be published', 409);
-      const location = await this.validate(user, event);
+      const { location } = await this.validate(user, event, tx);
       await this.ensureLocationAvailable(events, user.id, event.primaryLocationId);
       validatePublicationDates(event, now);
       if ((await events.countUpcoming(user.id, now)) >= 10) {
@@ -154,20 +159,38 @@ export class ManageEventUseCase {
       if (!cancellationReason || cancellationReason.length > 300) {
         throw new AppError('A cancellation reason of 1 to 300 characters is required', 422);
       }
-      const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
-      await events.syncSchedule(saved, event.firstStartsAt);
-      if (this.notifications) {
-        await publishEventNotification(
-          this.notifications,
-          tx,
-          saved,
-          'EVENT_CANCELLED',
-          await events.listNotificationRecipients(saved, true),
-          cancellationReason
-        );
-      }
+      const saved = await this.cancelEvent(events, event, cancellationReason, tx);
       return { ...saved, tags: await events.readTags(id) };
     });
+  }
+
+  async cancelUpcomingForAccountDeletion(organizerId: string, now: Date, tx: TransactionContext) {
+    const events = this.events.inTransaction(tx);
+    const upcoming = await events.lockUpcoming(organizerId, now);
+    for (const event of upcoming) {
+      await this.cancelEvent(events, event, 'Організатор подав запит на видалення акаунта', tx);
+    }
+  }
+
+  private async cancelEvent(
+    events: EventManagementRepository,
+    event: Event,
+    cancellationReason: string,
+    tx: TransactionContext
+  ): Promise<Event> {
+    const saved = await events.save({ ...event, status: 'CANCELLED', cancellationReason });
+    await events.syncSchedule(saved, event.firstStartsAt);
+    if (this.notifications) {
+      await publishEventNotification(
+        this.notifications,
+        tx,
+        saved,
+        'EVENT_CANCELLED',
+        await events.listNotificationRecipients(saved, true),
+        cancellationReason
+      );
+    }
+    return saved;
   }
 
   delete(user: AuthUser, id: string): Promise<void> {
@@ -189,10 +212,14 @@ export class ManageEventUseCase {
   }
 
   duplicate(user: AuthUser, id: string): Promise<Event> {
-    return this.change(user, id, async (events, event) => {
-      const tags = validateEventTags(await events.readTags(id));
-      const data = { ...event, firstStartsAt: null, firstEndsAt: null, tags };
-      await this.validate(user, data);
+    return this.change(user, id, async (events, event, _now, tx) => {
+      const data = {
+        ...event,
+        firstStartsAt: null,
+        firstEndsAt: null,
+        tags: await events.readTags(id)
+      };
+      const { tags } = await this.validate(user, data, tx);
       await this.ensureLocationAvailable(events, user.id, data.primaryLocationId);
       const draft = await events.create(user.id, data);
       await events.replaceTags(draft.id, tags);
@@ -212,11 +239,16 @@ export class ManageEventUseCase {
   ): Promise<T> {
     return this.unitOfWork.run(async (tx) => {
       const events = this.events.inTransaction(tx);
-      await events.lockOrganizer(user.id);
+      await this.lockActiveOrganizer(events, user.id);
       const event = await events.findOwned(id, user.id, true);
       if (!event) throw new AppError('Event not found', 404);
       return execute(events, event, this.clock(), tx);
     });
+  }
+
+  private async lockActiveOrganizer(events: EventManagementRepository, userId: string) {
+    await events.lockOrganizer(userId);
+    if (!(await events.isOrganizerActive(userId))) throw new AppError('Account is inactive', 403);
   }
 
   private async ensureLocationAvailable(
@@ -237,23 +269,29 @@ export class ManageEventUseCase {
     }
   }
 
-  private async validate(user: AuthUser, data: CreateEventData) {
+  private async validate(
+    user: AuthUser,
+    data: CreateEventData,
+    tx: TransactionContext,
+    existingCategoryId?: string
+  ) {
     if (!this.access.canCreateEventWithRestriction(user, data.ageRestriction, this.clock())) {
       throw new AppError('Event management is not allowed for this account', 403);
     }
     validateCreateEvent(data);
     validateEventTimezone(data.timezone ?? 'Europe/Kyiv');
-    validateEventTags(data.tags ?? []);
+    const tags = validateEventTags(data.tags ?? []);
     if ((data.mediaUrls?.length ?? 0) > 5) {
       throw new AppError('An event can have at most five additional photos', 422);
     }
-    if (!(await this.categories.findById(data.categoryId))) {
+    const category = await this.categories.findById(data.categoryId, tx);
+    if (!category || (!category.isActive && category.id !== existingCategoryId)) {
       throw new AppError('Event category not found', 422);
     }
     const location = data.primaryLocationId
-      ? await this.locations.findById(data.primaryLocationId)
+      ? await this.locations.findById(data.primaryLocationId, tx)
       : null;
     if (data.primaryLocationId && !location) throw new AppError('Event location not found', 422);
-    return location;
+    return { location, tags };
   }
 }

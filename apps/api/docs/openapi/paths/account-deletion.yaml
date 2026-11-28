@@ -1,0 +1,105 @@
+/api/v1/auth/account:
+  delete:
+    tags: [Account Settings]
+    summary: Request deletion of the current account
+    description: >
+      Requires the current password, a fresh Passkey assertion from the login options endpoint,
+      or a one-time code sent to the verified email address. Revokes existing sessions,
+      cancels future published events, and schedules a service email
+      with an account recovery link. The account can be restored for 30 days.
+      After that period, the account is anonymized and stored media is removed in the background.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [proof]
+            additionalProperties: false
+            properties:
+              proof:
+                oneOf:
+                  - type: object
+                    required: [method, password]
+                    additionalProperties: false
+                    properties:
+                      method: { const: password }
+                      password: { type: string, minLength: 1, maxLength: 72 }
+                  - type: object
+                    required: [method, challenge, response]
+                    additionalProperties: false
+                    properties:
+                      method: { const: passkey }
+                      challenge: { type: string, minLength: 1, maxLength: 2048 }
+                      response: { type: object, additionalProperties: true }
+                  - type: object
+                    required: [method, code]
+                    additionalProperties: false
+                    properties:
+                      method: { const: email }
+                      code: { type: string, minLength: 43, maxLength: 43 }
+    responses:
+      '202':
+        description: Deletion scheduled
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required: [recoverUntil]
+                  properties:
+                    recoverUntil: { type: string, format: date-time }
+      '401':
+        description: Authentication required or password or Passkey proof rejected
+      '400':
+        description: Missing, invalid, expired, or already used proof
+      '403':
+        description: Inactive account
+      '409':
+        description: Account state changed before the request could be applied
+      '429':
+        description: Too many confirmation attempts
+/api/v1/auth/account/deletion-code:
+  post:
+    tags: [Account Settings]
+    summary: Send a confirmation code to the verified account email
+    description: The one-time code expires in ten minutes and is valid only for account deletion.
+    security:
+      - CookieAuth: []
+      - BearerAuth: []
+    responses:
+      '202': { description: Confirmation code sent }
+      '401': { description: Authentication required }
+      '403': { description: Verified email required }
+      '429': { description: Too many code requests }
+/api/v1/auth/account/restore:
+  post:
+    tags: [Account Settings]
+    summary: Restore an account within the 30-day recovery period
+    description: >
+      Submit the token from the service email. The token can be used once.
+      Sign in again after recovery. Cancelled events retain their cancellation status.
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [token]
+            properties:
+              token: { type: string, minLength: 1, maxLength: 2048 }
+    responses:
+      '204':
+        description: Account restored
+      '400':
+        description: Invalid, expired, or already used recovery token
+      '429':
+        description: Too many recovery requests

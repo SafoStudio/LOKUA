@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { eventText } from './event-text.schema.js';
 
-const reviewText = z.string().trim().min(1).max(1000);
+const reviewText = eventText(1, 1000);
 
 export const createReviewSchema = z.strictObject({
   rating: z.number().int().min(1).max(5),

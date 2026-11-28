@@ -17,6 +17,9 @@ export class CategoryEntity {
   @Column({ type: 'varchar', length: 100 })
   name!: string;
 
+  @Column({ type: 'text', name: 'feed_key', insert: false, update: false, select: false })
+  feedKey!: string;
+
   @Column({ type: 'varchar', length: 100 })
   slug!: string;
 

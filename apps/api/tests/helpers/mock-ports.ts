@@ -26,6 +26,7 @@ export function createMockUserProvider(): UserProvider {
 
 export function createMockUserOnboardingProvider(): UserOnboardingProvider {
     return {
+    lockActiveAccount: vi.fn(),
         applyDateOfBirth: vi.fn(),
         applyProfile: vi.fn(),
         applyCity: vi.fn(),
@@ -50,7 +51,7 @@ export function createMockCityProvider(): CityProvider {
 export function createMockInterestProvider(): InterestProvider {
     return {
         findById: vi.fn(),
-        findByIds: vi.fn(),
+        findActiveByIds: vi.fn(),
         listActive: vi.fn()
     };
 }

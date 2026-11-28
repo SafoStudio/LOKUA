@@ -16,8 +16,13 @@ export class LoginWithGoogleUseCase {
     private readonly securityEvents: SecurityEventRepository
   ) {}
 
-  async execute(code: string, context: SecurityContext): Promise<AuthUser> {
-    const profile = await this.google.exchangeCode(code);
+  async execute(
+    code: string,
+    context: SecurityContext,
+    termsAccepted = false,
+    verifier?: string
+  ): Promise<AuthUser> {
+    const profile = await this.google.exchangeCode(code, verifier);
 
     if (!profile.emailVerified) {
       await this.securityEvents.record({
@@ -58,10 +63,13 @@ export class LoginWithGoogleUseCase {
       );
     }
 
+    if (!termsAccepted)
+      throw new AppError('Потрібно прийняти умови та політику конфіденційності', 400);
     const user = await this.googleLoginTransaction.createUserWithGoogleCredential({
       email,
       name: profile.name.trim(),
-      googleSub: profile.sub
+      googleSub: profile.sub,
+      termsAcceptedAt: new Date()
     });
 
     await this.securityEvents.record({

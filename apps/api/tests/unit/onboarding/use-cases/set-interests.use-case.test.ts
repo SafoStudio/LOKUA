@@ -3,7 +3,6 @@ import { SetInterestsUseCase } from '../../../../src/modules/onboarding/applicat
 import { OnboardingStepOutOfOrderError } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockInterestProvider,
@@ -32,7 +31,6 @@ describe('SetInterestsUseCase', () => {
         useCase = new SetInterestsUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
             interests,
             createMockAuditLogger()
@@ -40,7 +38,7 @@ describe('SetInterestsUseCase', () => {
     });
 
     const setupHappyPath = () => {
-        vi.mocked(interests.findByIds).mockResolvedValueOnce([
+        vi.mocked(interests.findActiveByIds).mockResolvedValueOnce([
             { id: 'i1', name: 'Біг', isActive: true },
             { id: 'i2', name: 'Настолки', isActive: true },
             { id: 'i3', name: 'Кава', isActive: true }
@@ -91,7 +89,7 @@ describe('SetInterestsUseCase', () => {
     });
 
     it('throws 422 if some interests not found', async () => {
-        vi.mocked(interests.findByIds).mockResolvedValueOnce([
+        vi.mocked(interests.findActiveByIds).mockResolvedValueOnce([
             { id: 'i1', name: 'Біг', isActive: true }
         ]);
         await expect(
@@ -100,7 +98,7 @@ describe('SetInterestsUseCase', () => {
     });
 
     it('throws 409 if CITY not completed', async () => {
-        vi.mocked(interests.findByIds).mockResolvedValueOnce([
+        vi.mocked(interests.findActiveByIds).mockResolvedValueOnce([
             { id: 'i1', name: 'Біг', isActive: true },
             { id: 'i2', name: 'Настолки', isActive: true },
             { id: 'i3', name: 'Кава', isActive: true }

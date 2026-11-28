@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import { AppError, assertString } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
@@ -11,15 +11,15 @@ import {
   OnboardingStepOutOfOrderError
 } from '../../domain/index.js';
 import { ensureOnboardingState } from './ensure-onboarding-state.js';
+import { advanceStep } from '../../domain/advance-step.js';
 
 export class SetProfileUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly audit: AuditLogger,
-    private readonly images?: ImageOwnership
+    private readonly images: ImageOwnership
   ) {}
 
   async execute(
@@ -41,28 +41,24 @@ export class SetProfileUseCase {
     }
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('DATE_OF_BIRTH')) {
         throw new OnboardingStepOutOfOrderError('DATE_OF_BIRTH', state.currentStep);
       }
       if (mainPhotoUrl !== state.mainPhotoUrl) {
-        this.images?.assertOwnedUrl(mainPhotoUrl, context.user.id, 'PROFILE');
+        this.images.assertOwnedUrl(mainPhotoUrl, context.user.id, 'PROFILE');
       }
 
       await this.onboardingUsers.applyProfile(context.user.id, { name, mainPhotoUrl }, tx);
-
-      const nextCompleted = state.completedSteps.includes('PROFILE')
-        ? state.completedSteps
-        : [...state.completedSteps, 'PROFILE' as const];
 
       const updated = await this.stateRepository.updateStep(
         state.id,
         {
           name,
           mainPhotoUrl,
-          currentStep: 'CITY',
-          completedSteps: nextCompleted
+          ...advanceStep(state, 'PROFILE')
         },
         tx
       );

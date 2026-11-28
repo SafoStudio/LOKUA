@@ -2,25 +2,21 @@ import type { RequestHandler } from 'express';
 import type { DataSource } from 'typeorm';
 import type { CityProvider, CountryProvider } from '../dictionaries/index.js';
 import type { UserProvider } from '../users/index.js';
+import { env } from '../../config/env.js';
+import { startBatchWorker } from '../../common/start-batch-worker.js';
 import type {
-  CreateLocationInput,
-  FindLocationByIdInput,
-  SearchNearbyInput,
-  SearchInBBoxInput,
   GeocodingProvider,
   ReverseGeocodingProvider,
   LocationProvider
 } from './application/index.js';
 import {
   CreateLocationUseCase,
-  FindLocationByIdUseCase,
   FindPublicLocationByIdUseCase,
   SearchLocationsNearbyUseCase,
   SearchLocationsInBBoxUseCase,
   GeocodeAddressUseCase,
   ReverseGeocodeUseCase
 } from './application/index.js';
-import type { Coordinates } from '../../common/index.js';
 import {
   LocationEntity,
   GeocodingCacheEntity,
@@ -31,6 +27,7 @@ import {
 } from './infrastructure/index.js';
 import { createGeolocationController } from './presentation/http/geolocation.controller.js';
 import { createGeolocationRouter } from './presentation/http/geolocation.routes.js';
+import { reserveGeocodingSlot } from './infrastructure/persistence/adapters/geocoding-request-slot.js';
 
 export interface CreateGeolocationModuleDependencies {
   dataSource: DataSource;
@@ -59,13 +56,14 @@ export function createGeolocationModule({
     dataSource.getRepository(GeocodingCacheEntity)
   );
 
-  const defaultNominatim = new NominatimGeocodingProvider();
+  const defaultNominatim = new NominatimGeocodingProvider({
+    baseUrl: env.NOMINATIM_BASE_URL,
+    acquireSlot: () => reserveGeocodingSlot(dataSource)
+  });
   const geoProvider = geocodingProvider ?? defaultNominatim;
   const reverseGeoProvider = reverseGeocodingProvider ?? defaultNominatim;
 
   const createLocation = new CreateLocationUseCase(locationRepository, cities, countries, users);
-  const findLocationById = new FindLocationByIdUseCase(locationRepository);
-  const findPublicLocationById = new FindPublicLocationByIdUseCase(locationRepository);
 
   const searchNearby = new SearchLocationsNearbyUseCase(locationRepository, {
     defaultRadiusMeters: 5000,
@@ -92,7 +90,7 @@ export function createGeolocationModule({
   };
   const controller = createGeolocationController({
     createLocation,
-    findLocationById: new FindLocationByIdUseCase(discoverableLocations),
+    findExactById: (id, viewerId) => locationRepository.findExactById(id, viewerId),
     findPublicLocationById: new FindPublicLocationByIdUseCase(discoverableLocations),
     searchNearby,
     searchInBBox,
@@ -110,14 +108,15 @@ export function createGeolocationModule({
   return {
     router,
     locations,
-
-    createLocation: (input: CreateLocationInput) => createLocation.execute(input),
-    findLocationById: (input: FindLocationByIdInput) => findLocationById.execute(input),
-    findPublicLocationById: (input: FindLocationByIdInput) => findPublicLocationById.execute(input),
-    searchNearby: (input: SearchNearbyInput) => searchNearby.execute(input),
-    searchInBBox: (input: SearchInBBoxInput) => searchInBBox.execute(input),
-    geocode: (address: string, city?: string) => geocodeAddress.execute({ address, city }),
-    reverseGeocode: (coords: Coordinates) => reverseGeocode.execute(coords)
+    startCacheCleanup: () =>
+      startBatchWorker(
+        async () => {
+          await cacheRepository.deleteExpired();
+          return false;
+        },
+        60 * 60_000,
+        'Geocoding cache cleanup failed'
+      )
   };
 }
 

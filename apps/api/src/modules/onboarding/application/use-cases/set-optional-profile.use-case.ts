@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import { AppError } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
 import type { AuditLogger } from '../../../moderation/index.js';
@@ -10,12 +10,12 @@ import {
   OnboardingStepOutOfOrderError
 } from '../../domain/index.js';
 import { ensureOnboardingState } from './ensure-onboarding-state.js';
+import { advanceStep } from '../../domain/advance-step.js';
 
 export class SetOptionalProfileUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly audit: AuditLogger
   ) {}
@@ -77,14 +77,14 @@ export class SetOptionalProfileUseCase {
           throw new AppError('socialLinks must be an object', 400);
         }
         const entries = Object.entries(data.socialLinks as Record<string, unknown>);
-        const normalized: Record<string, string> = {};
-        for (const [key, value] of entries) {
-          if (typeof value !== 'string' || !/^https?:\/\//.test(value)) {
-            throw new AppError(`socialLinks.${key} must be a valid URL`, 400);
-          }
-          normalized[key] = value;
-        }
-        patch.socialLinks = normalized;
+        patch.socialLinks = Object.fromEntries(
+          entries.map(([key, value]) => {
+            if (typeof value !== 'string' || !/^https?:\/\//i.test(value) || !URL.canParse(value)) {
+              throw new AppError(`socialLinks.${key} must be a valid HTTP or HTTPS URL`, 400);
+            }
+            return [key, value];
+          })
+        );
       }
     }
 
@@ -93,6 +93,7 @@ export class SetOptionalProfileUseCase {
     }
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('INTERESTS')) {
@@ -101,18 +102,13 @@ export class SetOptionalProfileUseCase {
 
       await this.onboardingUsers.applyOptionalProfile(context.user.id, patch, tx);
 
-      const nextCompleted = state.completedSteps.includes('OPTIONAL')
-        ? state.completedSteps
-        : [...state.completedSteps, 'OPTIONAL' as const];
-
       const updated = await this.stateRepository.updateStep(
         state.id,
         {
           bio: patch.bio !== undefined ? patch.bio : state.bio,
           languages: patch.languages !== undefined ? patch.languages : state.languages,
           socialLinks: patch.socialLinks !== undefined ? patch.socialLinks : state.socialLinks,
-          currentStep: 'COMPLETED',
-          completedSteps: nextCompleted
+          ...advanceStep(state, 'OPTIONAL')
         },
         tx
       );

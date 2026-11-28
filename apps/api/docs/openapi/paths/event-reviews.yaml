@@ -5,7 +5,7 @@
       required: true
       schema: { type: string, format: uuid }
   get:
-    tags: [Events]
+    tags: [Reviews]
     summary: List reviews for a completed event
     description: Pinned reviews come first, then newest reviews. Event visibility and blocking rules apply.
     security: &publicReviewSecurity
@@ -55,7 +55,7 @@
             schema:
               $ref: '#/components/schemas/ErrorResponse'
   post:
-    tags: [Events]
+    tags: [Reviews]
     summary: Review a completed event
     description: |
       An approved participant with verified email and completed onboarding can submit one review
@@ -107,7 +107,7 @@
       required: true
       schema: { type: string, format: uuid }
   post:
-    tags: [Events]
+    tags: [Reviews]
     summary: Reply once as the event organizer
     security: *reviewWriteSecurity
     requestBody:
@@ -131,7 +131,7 @@
 /api/v1/events/{id}/reviews/{reviewId}/pin:
   parameters: *reviewItemParameters
   put:
-    tags: [Events]
+    tags: [Reviews]
     summary: Pin or unpin a review as the event organizer
     description: The organizer can have up to three pinned reviews across their events.
     security: *reviewWriteSecurity
@@ -150,7 +150,7 @@
 /api/v1/events/{id}/reviews/{reviewId}:
   parameters: *reviewItemParameters
   patch:
-    tags: [Events]
+    tags: [Reviews]
     summary: Edit your review during the original seven-day window
     security: *reviewWriteSecurity
     requestBody:
@@ -173,12 +173,12 @@
       required: true
       schema: { type: string, format: uuid }
   get:
-    tags: [Events]
-    summary: Get a public organizer profile with ratings and reviews
+    tags: [Organizer Profiles]
+    summary: Get a public organizer profile with ratings, reviews, and event history
     security: *publicReviewSecurity
     responses:
       '200':
-        description: Public profile with rating and review preview
+        description: Public profile with rating and previews of reviews and event history
         headers: *privateReviewHeaders
         content:
           application/json:
@@ -196,13 +196,34 @@
 /api/v1/users/{id}/reviews:
   parameters: *reviewOrganizerId
   get:
-    tags: [Events]
+    tags: [Organizer Profiles]
     summary: List visible reviews of the organizer
     description: Pinned reviews come first. Age, moderation and blocking rules apply to review visibility.
     security: *publicReviewSecurity
     parameters: *reviewPageParameters
     responses:
       '200': *reviewPageResponse
+      '400': *reviewValidation
+      '401': *reviewUnauthorized
+      '403': *reviewForbidden
+      '404': *reviewNotFound
+
+/api/v1/users/{id}/events:
+  parameters: *reviewOrganizerId
+  get:
+    tags: [Organizer Profiles]
+    summary: List completed events organized by the user
+    description: Orders visible completed events by end time, newest first. Age, moderation and blocking rules apply.
+    security: *publicReviewSecurity
+    parameters: *reviewPageParameters
+    responses:
+      '200':
+        description: Visible completed events
+        headers: *privateReviewHeaders
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizerEventHistoryPage'
       '400': *reviewValidation
       '401': *reviewUnauthorized
       '403': *reviewForbidden

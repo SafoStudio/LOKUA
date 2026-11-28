@@ -10,6 +10,7 @@ export interface GeocodingCache {
   countryCode: string;
   coordinates: Coordinates;
   provider: string;
+  providerPlaceId: string | null;
   expiresAt: Date;
   createdAt: Date;
 }

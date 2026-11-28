@@ -3,6 +3,7 @@ import type { PublicLocationView } from '../../domain/index.js';
 import {
   BoundingBoxTooLargeError,
   InvalidCoordinatesError,
+  isValidCoordinates,
   toLocationView
 } from '../../domain/index.js';
 
@@ -28,10 +29,8 @@ export class SearchLocationsInBBoxUseCase {
 
   async execute(input: SearchInBBoxInput): Promise<PublicLocationView[]> {
     if (
-      input.minLat < -90 ||
-      input.maxLat > 90 ||
-      input.minLng < -180 ||
-      input.maxLng > 180 ||
+      !isValidCoordinates({ latitude: input.minLat, longitude: input.minLng }) ||
+      !isValidCoordinates({ latitude: input.maxLat, longitude: input.maxLng }) ||
       input.minLat >= input.maxLat ||
       input.minLng >= input.maxLng
     ) {

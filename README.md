@@ -20,8 +20,11 @@ LOKUA/
 
 ## Quick start
 
+Install Node.js, pnpm and Docker Compose, then run from the repository root.
+
 ```bash
-pnpm install
-docker compose up -d
+pnpm setup:local
 pnpm --filter api dev
 ```
+
+Run `pnpm --filter api smoke:lifecycle` for an isolated test of the event flow.

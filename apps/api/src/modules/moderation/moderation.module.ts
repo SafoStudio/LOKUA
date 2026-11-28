@@ -11,6 +11,9 @@ import { TypeOrmUnitOfWork } from '../../common/index.js';
 import { startBatchWorker } from '../../common/start-batch-worker.js';
 import { ModerationUseCase } from './application/use-cases/moderation.use-case.js';
 import { ModerationStore } from './infrastructure/persistence/adapters/moderation.store.js';
+import { GetAdminStatisticsUseCase } from './application/use-cases/get-admin-statistics.use-case.js';
+import { TypeOrmAdminStatisticsReader } from './infrastructure/persistence/adapters/admin-statistics.reader.js';
+import { createAdminStatisticsRouter } from './presentation/http/admin-statistics.routes.js';
 import {
   createAdminModerationRouter,
   createReportsRouter
@@ -57,6 +60,11 @@ export function createModerationModule({
     requireRole
   });
   adminUsersRouter.use(createAdminModerationRouter(moderation));
+  adminUsersRouter.use(
+    createAdminStatisticsRouter(
+      new GetAdminStatisticsUseCase(new TypeOrmAdminStatisticsReader(dataSource))
+    )
+  );
 
   return {
     audit,

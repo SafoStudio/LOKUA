@@ -1,4 +1,4 @@
-import type { Coordinates } from '../../../../common/index.js';
+import type { Coordinates, TransactionContext } from '../../../../common/index.js';
 import type { Location, PublicLocationView } from '../../domain/index.js';
 
 export interface CreateLocationProviderInput {
@@ -15,7 +15,7 @@ export interface CreateLocationProviderInput {
 }
 
 export interface LocationProvider {
-  findById(id: string): Promise<Location | null>;
+  findById(id: string, tx?: TransactionContext): Promise<Location | null>;
   findPublicById(id: string): Promise<PublicLocationView | null>;
   create(input: CreateLocationProviderInput): Promise<Location>;
 }

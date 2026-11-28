@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { validate } from '../../../../middlewares/index.js';
+import { createRequestRateLimit } from '../../../../middlewares/request-rate-limit.js';
 import { createEventSchema } from './create-event.schema.js';
 import type { EventsController } from './events.controller.js';
 import type { DiscussionController } from './discussion.controller.js';
@@ -52,6 +53,11 @@ export function createEventsRouter({
   reviews
 }: EventsRouterDependencies) {
   const router = Router();
+  const participationLimit = createRequestRateLimit({
+    limit: 30,
+    windowMs: 60 * 60_000,
+    key: (req) => req.user?.id ?? 'unauthenticated'
+  });
 
   router.get('/', optionalAuth, validate({ query: getEventsQuerySchema }), controller.getAll);
   router.get('/map', optionalAuth, validate({ query: getEventsMapQuerySchema }), controller.getMap);
@@ -130,6 +136,7 @@ export function createEventsRouter({
   router.post(
     '/:id/participations',
     requireAuth,
+    participationLimit,
     validate({ params: getEventByIdParamsSchema, body: participationBodySchema }),
     controller.join
   );

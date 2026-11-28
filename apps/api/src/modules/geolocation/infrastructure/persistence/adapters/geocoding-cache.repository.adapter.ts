@@ -15,47 +15,27 @@ export class GeocodingCacheRepositoryAdapter implements GeocodingCacheRepository
     return entity ? this.toDomain(entity) : null;
   }
 
-  async save(input: CreateGeocodingCacheInput): Promise<GeocodingCache> {
+  async save(input: CreateGeocodingCacheInput): Promise<void> {
     const expiresAt = new Date(Date.now() + input.ttlSeconds * 1000);
 
-    const existing = await this.repository.findOne({
-      where: { queryHash: input.queryHash }
-    });
-
-    if (existing) {
-      existing.rawQuery = input.rawQuery;
-      existing.formattedAddress = input.formattedAddress;
-      existing.city = input.city;
-      existing.district = input.district ?? null;
-      existing.countryCode = input.countryCode;
-      existing.coordinates = {
-        latitude: input.latitude,
-        longitude: input.longitude
-      };
-      existing.provider = input.provider;
-      existing.expiresAt = expiresAt;
-
-      const saved = await this.repository.save(existing);
-      return this.toDomain(saved);
-    }
-
-    const entity = this.repository.create({
-      queryHash: input.queryHash,
-      rawQuery: input.rawQuery,
-      formattedAddress: input.formattedAddress,
-      city: input.city,
-      district: input.district ?? null,
-      countryCode: input.countryCode,
-      coordinates: {
-        latitude: input.latitude,
-        longitude: input.longitude
+    await this.repository.upsert(
+      {
+        queryHash: input.queryHash,
+        rawQuery: input.rawQuery,
+        formattedAddress: input.formattedAddress,
+        city: input.city,
+        district: input.district ?? null,
+        countryCode: input.countryCode,
+        coordinates: {
+          latitude: input.latitude,
+          longitude: input.longitude
+        },
+        provider: input.provider,
+        providerPlaceId: input.providerPlaceId ?? null,
+        expiresAt
       },
-      provider: input.provider,
-      expiresAt
-    });
-
-    const saved = await this.repository.save(entity);
-    return this.toDomain(saved);
+      ['queryHash']
+    );
   }
 
   async deleteExpired(): Promise<number> {
@@ -76,6 +56,7 @@ export class GeocodingCacheRepositoryAdapter implements GeocodingCacheRepository
       countryCode: entity.countryCode,
       coordinates: entity.coordinates,
       provider: entity.provider,
+      providerPlaceId: entity.providerPlaceId,
       expiresAt: entity.expiresAt,
       createdAt: entity.createdAt
     };

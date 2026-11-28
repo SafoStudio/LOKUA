@@ -1,0 +1,139 @@
+/api/v1/auth/change-email:
+  post:
+    tags: [Account Settings]
+    summary: Send a confirmation link to a new email address
+    description: Requires the current password or a fresh Passkey assertion from the signed-in account. Obtain a Passkey challenge from the Passkey login options endpoint. The confirmation link expires in one hour.
+    security: &accountSettingsSecurity
+      - CookieAuth: []
+      - BearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [email, proof]
+            additionalProperties: false
+            properties:
+              email: { type: string, format: email, maxLength: 255 }
+              proof:
+                oneOf:
+                  - type: object
+                    required: [method, password]
+                    additionalProperties: false
+                    properties:
+                      method: { const: password }
+                      password: { type: string, minLength: 1, maxLength: 72 }
+                  - type: object
+                    required: [method, challenge, response]
+                    additionalProperties: false
+                    properties:
+                      method: { const: passkey }
+                      challenge: { type: string, minLength: 1, maxLength: 2048 }
+                      response: { type: object, additionalProperties: true }
+    responses:
+      '202': { description: Confirmation email sent }
+      '400': { description: Invalid email }
+      '401': { description: Authentication required }
+      '403': { description: Inactive account }
+      '409': { description: Address already in use }
+      '422': { description: The address must differ from the current address }
+      '429': { description: Too many email change requests }
+/api/v1/auth/change-email/confirm:
+  post:
+    tags: [Account Settings]
+    summary: Confirm the new email address for the signed-in account
+    security: *accountSettingsSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token]
+            additionalProperties: false
+            properties:
+              token: { type: string, minLength: 1, maxLength: 2048 }
+    responses:
+      '204': { description: Verified address saved }
+      '400': { description: Invalid, expired, or already used confirmation token }
+      '401': { description: Authentication required }
+      '403': { description: Inactive account }
+      '409': { description: Address already in use }
+/api/v1/users/me/profile:
+  get:
+    tags: [Users]
+    summary: Get the current user's profile settings
+    security: *accountSettingsSecurity
+    responses:
+      '200':
+        description: Private profile settings
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  type: object
+                  required:
+                    [name, cityId, interestIds, birthDate, photoUrls, bio, languages, socialLinks]
+                  properties:
+                    name: { type: string }
+                    cityId: { type: [string, 'null'], format: uuid }
+                    interestIds:
+                      type: array
+                      items: { type: string, format: uuid }
+                    birthDate: { type: [string, 'null'], format: date, readOnly: true }
+                    photoUrls:
+                      type: array
+                      items: { type: string, format: uri }
+                    bio: { type: [string, 'null'] }
+                    languages:
+                      type: [array, 'null']
+                      items: { type: string }
+                    socialLinks:
+                      type: [object, 'null']
+                      additionalProperties: { type: string, format: uri }
+      '401': { description: Authentication required }
+      '403': { description: Inactive account }
+      '404': { description: Profile unavailable }
+  patch:
+    tags: [Users]
+    summary: Edit the current user's profile
+    description: Requires completed onboarding and a verified email. Use the profile photos endpoint to change photos.
+    security: *accountSettingsSecurity
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            minProperties: 1
+            additionalProperties: false
+            properties:
+              name: { type: string, minLength: 1, maxLength: 100 }
+              cityId: { type: string, format: uuid }
+              interestIds:
+                type: array
+                minItems: 3
+                maxItems: 20
+                description: Must contain at least three distinct active interests.
+                items: { type: string, format: uuid }
+              bio: { type: [string, 'null'], maxLength: 300 }
+              languages:
+                type: [array, 'null']
+                items: { type: string, minLength: 1, maxLength: 10 }
+              socialLinks:
+                type: [object, 'null']
+                additionalProperties:
+                  type: string
+                  format: uri
+                  pattern: '^https?://'
+    responses:
+      '204': { description: Profile updated }
+      '400': { description: Invalid fields or immutable date of birth }
+      '401': { description: Authentication required }
+      '403': { description: Inactive account, unverified email, or incomplete onboarding }
+      '404': { description: Profile unavailable }
+      '422': { description: Unavailable city or interests }

@@ -1,9 +1,5 @@
 import type { Request, Response } from 'express';
-import type {
-  CreateEventUseCase,
-  GetEventsUseCase,
-  GetEventByIdUseCase
-} from '../../application/index.js';
+import type { GetEventsUseCase, GetEventByIdUseCase } from '../../application/index.js';
 import type { CreateEventSchema } from './create-event.schema.js';
 import { toEventContext } from './event-context.js';
 import {
@@ -39,7 +35,6 @@ interface EventsControllerDependencies {
   manageParticipation: ManageParticipationUseCase;
   listParticipation: ListEventParticipationUseCase;
   manageEvent: ManageEventUseCase;
-  createEvent: CreateEventUseCase;
   getEvents: GetEventsUseCase;
   getMyEvents: GetMyEventsUseCase;
   getEventById: GetEventByIdUseCase;
@@ -49,7 +44,6 @@ export function createEventsController({
   listParticipation,
   manageParticipation,
   manageEvent,
-  createEvent,
   getEvents,
   getMyEvents,
   getEventById
@@ -110,7 +104,7 @@ export function createEventsController({
     async create(req: Request, res: Response): Promise<void> {
       const body = req.body as CreateEventSchema;
 
-      const event = await createEvent.execute(toEventContext(req), body);
+      const event = await manageEvent.create(toEventContext(req).user, body);
 
       res.status(201).json({ data: toEventView(event) });
     },

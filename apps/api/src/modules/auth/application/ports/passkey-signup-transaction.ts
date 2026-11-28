@@ -5,6 +5,7 @@ export interface PasskeySignupTransaction {
     userId: string;
     email: string;
     name: string;
+    termsAcceptedAt?: Date;
     credential: {
       credentialId: string;
       publicKey: Buffer;

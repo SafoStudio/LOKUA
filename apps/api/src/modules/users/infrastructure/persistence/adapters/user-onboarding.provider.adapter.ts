@@ -1,17 +1,32 @@
 import type { DataSource, EntityManager, QueryDeepPartialEntity } from 'typeorm';
+import { IsNull } from 'typeorm';
 import type { UserOnboardingProvider } from '../../../application/index.js';
 import { UserEntity } from '../entities/user.entity.js';
 import { UserPhotoEntity } from '../entities/user-photo.entity.js';
 import { UserInterestEntity } from '../entities/user-interest.entity.js';
 import type { TransactionContext } from '../../../../../common/index.js';
-import { toEntityManager } from '../../../../../common/index.js';
+import { AppError, toEntityManager } from '../../../../../common/index.js';
 
 export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
   constructor(private readonly dataSource: DataSource) {}
 
+  async lockActiveAccount(userId: string, tx: TransactionContext): Promise<void> {
+    const user = await toEntityManager(tx)
+      .getRepository(UserEntity)
+      .findOne({
+        where: { id: userId, status: 'ACTIVE' },
+        select: { id: true },
+        lock: { mode: 'pessimistic_write' }
+      });
+    if (!user) throw new AppError('Account is unavailable', 403);
+  }
+
   async applyDateOfBirth(userId: string, birthDate: Date, tx?: TransactionContext): Promise<void> {
     await this.withManager(tx, async (m) => {
-      await m.getRepository(UserEntity).update({ id: userId }, { birthDate });
+      const result = await m
+        .getRepository(UserEntity)
+        .update({ id: userId, status: 'ACTIVE', birthDate: IsNull() }, { birthDate });
+      if (!result.affected) throw new AppError('Date of birth is already set or unavailable', 409);
     });
   }
 
@@ -89,7 +104,17 @@ export class UserOnboardingProviderAdapter implements UserOnboardingProvider {
 
   async completeOnboarding(userId: string, tx?: TransactionContext): Promise<void> {
     await this.withManager(tx, async (m) => {
-      await m.getRepository(UserEntity).update({ id: userId }, { onboardingCompleted: true });
+      const users = m.getRepository(UserEntity);
+      const result = await users.update(
+        { id: userId, status: 'ACTIVE', emailVerified: true, onboardingCompleted: false },
+        { onboardingCompleted: true }
+      );
+      if (result.affected) return;
+
+      const user = await users.findOneBy({ id: userId });
+      if (!user || user.status !== 'ACTIVE') throw new AppError('Account is unavailable', 403);
+      if (user.onboardingCompleted) throw new AppError('Onboarding already completed', 409);
+      throw new AppError('Verify your email before completing onboarding', 403);
     });
   }
 

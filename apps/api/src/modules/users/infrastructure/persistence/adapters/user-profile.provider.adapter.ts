@@ -12,6 +12,11 @@ interface UserProfileRow {
   avatarUrl: string | null;
   photoUrls: string[];
   interestIds: string[] | null;
+  status: UserProfile['status'];
+  birthDate: string | null;
+  bio: string | null;
+  languages: string[] | null;
+  socialLinks: Record<string, string> | null;
 }
 
 const SQL = `
@@ -19,6 +24,11 @@ const SQL = `
     u.id,
     u.email,
     u.name,
+    u.status,
+    to_char(u.birth_date, 'YYYY-MM-DD') AS "birthDate",
+    u.bio,
+    u.languages,
+    u.social_links AS "socialLinks",
     u.city_id AS "cityId",
     u.onboarding_completed AS "onboardingCompleted",
     u.created_at AS "createdAt",
@@ -53,6 +63,11 @@ export class UserProfileProviderAdapter implements UserProfileProvider {
       id: row.id,
       email: row.email,
       name: row.name,
+      status: row.status,
+      birthDate: row.birthDate ? new Date(`${row.birthDate}T00:00:00Z`) : null,
+      bio: row.bio,
+      languages: row.languages,
+      socialLinks: row.socialLinks,
       avatarUrl: row.avatarUrl,
       photoUrls: row.photoUrls,
       cityId: row.cityId,

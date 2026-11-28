@@ -36,6 +36,9 @@ export function createAuthMiddleware({ tokenService, users, access }: AuthMiddle
       if (!user) return next(new AppError('User not found', 401));
 
       if (access.isBlocked(user)) return next(new AppError('Account is blocked', 403));
+      if (user.sessionVersion !== payload.sessionVersion) {
+        return next(new AppError('Invalid or expired access token', 401));
+      }
 
       req.user = user;
 

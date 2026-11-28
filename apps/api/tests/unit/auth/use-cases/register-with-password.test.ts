@@ -59,6 +59,7 @@ describe('RegisterWithPasswordUseCase', () => {
         {
           email: '  John@Example.COM  ',
           name: '  John Doe  ',
+          termsAccepted: true,
           password: 'StrongPassword123'
         },
         context
@@ -76,7 +77,8 @@ describe('RegisterWithPasswordUseCase', () => {
     expect(registrationTransaction.createUserWithPasswordCredential).toHaveBeenCalledWith({
       email: 'john@example.com',
       name: 'John Doe',
-      passwordHash: 'hashed-password'
+      passwordHash: 'hashed-password',
+      termsAcceptedAt: expect.any(Date)
     });
     expect(sendVerificationEmail.execute).toHaveBeenCalledWith('user-1');
     expect(securityEvents.record).toHaveBeenCalledWith(
@@ -101,6 +103,7 @@ describe('RegisterWithPasswordUseCase', () => {
             {
               email: 'john@example.com',
               name: 'John',
+              termsAccepted: true,
               password: 'StrongPassword123'
             },
             context
@@ -122,6 +125,7 @@ describe('RegisterWithPasswordUseCase', () => {
             {
               email: 'john@example.com',
               name: 'John',
+              termsAccepted: true,
               password: 'a'.repeat(73)
             },
             context

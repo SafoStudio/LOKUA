@@ -55,7 +55,7 @@ describe('Google OAuth API', () => {
 
       const res = await request(app)
           .get(`/api/v1/auth/google/callback?code=${code}&state=${stateValue}`)
-          .set('Cookie', [`googleOAuthState=${stateValue}`]);
+          .set('Cookie', [`googleOAuthState=${stateValue}`, `googleOAuthVerifier=${'v'.repeat(43)}`]);
 
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe(env.GOOGLE_SUCCESS_REDIRECT);
@@ -112,7 +112,7 @@ describe('Google OAuth API', () => {
 
       const res = await request(app)
           .get(`/api/v1/auth/google/callback?code=some-code&state=${stateValue}`)
-          .set('Cookie', [`googleOAuthState=${stateValue}`]);
+          .set('Cookie', [`googleOAuthState=${stateValue}`, `googleOAuthVerifier=${'v'.repeat(43)}`]);
 
       expect(res.status).toBe(409);
       expect(res.body).toEqual({

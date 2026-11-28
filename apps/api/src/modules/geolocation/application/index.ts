@@ -25,11 +25,6 @@ export {
 } from './use-cases/create-location.use-case.js';
 
 export {
-  FindLocationByIdUseCase,
-  type FindLocationByIdInput
-} from './use-cases/find-location-by-id.use-case.js';
-
-export {
   FindPublicLocationByIdUseCase,
   type FindPublicLocationByIdInput
 } from './use-cases/find-public-location-by-id.use-case.js';

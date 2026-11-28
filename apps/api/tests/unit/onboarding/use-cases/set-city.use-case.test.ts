@@ -4,7 +4,6 @@ import { AppError } from '../../../../src/common/index.js';
 import { OnboardingStepOutOfOrderError } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockCityProvider,
@@ -44,7 +43,6 @@ describe('SetCityUseCase', () => {
         useCase = new SetCityUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
             cities,
             createMockAuditLogger()

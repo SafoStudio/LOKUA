@@ -29,6 +29,8 @@ import {
   createGoogleState,
   setGoogleStateCookie,
   clearGoogleStateCookie,
+  requireGoogleVerifier,
+  setGoogleVerifierCookie,
   verifyGoogleState
 } from './google.state.js';
 import { toUserProfileView } from './user-profile.view.js';
@@ -53,11 +55,16 @@ interface AuthControllerDependencies {
   sendVerificationEmail: SendVerificationEmailUseCase;
   verifyEmail: VerifyEmailUseCase;
   requestPasswordReset: RequestPasswordResetUseCase;
-  resetPassword: ResetPasswordUseCase;
-  changePassword: ChangePasswordUseCase;
+  resetPassword: Pick<ResetPasswordUseCase, 'execute'>;
+  changePassword: Pick<ChangePasswordUseCase, 'execute'>;
   logout: LogoutUseCase;
   logoutAll: LogoutAllUseCase;
   getMyProfile: GetMyProfileUseCase;
+}
+
+function requireUserId(req: Request): string {
+  if (!req.user) throw new AppError('Authentication required', 401);
+  return req.user.id;
 }
 
 export function createAuthController({
@@ -118,18 +125,14 @@ export function createAuthController({
     },
 
     async startPasskeyRegistration(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
-
-      const result = await startPasskeyRegistration.execute({ userId: req.user.id });
+      const result = await startPasskeyRegistration.execute({ userId: requireUserId(req) });
 
       res.status(200).json({ options: result.options });
     },
 
     async completePasskeyRegistration(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
-
       await completePasskeyRegistration.execute({
-        userId: req.user.id,
+        userId: requireUserId(req),
         challenge: req.body.challenge,
         response: req.body.response
       });
@@ -170,9 +173,7 @@ export function createAuthController({
     },
 
     async logoutAll(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
-
-      await logoutAll.execute(req.user.id, toSecurityContext(req));
+      await logoutAll.execute(requireUserId(req), toSecurityContext(req));
 
       clearAuthCookies(res);
 
@@ -180,11 +181,9 @@ export function createAuthController({
     },
 
     async me(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
+      const profile = await getMyProfile.execute(requireUserId(req));
 
-      const profile = await getMyProfile.execute(req.user.id);
-
-      res.status(200).json({ user: toUserProfileView(profile) });
+      res.status(200).json({ user: toUserProfileView(profile, req.user?.emailVerified === true) });
     },
 
     async verifyEmail(req: Request, res: Response): Promise<void> {
@@ -196,9 +195,7 @@ export function createAuthController({
     },
 
     async resendVerificationEmail(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
-
-      await sendVerificationEmail.execute(req.user.id);
+      await sendVerificationEmail.execute(requireUserId(req));
 
       res.status(200).json({ message: 'Verification email sent' });
     },
@@ -222,11 +219,9 @@ export function createAuthController({
     },
 
     async changePassword(req: Request, res: Response): Promise<void> {
-      if (!req.user) throw new AppError('Authentication required', 401);
-
       await changePassword.execute(
         {
-          userId: req.user.id,
+          userId: requireUserId(req),
           currentPassword: req.body.currentPassword,
           newPassword: req.body.newPassword
         },
@@ -236,12 +231,12 @@ export function createAuthController({
       res.status(200).json({ message: 'Password changed successfully' });
     },
 
-    googleStart(_req: Request, res: Response): void {
-      const state = createGoogleState();
+    googleStart(req: Request, res: Response): void {
+      const state = createGoogleState(req.query.termsAccepted === 'true');
 
       setGoogleStateCookie(res, state);
 
-      const url = googleOAuth.buildAuthUrl(state);
+      const url = googleOAuth.buildAuthUrl(state, setGoogleVerifierCookie(res));
 
       res.redirect(url);
     },
@@ -252,7 +247,13 @@ export function createAuthController({
 
         const code = assertString(req.query.code, 'Google authorization code');
 
-        const user = await loginGoogle.execute(code, toSecurityContext(req));
+        const state = assertString(req.query.state, 'Google OAuth state');
+        const user = await loginGoogle.execute(
+          code,
+          toSecurityContext(req),
+          state.startsWith('consent.'),
+          requireGoogleVerifier(req)
+        );
         const result = await issueTokens.execute(user);
 
         setAuthCookies(res, result.accessToken, result.refreshToken);

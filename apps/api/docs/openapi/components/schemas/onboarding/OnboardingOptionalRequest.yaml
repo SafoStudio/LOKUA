@@ -20,5 +20,6 @@ properties:
     additionalProperties:
       type: string
       format: uri
+      pattern: '^https?://'
     example:
       telegram: 'https://t.me/username'

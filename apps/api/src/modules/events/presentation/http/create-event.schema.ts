@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { eventText } from './event-text.schema.js';
+
+const eventDate = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 
 const optionalNullableUrl = z
   .string()
@@ -9,10 +12,13 @@ const optionalNullableUrl = z
 
 export const createEventSchema = z
   .object({
-    title: z.string().trim().min(3).max(100),
+    title: eventText(3, 100),
     categoryId: z.uuid(),
-    tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).max(10).optional(),
-    description: z.string().trim().min(1),
+    tags: z
+      .array(eventText(1, 30).transform((value) => value.toLowerCase()))
+      .max(10)
+      .optional(),
+    description: eventText(1, 10_000),
 
     coverUrl: optionalNullableUrl,
     mediaUrls: z.array(z.url()).max(5).optional(),
@@ -22,17 +28,17 @@ export const createEventSchema = z
     onlineUrl: optionalNullableUrl,
     hideExactAddress: z.boolean().optional(),
 
-    capacityLimit: z.number().int().positive().nullable().optional(),
+    capacityLimit: z.number().int().min(1).max(2_147_483_647).nullable().optional(),
     participationMode: z.enum(['FREE', 'REQUEST']),
     ageRestriction: z.enum(['ALL', 'SIXTEEN_PLUS', 'EIGHTEEN_PLUS']),
 
     isFree: z.boolean(),
-    priceText: z.string().trim().min(1).max(100).nullable().optional(),
-    itemsToBring: z.string().trim().max(500).nullable().optional(),
+    priceText: eventText(1, 100).nullable().optional(),
+    itemsToBring: eventText(0, 500).nullable().optional(),
 
-    firstStartsAt: z.coerce.date().nullable().optional(),
-    firstEndsAt: z.coerce.date().nullable().optional(),
-    timezone: z.string().trim().min(1).max(64).optional()
+    firstStartsAt: eventDate.nullable().optional(),
+    firstEndsAt: eventDate.nullable().optional(),
+    timezone: eventText(1, 64).optional()
   })
   .strict();
 

@@ -8,7 +8,7 @@ export interface GeocodeView {
   coordinates: { latitude: number; longitude: number };
   provider: string;
   providerPlaceId: string | null;
-  rawPayload: Record<string, unknown> | null;
+  rawPayload: null;
 }
 
 export function toGeocodeView(result: GeocodingResult): GeocodeView {
@@ -20,6 +20,6 @@ export function toGeocodeView(result: GeocodingResult): GeocodeView {
     coordinates: result.coordinates,
     provider: result.provider,
     providerPlaceId: result.providerPlaceId ?? null,
-    rawPayload: result.rawPayload ?? null
+    rawPayload: null
   };
 }

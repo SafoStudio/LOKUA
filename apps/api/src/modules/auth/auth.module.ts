@@ -52,6 +52,16 @@ import { createAuthController } from './presentation/http/auth.controller.js';
 import { createAuthMiddleware } from './presentation/http/auth.middleware.js';
 import { createRequireRole } from './presentation/http/require-role.middleware.js';
 import { createAuthRouter } from './presentation/http/auth.routes.js';
+import { ChangeEmailUseCase } from './application/use-cases/change-email.use-case.js';
+import { JwtEmailChangeTokens } from './infrastructure/crypto/email-change-tokens.js';
+import { TypeOrmEmailChangeStore } from './infrastructure/persistence/adapters/email-change.store.js';
+import { createEmailChangeRouter } from './presentation/http/email-change.routes.js';
+import { createSharedAuthRateLimit } from './infrastructure/persistence/adapters/auth-rate-limit.js';
+import { AccountEmailCodeUseCase } from './application/use-cases/account-email-code.use-case.js';
+import { createReauthentication } from './presentation/http/reauthentication.js';
+import { createAccountProofHandlers } from './presentation/http/account-proof.middleware.js';
+import { createAccountDeletionRouter } from './presentation/http/account-deletion.routes.js';
+import type { AccountDeletion } from './presentation/http/account-deletion.routes.js';
 import { parseTtlToMs } from './application/use-cases/parse-ttl.js';
 import { env } from '../../config/env.js';
 
@@ -167,20 +177,32 @@ export function createAuthModule({
     securityEvents
   );
 
-  const resetPassword = new ResetPasswordUseCase(
-    passwordResetTokens,
-    passwordCredentials,
-    passwordHasher,
-    refreshSessions,
-    securityEvents
-  );
+  const resetPassword: Pick<ResetPasswordUseCase, 'execute'> = {
+    execute: (input, context) =>
+      dataSource.transaction(async (manager) => {
+        const useCase = new ResetPasswordUseCase(
+          new PasswordResetTokenRepositoryAdapter(manager.getRepository(PasswordResetTokenEntity)),
+          new PasswordCredentialRepositoryAdapter(manager.getRepository(PasswordCredentialEntity)),
+          passwordHasher,
+          new RefreshSessionRepositoryAdapter(manager.getRepository(RefreshSessionEntity)),
+          new SecurityEventRepositoryAdapter(manager.getRepository(SecurityEventEntity))
+        );
+        await useCase.execute(input, context);
+      })
+  };
 
-  const changePassword = new ChangePasswordUseCase(
-    passwordCredentials,
-    passwordHasher,
-    refreshSessions,
-    securityEvents
-  );
+  const changePassword: Pick<ChangePasswordUseCase, 'execute'> = {
+    execute: (input, context) =>
+      dataSource.transaction(async (manager) => {
+        const useCase = new ChangePasswordUseCase(
+          new PasswordCredentialRepositoryAdapter(manager.getRepository(PasswordCredentialEntity)),
+          passwordHasher,
+          new RefreshSessionRepositoryAdapter(manager.getRepository(RefreshSessionEntity)),
+          new SecurityEventRepositoryAdapter(manager.getRepository(SecurityEventEntity))
+        );
+        await useCase.execute(input, context);
+      })
+  };
 
   const logout = new LogoutUseCase(refreshSessions, securityEvents);
   const logoutAll = new LogoutAllUseCase(refreshSessions, securityEvents);
@@ -196,7 +218,8 @@ export function createAuthModule({
     passkeyProvider,
     passkeySignupTransaction,
     issueTokens,
-    securityEvents
+    securityEvents,
+    sendVerificationEmail
   );
 
   const startPasskeyRegistration = new StartPasskeyRegistrationUseCase(
@@ -254,9 +277,79 @@ export function createAuthModule({
     access
   });
 
-  const router = createAuthRouter(controller, middleware);
+  const rateLimit = createSharedAuthRateLimit(dataSource);
+  const reauthenticate = createReauthentication(login, completePasskeyLogin);
+  const enrollment = new AccountEmailCodeUseCase(
+    passkeyChallenges,
+    'ENROLLMENT_EMAIL',
+    (to, code) =>
+      emailService.sendNotificationEmail({
+        to,
+        title: 'Підтвердження додавання ключа доступу LOKUA',
+        message: `Код підтвердження: ${code}. Він дійсний 10 хвилин.`
+      })
+  );
+  const enrollmentHandlers = createAccountProofHandlers(enrollment, reauthenticate);
+  const deletion = new AccountEmailCodeUseCase(passkeyChallenges, 'DELETION_EMAIL', (to, code) =>
+    emailService.sendNotificationEmail({
+      to,
+      title: 'Підтвердження видалення акаунта LOKUA',
+      message: `Код підтвердження видалення: ${code}. Він дійсний 10 хвилин.`
+    })
+  );
+  const deletionProof = createAccountProofHandlers(deletion, reauthenticate);
+  const router = createAuthRouter(
+    controller,
+    {
+      ...middleware,
+      authorizePasskeyEnrollment: enrollmentHandlers.authorize
+    },
+    rateLimit
+  );
+  router.post(
+    '/passkey/registration/email-code',
+    middleware.requireAuth,
+    rateLimit('enrollment-email', 3, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+    enrollmentHandlers.requestCode
+  );
+  const changeEmail = new ChangeEmailUseCase(
+    new TypeOrmEmailChangeStore(dataSource),
+    new JwtEmailChangeTokens(env.JWT_REFRESH_SECRET),
+    async (to, token) => {
+      const url = new URL('/account/confirm-email', env.CLIENT_URL);
+      url.hash = new URLSearchParams({ token }).toString();
+      await emailService.sendNotificationEmail({
+        to,
+        title: 'Підтвердження нової email-адреси',
+        message: `Підтвердьте нову email-адресу протягом години: ${url}`
+      });
+    },
+    (to) =>
+      emailService.sendNotificationEmail({
+        to,
+        title: 'Вашу email-адресу змінено',
+        message:
+          'Email-адресу вашого акаунта LOKUA змінено. Якщо це були не ви, зверніться до підтримки.'
+      })
+  );
+  router.use(
+    createEmailChangeRouter(
+      middleware.requireAuth,
+      changeEmail,
+      login,
+      completePasskeyLogin,
+      rateLimit('change-email', 5, 15 * 60_000, (req) => req.user?.id ?? 'unknown')
+    )
+  );
 
   return {
+    createAccountDeletionRouter: (accounts: AccountDeletion) =>
+      createAccountDeletionRouter(middleware.requireAuth, accounts, {
+        ...deletionProof,
+        limitCode: rateLimit('deletion-code', 3, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+        limitProof: rateLimit('deletion-proof', 5, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+        limitRestore: rateLimit('account-restore', 20, 15 * 60_000)
+      }),
     sendNotificationEmail: emailService.sendNotificationEmail.bind(emailService),
     router,
     access,

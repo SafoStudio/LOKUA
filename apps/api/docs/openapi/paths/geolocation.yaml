@@ -153,9 +153,11 @@
     description: |
       Returns the location. When precision=PUBLIC (default), only public coordinates
       are returned and address is omitted. When precision=EXACT, exact coordinates
-      and the address are returned to an authenticated active account.
+      and the address are returned to an authenticated active account for public
+      catalog locations or locations it owns.
+      Account-owned locations are excluded from public searches.
       Locations associated with an event whose address is hidden are served through
-      the event card and are unavailable through this endpoint in either precision.
+      the event card. An account may still request its own location with EXACT precision.
     security:
       - {}
       - CookieAuth: []
@@ -235,6 +237,10 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '429': { description: Too many geocoding requests }
+      '502': { description: Invalid response from the geocoding provider }
+      '503': { description: Geocoding provider unavailable or busy }
+      '504': { description: Geocoding provider timed out }
 
 /api/v1/geo/reverse-geocode:
   post:
@@ -265,3 +271,7 @@
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '429': { description: Too many geocoding requests }
+      '502': { description: Invalid response from the geocoding provider }
+      '503': { description: Geocoding provider unavailable or busy }
+      '504': { description: Geocoding provider timed out }

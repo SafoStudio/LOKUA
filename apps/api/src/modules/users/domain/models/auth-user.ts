@@ -10,4 +10,5 @@ export interface AuthUser {
   status: UserStatus;
   onboardingCompleted: boolean;
   birthDate: Date | null;
+  sessionVersion?: string;
 }

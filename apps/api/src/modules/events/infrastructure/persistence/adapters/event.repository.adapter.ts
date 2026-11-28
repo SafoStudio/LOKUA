@@ -1,4 +1,4 @@
-import type { Repository, SelectQueryBuilder } from 'typeorm';
+import type { Repository } from 'typeorm';
 import type { EventLocationSnapshot } from '../../../application/ports/event.repository.js';
 import type { TransactionContext } from '../../../../../common/index.js';
 import { obfuscateCoordinates } from '../../../../geolocation/index.js';
@@ -14,33 +14,17 @@ import type {
   OccurrenceStatus,
   ParticipationStatus
 } from '../../../domain/index.js';
-import type {
-  EventRepository,
-  FindPublishedEventsQuery,
-  FindPublishedEventsResult
-} from '../../../application/index.js';
+import type { EventRepository } from '../../../application/index.js';
 import type { CreateEventData } from '../../../application/index.js';
-import {
-  decodeEventCursor,
-  decodeMyEventsCursor,
-  encodeEventCursor,
-  encodeMyEventsCursor
-} from '../event-cursor.js';
-import type { EventCursor } from '../event-cursor.js';
+import { decodeMyEventsCursor, encodeMyEventsCursor } from '../event-cursor.js';
+import { areaPoint, foreignPrivateLocation, snapshotDistrict } from '../event-location-query.js';
+import { toEvent } from '../event.mapper.js';
 import { EventParticipationEntity } from '../entities/event-participation.entity.js';
 import { EventOccurrenceEntity } from '../entities/event-occurrence.entity.js';
 import { EventLocationSnapshotEntity } from '../entities/event-location-snapshot.entity.js';
 import { EventTagEntity } from '../entities/event-tag.entity.js';
 import { TagEntity } from '../entities/tag.entity.js';
 import { EventEntity } from '../entities/event.entity.js';
-
-interface FeedRow {
-  feed_available: boolean;
-  feed_start: string;
-  feed_distance?: number;
-  feed_latitude?: number;
-  feed_longitude?: number;
-}
 
 interface MyEventRow {
   my_sort_at: string;
@@ -80,24 +64,6 @@ const myEventViews = {
   }
 } as const;
 
-// Older snapshots can contain full precision in public_coordinates.
-const publicSnapshot = 'CAST(snapshot.public_coordinates AS geometry)';
-const foreignPrivateSnapshot = `EXISTS (
-  SELECT 1 FROM events other_event
-  LEFT JOIN event_location_snapshot other_snapshot ON other_snapshot.event_id = other_event.id
-  WHERE other_event.hide_exact_address
-    AND other_event.organizer_id <> event.organizer_id
-    AND (other_event.primary_location_id = snapshot.location_id
-      OR other_snapshot.location_id = snapshot.location_id)
-)`;
-const publicPoint = `CASE WHEN event.hide_exact_address OR ${foreignPrivateSnapshot} THEN ST_SetSRID(ST_MakePoint(
-  CAST(ROUND(CAST(ST_X(${publicSnapshot}) AS numeric), 2) AS double precision),
-  CAST(ROUND(CAST(ST_Y(${publicSnapshot}) AS numeric), 2) AS double precision)
-), 4326) ELSE CAST(snapshot.coordinates AS geometry) END`;
-const feedDistance = `ST_Distance(
-  CAST((${publicPoint}) AS geography),
-  CAST(ST_SetSRID(ST_MakePoint(:originLongitude, :originLatitude), 4326) AS geography)
-)`;
 const statusByEventStatus: Record<EventStatus, OccurrenceStatus> = {
   DRAFT: 'SCHEDULED',
   PUBLISHED: 'SCHEDULED',
@@ -144,7 +110,7 @@ export class EventRepositoryAdapter
 
     const savedEntity = await this.repository.save(entity);
 
-    return this.toDomain(savedEntity);
+    return toEvent(savedEntity);
   }
 
   inTransaction(tx: TransactionContext): EventRepositoryAdapter {
@@ -158,17 +124,37 @@ export class EventRepositoryAdapter
     ]);
   }
 
+  async isOrganizerActive(id: string): Promise<boolean> {
+    const [user] = await this.repository.query<{ status: string }[]>(
+      'SELECT status FROM users WHERE id = $1',
+      [id]
+    );
+    return user?.status === 'ACTIVE';
+  }
+
+  async lockUpcoming(organizerId: string, now: Date): Promise<Event[]> {
+    const rows = await this.repository
+      .createQueryBuilder('event')
+      .where('event.organizerId = :organizerId', { organizerId })
+      .andWhere("event.status IN ('PUBLISHED', 'FULL')")
+      .andWhere('event.firstStartsAt > :now', { now })
+      .orderBy('event.id', 'ASC')
+      .setLock('pessimistic_write')
+      .getMany();
+    return rows.map((row) => toEvent(row));
+  }
+
   async findOwned(id: string, organizerId: string, lock = false): Promise<Event | null> {
     const entity = await this.repository.findOne({
       where: { id, organizerId },
       ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {})
     });
-    return entity ? this.toDomain(entity) : null;
+    return entity ? toEvent(entity) : null;
   }
 
   async findEvent(id: string): Promise<Event | null> {
     const entity = await this.repository.findOneBy({ id });
-    return entity ? this.toDomain(entity) : null;
+    return entity ? toEvent(entity) : null;
   }
 
   async listNotificationRecipients(event: Event, includePending: boolean): Promise<string[]> {
@@ -186,15 +172,12 @@ export class EventRepositoryAdapter
     return participants.map((participant) => participant.user_id);
   }
 
-  hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
-    return this.repository
-      .createQueryBuilder('event')
-      .leftJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
-      .where('event.organizer_id <> :organizerId AND event.hide_exact_address', { organizerId })
-      .andWhere('(event.primary_location_id = :locationId OR snapshot.location_id = :locationId)', {
-        locationId
-      })
-      .getExists();
+  async hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
+    const [result] = await this.repository.query<{ restricted: boolean }[]>(
+      `SELECT (${foreignPrivateLocation('$1', '$2')}) AS restricted`,
+      [locationId, organizerId]
+    );
+    return result.restricted;
   }
 
   findParticipationById(eventId: string, id: string): Promise<EventParticipation | null> {
@@ -233,7 +216,7 @@ export class EventRepositoryAdapter
       where: { id },
       lock: { mode: 'pessimistic_write' }
     });
-    return entity ? this.toDomain(entity) : null;
+    return entity ? toEvent(entity) : null;
   }
 
   findParticipation(eventId: string, userId: string): Promise<EventParticipation | null> {
@@ -309,7 +292,7 @@ export class EventRepositoryAdapter
 
   async save(event: Event): Promise<Event> {
     const entity = this.repository.create(event);
-    return this.toDomain(await this.repository.save(entity));
+    return toEvent(await this.repository.save(entity));
   }
 
   async delete(id: string): Promise<void> {
@@ -448,7 +431,7 @@ export class EventRepositoryAdapter
 
     const { entities, raw } = await builder.getRawAndEntities<MyEventRow>();
     const items = entities.slice(0, limit).map((entity, index) => ({
-      event: this.toDomain(entity),
+      event: toEvent(entity),
       isOrganizer: entity.organizerId === userId,
       participationStatus:
         entity.organizerId === userId ? null : raw[index].my_participation_status,
@@ -465,244 +448,67 @@ export class EventRepositoryAdapter
     };
   }
 
-  async findPublished(query: FindPublishedEventsQuery): Promise<FindPublishedEventsResult> {
-    let cursor: EventCursor | undefined;
-    if (query.cursor) {
-      try {
-        cursor = decodeEventCursor(query.cursor);
-      } catch {
-        throw new AppError('Invalid cursor', 400);
-      }
-    }
-    if (
-      cursor &&
-      ((cursor.source === 'MAP') !== Boolean(query.bounds) ||
-        (cursor.distanceMeters !== undefined) !== Boolean(query.origin) ||
-        (cursor.distanceMeters !== undefined && cursor.source !== 'CITY'))
-    ) {
-      throw new AppError('Invalid cursor for the requested event view', 400);
-    }
-    if (!query.ageRestrictions.length || cursor?.firstStartsAt === null) {
-      return { items: [], nextCursor: null };
-    }
+  async findOrganizerHistory(query: Parameters<EventRepository['findOrganizerHistory']>[0]) {
+    const { organizerId, ageRestrictions, limit, cursor } = query;
+    if (ageRestrictions?.length === 0) return { items: [], nextCursor: null };
 
-    const availability = `(
-      event.status = 'PUBLISHED' AND (
-        event.capacity_limit IS NULL OR event.capacity_limit > (
-          SELECT COUNT(*) FROM event_participations p
-          WHERE p.event_id = event.id AND p.status = 'APPROVED'
-            AND p.user_id <> event.organizer_id
-        )
-      )
-    )`;
     const builder = this.repository
       .createQueryBuilder('event')
-      .where("event.status IN ('PUBLISHED', 'FULL')")
-      .andWhere('event.first_starts_at > :feedNow', { feedNow: query.now })
-      .andWhere('event.is_hidden_by_admin = false')
-      .andWhere('event.age_restriction IN (:...ageRestrictions)', {
-        ageRestrictions: query.ageRestrictions
-      })
-      .addSelect(availability, 'feed_available')
-      .addSelect(
-        `to_char(event.first_starts_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-        'feed_start'
-      )
-      .orderBy('event.firstStartsAt', 'ASC')
-      .addOrderBy('event.id', 'ASC')
-      .limit(query.limit + 1);
-
-    if (query.blockedOrganizerIds.length) {
-      builder.andWhere('event.organizer_id NOT IN (:...blockedOrganizerIds)', {
-        blockedOrganizerIds: query.blockedOrganizerIds
-      });
+      .where('event.organizer_id = :organizerId', { organizerId })
+      .andWhere("event.status = 'COMPLETED' AND event.first_ends_at IS NOT NULL")
+      .andWhere('event.is_hidden_by_admin = false');
+    if (ageRestrictions) {
+      builder.andWhere('event.age_restriction IN (:...ageRestrictions)', { ageRestrictions });
     }
-    if (query.categoryId) {
-      builder.andWhere('event.category_id = :categoryId', { categoryId: query.categoryId });
+    if (cursor) {
+      const anchor = this.repository
+        .createQueryBuilder('anchor')
+        .select('anchor.first_ends_at, anchor.id')
+        .where('anchor.id = :cursor AND anchor.organizer_id = :organizerId')
+        .andWhere("anchor.status = 'COMPLETED' AND anchor.is_hidden_by_admin = false");
+      if (ageRestrictions) anchor.andWhere('anchor.age_restriction IN (:...ageRestrictions)');
+      builder.andWhere(`(event.first_ends_at, event.id) < (${anchor.getQuery()})`, { cursor });
     }
-    if (query.format) {
-      builder.andWhere('event.format = :format', { format: query.format });
-    }
-    if (query.participationMode) {
-      builder.andWhere('event.participation_mode = :participationMode', {
-        participationMode: query.participationMode
-      });
-    }
-    if (query.freeOnly) builder.andWhere('event.is_free = true');
-    if (query.availableOnly) builder.andWhere(availability);
-    if (query.from) builder.andWhere('event.first_starts_at >= :from', { from: query.from });
-    if (query.to) builder.andWhere('event.first_starts_at < :to', { to: query.to });
-    if (query.period) this.applyFeedPeriod(builder, query);
-    if (query.search) {
-      builder.andWhere(
-        `(
-          strpos(lower(event.title), lower(:search)) > 0 OR
-          strpos(lower(event.description), lower(:search)) > 0 OR EXISTS (
-            SELECT 1 FROM event_tags link JOIN tags tag ON tag.id = link.tag_id
-            WHERE link.event_id = event.id AND strpos(lower(tag.name), lower(:search)) > 0
-          )
-        )`,
-        { search: query.search }
-      );
-    }
-    if (cursor && !query.origin) {
-      builder.andWhere('(event.first_starts_at, event.id) > (:cursorStart, :cursorId)', {
-        cursorStart: cursor.firstStartsAt,
-        cursorId: cursor.id
-      });
-    }
-
-    const run = (source: 'CITY' | 'ONLINE' | 'MAP') => {
-      const scoped = builder.clone();
-      if (source === 'ONLINE') {
-        scoped.andWhere("event.format = 'ONLINE'");
-      } else if (query.bounds || query.origin) {
-        scoped
-          .innerJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
-          .andWhere("event.format = 'OFFLINE'");
-        if (query.cityId) {
-          scoped.andWhere('snapshot.city_id = :cityId', { cityId: query.cityId });
-        }
-        if (query.bounds) this.applyMapBounds(scoped, query.bounds);
-        if (query.origin) {
-          scoped
-            .setParameters({
-              originLongitude: query.origin.longitude,
-              originLatitude: query.origin.latitude
-            })
-            .addSelect(feedDistance, 'feed_distance')
-            .orderBy('feed_distance', 'ASC')
-            .addOrderBy('event.firstStartsAt', 'ASC')
-            .addOrderBy('event.id', 'ASC');
-          if (cursor) {
-            scoped.andWhere(
-              `(${feedDistance}, event.first_starts_at, event.id) >
-                (:cursorDistance, :cursorStart, :cursorId)`,
-              {
-                cursorDistance: cursor.distanceMeters,
-                cursorStart: cursor.firstStartsAt,
-                cursorId: cursor.id
-              }
-            );
-          }
-        }
-      } else {
-        scoped.andWhere(
-          `event.format = 'OFFLINE' AND EXISTS (
-            SELECT 1 FROM event_location_snapshot snapshot
-            WHERE snapshot.event_id = event.id AND snapshot.city_id = :cityId
-          )`,
-          { cityId: query.cityId }
-        );
-      }
-      return scoped.getRawAndEntities<FeedRow>();
-    };
-
-    let source: 'CITY' | 'ONLINE' | 'MAP' = query.bounds
-      ? 'MAP'
-      : query.format === 'ONLINE'
-        ? 'ONLINE'
-        : (cursor?.source ?? 'CITY');
-    let page = await run(source);
-    if (!cursor && !query.format && !query.bounds && !query.origin && !page.entities.length) {
-      source = 'ONLINE';
-      page = await run(source);
-    }
-
-    const items = page.entities.slice(0, query.limit).map((entity, index) => {
-      const row = page.raw[index];
-      return {
-        ...this.toDomain(entity),
-        hasAvailablePlaces: row.feed_available,
-        distanceMeters: row.feed_distance,
-        mapCoordinates:
-          row.feed_latitude === undefined || row.feed_longitude === undefined
-            ? undefined
-            : { latitude: row.feed_latitude, longitude: row.feed_longitude }
-      };
-    });
-    const last = items.at(-1);
-    return {
-      items,
-      nextCursor:
-        last && page.entities.length > query.limit
-          ? encodeEventCursor({
-              id: last.id,
-              firstStartsAt: page.raw[items.length - 1].feed_start,
-              distanceMeters: last.distanceMeters,
-              source
-            })
-          : null
-    };
+    const rows = await builder
+      .orderBy('event.first_ends_at', 'DESC')
+      .addOrderBy('event.id', 'DESC')
+      .limit(limit + 1)
+      .getMany();
+    const items = rows.slice(0, limit).map((row) => toEvent(row));
+    return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
   }
 
-  private applyMapBounds(
-    builder: SelectQueryBuilder<EventEntity>,
-    bounds: NonNullable<FindPublishedEventsQuery['bounds']>
-  ): void {
-    const point = `(${publicPoint})`;
-    const envelope = 'ST_MakeEnvelope(:minLng, :minLat, :maxLng, :maxLat, 4326)';
-    builder
-      .andWhere(`ST_Intersects(${point}, ${envelope})`, { ...bounds })
-      .addSelect(`ST_Y(${point})`, 'feed_latitude')
-      .addSelect(`ST_X(${point})`, 'feed_longitude');
-  }
-
-  private applyFeedPeriod(
-    builder: SelectQueryBuilder<EventEntity>,
-    query: FindPublishedEventsQuery
-  ): void {
-    const today =
-      'CAST(timezone(CAST(:feedTimezone AS text), CAST(:feedNow AS timestamptz)) AS date)';
-    const eventDay = 'CAST(timezone(CAST(:feedTimezone AS text), event.first_starts_at) AS date)';
-    builder.setParameter('feedTimezone', query.timezone);
-    if (query.period === 'WEEKEND') {
-      const weekday = `CAST(EXTRACT(ISODOW FROM ${today}) AS integer)`;
-      const saturday = `(${today} + 6 - ${weekday})`;
-      builder.andWhere(`${eventDay} BETWEEN ${saturday} AND (${saturday} + 1)`);
-    } else {
-      const offset = query.period === 'TOMORROW' ? 1 : 0;
-      builder.andWhere(`${eventDay} = (${today} + CAST(:dayOffset AS integer))`, {
-        dayOffset: offset
-      });
-    }
-  }
-
-  findLocationSnapshot(eventId: string, locationId: string): Promise<EventLocationSnapshot | null> {
-    return this.repository.manager
+  async findLocationSnapshot(
+    eventId: string,
+    locationId: string
+  ): Promise<EventLocationSnapshot | null> {
+    const { entities, raw } = await this.repository.manager
       .getRepository(EventLocationSnapshotEntity)
-      .findOneBy({ eventId, locationId });
-  }
-
-  private toDomain(entity: EventEntity): Event {
+      .createQueryBuilder('snapshot')
+      .innerJoin('cities', 'city', 'city.id = snapshot.city_id')
+      .leftJoin('districts', 'district', snapshotDistrict)
+      .where('snapshot.event_id = :eventId AND snapshot.location_id = :locationId', {
+        eventId,
+        locationId
+      })
+      .addSelect('district.id', 'area_id')
+      .addSelect('district.name', 'area_name')
+      .addSelect(`ST_Y(${areaPoint})`, 'area_latitude')
+      .addSelect(`ST_X(${areaPoint})`, 'area_longitude')
+      .getRawAndEntities<{
+        area_id: string | null;
+        area_name: string | null;
+        area_latitude: number;
+        area_longitude: number;
+      }>();
+    const [snapshot] = entities;
+    if (!snapshot) return null;
+    const [area] = raw;
     return {
-      id: entity.id,
-      organizerId: entity.organizerId,
-      title: entity.title,
-      categoryId: entity.categoryId,
-      description: entity.description,
-      coverUrl: entity.coverUrl,
-      mediaUrls: entity.mediaUrls,
-      format: entity.format,
-      primaryLocationId: entity.primaryLocationId,
-      onlineUrl: entity.onlineUrl,
-      hideExactAddress: entity.hideExactAddress,
-      capacityLimit: entity.capacityLimit,
-      hasApprovedParticipants: entity.hasApprovedParticipants,
-      participationMode: entity.participationMode,
-      ageRestriction: entity.ageRestriction,
-      isFree: entity.isFree,
-      priceText: entity.priceText,
-      itemsToBring: entity.itemsToBring,
-      status: entity.status,
-      cancellationReason: entity.cancellationReason,
-      isHiddenByAdmin: entity.isHiddenByAdmin,
-      firstStartsAt: entity.firstStartsAt,
-      firstEndsAt: entity.firstEndsAt,
-      timezone: entity.timezone,
-      publishedAt: entity.publishedAt,
-      createdAt: entity.createdAt,
-      updatedAt: entity.updatedAt
+      ...snapshot,
+      districtId: area.area_id,
+      districtName: area.area_name,
+      publicCoordinates: { latitude: area.area_latitude, longitude: area.area_longitude }
     };
   }
 }

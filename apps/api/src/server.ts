@@ -1,4 +1,5 @@
 import { logger } from './common/index.js';
+import { createServer } from 'node:http';
 import { env } from './config/env.js';
 import { AppDataSource } from './db/data-source.js';
 import { createModules } from './bootstrap/modules.js';
@@ -14,21 +15,32 @@ try {
     onboardingRouter: modules.onboarding.router,
     geolocationRouter: modules.geolocation.router,
     adminUsersRouter: modules.moderation.adminUsersRouter,
+    dictionariesRouter: modules.dictionaries.router,
     eventsRouter: modules.events.router,
     profilesRouter: modules.events.profilesRouter,
     notificationsRouter: modules.notifications.router,
     reportsRouter: modules.moderation.reportsRouter,
     imageMediaRouter: modules.storage.imageMediaRouter,
-    profilePhotosRouter: modules.profilePhotosRouter
+    profilePhotosRouter: modules.profilePhotosRouter,
+    profileSettingsRouter: modules.profileSettingsRouter,
+    userBlocksRouter: modules.userBlocksRouter,
+    accountDeletionRouter: modules.accountDeletionRouter
   });
 
-  const server = app.listen(env.PORT, () => {
+  const server = createServer(app).listen({ port: env.PORT, host: env.BIND_HOST }, () => {
     logger.info(`API running at http://localhost:${env.PORT}`);
     logger.info(`Docs available at http://localhost:${env.PORT}/docs`);
+    if (process.connected) process.send?.({ type: 'ready' });
+  });
+  server.once('error', (err) => {
+    logger.fatal({ err }, 'HTTP server failed to listen');
+    process.exit(1);
   });
   const stopEventLifecycleWorker = modules.events.startLifecycleWorker();
   const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
   const stopBlockExpiry = modules.moderation.startBlockExpiryWorker();
+  const stopAccountDeletion = modules.startAccountDeletionWorker();
+  const stopGeocodingCacheCleanup = modules.geolocation.startCacheCleanup();
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
@@ -38,7 +50,9 @@ try {
     const workersStopped = Promise.all([
       stopEventLifecycleWorker(),
       stopNotificationDelivery(),
-      stopBlockExpiry()
+      stopBlockExpiry(),
+      stopAccountDeletion(),
+      stopGeocodingCacheCleanup()
     ]);
 
     server.close(async (closeErr) => {
@@ -65,6 +79,7 @@ try {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  if (process.connected) process.on('disconnect', () => shutdown('IPC disconnect'));
 } catch (err) {
   logger.fatal({ err }, 'Failed to start');
   process.exit(1);
