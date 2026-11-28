@@ -70,7 +70,9 @@ Variable Description
 
 Set `TRUST_PROXY_HOPS` to the exact number of trusted proxy hops only when clients cannot
 reach the API directly or through a shorter path. The default is `0`.
-Login, signup and event participation rate limits use fixed windows in each API process.
+Most HTTP rate limits use fixed windows in each API process. Authentication limits are shared
+across API replicas through PostgreSQL. Geocoding separately coordinates its upstream request
+limit across replicas.
 
 #### CLIENT_URL _Client URL (CORS + redirects)_
 
@@ -99,6 +101,10 @@ The API coordinates a one-request-per-second upstream limit across replicas. See
 
 #### STORAGE_ACCESS_KEY_ID / STORAGE_SECRET_ACCESS_KEY _S3 credentials_
 
+Set `STORAGE_IMAGE_SIGNING_SECRET` to a stable random secret of at least 32 characters in
+production. It signs media URLs and must remain unchanged across deployments. Development falls
+back to `JWT_ACCESS_SECRET` when this variable is unset.
+
 The account deletion worker lists and deletes objects under `images/<userId>/`. The storage
 credentials need bucket listing and object deletion access for that prefix. Configure lifecycle
 rules for retained object versions if the bucket uses versioning.
@@ -113,8 +119,9 @@ For account creation, send `termsAccepted: true` with password registration and 
 verification. For Google signup, start OAuth with `?termsAccepted=true` after consent.
 
 For the interests section, request `GET /api/v1/events?byInterests=true` with an authenticated
-session after onboarding. Matching uses active interests and case-insensitive exact matches
-against category names and event tags. The map accepts the same filter.
+session after onboarding. Active interests match normalized category and event-tag keys. Those
+keys are initialized from the original labels, so renaming a category, interest, or tag does not
+silently change existing matches. The map accepts the same filter.
 
 Hidden event locations use district centers. The Kyiv seed uses the
 [UNICEF GIS KyivDistricts layer](https://gis.unicef.org/server/rest/services/Hosted/KyivDistricts/FeatureServer/0).

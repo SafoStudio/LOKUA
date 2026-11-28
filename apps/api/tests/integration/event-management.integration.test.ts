@@ -2376,16 +2376,19 @@ describe('event management and feed with PostgreSQL', () => {
 
     const statusPath = `/admin/users/${organizer.id}/status`;
     const blockedUntil = new Date(Date.now() + 60_000);
+    const users = dataSource.getRepository(UserEntity);
+    const initialSessionVersion = (await users.findOneByOrFail({ id: organizer.id })).sessionVersion;
     await api.patch(statusPath).set('X-Test-User', administrator.id)
       .send({ status: 'BLOCKED_TEMPORARY', reason: 'Report decision', blockedUntil }).expect(200);
-    const users = dataSource.getRepository(UserEntity);
-    expect(await users.findOneByOrFail({ id: organizer.id }))
-      .toMatchObject({ status: 'BLOCKED_TEMPORARY', blockedUntil });
+    const blockedUser = await users.findOneByOrFail({ id: organizer.id });
+    expect(blockedUser.sessionVersion).not.toBe(initialSessionVersion);
+    expect(blockedUser).toMatchObject({ status: 'BLOCKED_TEMPORARY', blockedUntil });
     await users.update(organizer.id, { blockedUntil: new Date(Date.now() - 1) });
     const stop = moderation.startBlockExpiryWorker();
     await stop();
-    expect(await users.findOneByOrFail({ id: organizer.id }))
-      .toMatchObject({ status: 'ACTIVE', blockedUntil: null });
+    const unblockedUser = await users.findOneByOrFail({ id: organizer.id });
+    expect(unblockedUser).toMatchObject({ status: 'ACTIVE', blockedUntil: null });
+    expect(unblockedUser.sessionVersion).not.toBe(blockedUser.sessionVersion);
     expect(await dataSource.getRepository(NotificationEntity).countBy({
       recipientId: organizer.id, type: 'ACCOUNT_STATUS_CHANGED'
     })).toBe(2);

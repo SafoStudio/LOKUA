@@ -3,6 +3,7 @@ import { logger, toEntityManager } from '../../../common/index.js';
 import type { TransactionContext } from '../../../common/index.js';
 import { notificationCopy } from '../notification-copy.js';
 import type { NotificationInput, NotificationPublisher } from '../notification-publisher.js';
+import type { NotificationReader } from '../application/index.js';
 import { NotificationEntity } from './persistence/entities/notification.entity.js';
 
 export type NotificationEmailSender = (email: {
@@ -25,7 +26,7 @@ interface DeliveryRow {
 
 export type AccountRecoveryLink = (userId: string, requestedAt: Date) => Promise<string>;
 
-export class NotificationStore implements NotificationPublisher {
+export class NotificationStore implements NotificationPublisher, NotificationReader {
   private readonly repository: Repository<NotificationEntity>;
 
   constructor(

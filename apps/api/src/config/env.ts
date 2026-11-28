@@ -70,6 +70,10 @@ const envSchema = z
   .refine((value) => value.NODE_ENV !== 'production' || value.LOCAL_SMTP_PORT === undefined, {
     path: ['LOCAL_SMTP_PORT'],
     message: 'Local SMTP is only supported outside production'
+  })
+  .refine((value) => value.NODE_ENV !== 'production' || value.STORAGE_IMAGE_SIGNING_SECRET, {
+    path: ['STORAGE_IMAGE_SIGNING_SECRET'],
+    message: 'A stable image signing secret is required in production'
   });
 
 const parsedEnv = envSchema.safeParse(process.env);

@@ -1,4 +1,5 @@
 type: object
+description: Exact location details. Account-owned locations are returned with exact precision only to their owner.
 required:
   - id
   - name

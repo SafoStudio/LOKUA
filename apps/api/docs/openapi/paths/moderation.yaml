@@ -235,6 +235,7 @@
   patch:
     tags: [Admin / Users]
     summary: Block or unblock an account as an administrator
+    description: Changing the account status invalidates the user's existing access and refresh tokens.
     security: *moderationSecurity
     requestBody:
       required: true

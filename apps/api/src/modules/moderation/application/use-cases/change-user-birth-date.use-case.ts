@@ -19,11 +19,10 @@ export class ChangeUserBirthDateUseCase {
   ) {}
 
   async execute(command: ChangeUserBirthDateCommand): Promise<User> {
-    const target = await this.users.findById(command.targetUserId);
-
-    if (!target) throw new AppError('User not found', 404);
-
     return this.unitOfWork.run(async (tx) => {
+      const target = await this.users.findById(command.targetUserId, tx, true);
+      if (!target) throw new AppError('User not found', 404);
+
       const updated = await this.users.setBirthDate(command.targetUserId, command.birthDate, tx);
 
       await this.audit.log(

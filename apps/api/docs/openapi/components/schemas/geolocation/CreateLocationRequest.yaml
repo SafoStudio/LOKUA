@@ -1,4 +1,5 @@
 type: object
+description: Creates an account-owned location. Account-owned locations are excluded from public location searches.
 required: [name, address, cityId, exactCoordinates]
 properties:
   name:

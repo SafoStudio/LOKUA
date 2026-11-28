@@ -1,4 +1,5 @@
 export type { AuditLogger } from './ports/audit-logger.js';
+export type { ModerationStorePort, ModerationTarget } from './ports/moderation-store.js';
 export type { AuditEntry } from './types/audit-entry.js';
 
 export { ChangeUserBirthDateUseCase } from './use-cases/change-user-birth-date.use-case.js';

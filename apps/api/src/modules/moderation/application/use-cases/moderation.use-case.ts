@@ -2,17 +2,18 @@ import { AppError } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
 import type { NotificationPublisher } from '../../../notifications/index.js';
 import type { AccessService, AuthUser, UserBlockProvider } from '../../../users/index.js';
-import type { ReportObjectType, ReportStatus } from '../../domain/index.js';
 import type {
-  ModerationStore,
-  AccountStatus
-} from '../../infrastructure/persistence/adapters/moderation.store.js';
-import type { ContentType } from '../../infrastructure/persistence/adapters/moderation-targets.js';
+  AccountStatus,
+  ContentType,
+  ReportObjectType,
+  ReportStatus
+} from '../../domain/index.js';
+import type { ModerationStorePort } from '../ports/moderation-store.js';
 import type { AuditLogger } from '../ports/audit-logger.js';
 
 export class ModerationUseCase {
   constructor(
-    private readonly store: ModerationStore,
+    private readonly store: ModerationStorePort,
     private readonly unitOfWork: UnitOfWork,
     private readonly audit: AuditLogger,
     private readonly access: AccessService,
