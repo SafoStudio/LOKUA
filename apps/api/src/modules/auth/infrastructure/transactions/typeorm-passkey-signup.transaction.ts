@@ -61,9 +61,6 @@ export class TypeOrmPasskeySignupTransaction implements PasskeySignupTransaction
         if (pgError.constraint === 'idx_users_email') {
           throw new AppError('Email already registered', 409);
         }
-        if (pgError.constraint === 'idx_passkey_credentials_credential_id') {
-          throw new AppError('Passkey already registered', 409);
-        }
         throw new AppError('Account or Passkey already exists', 409);
       }
 

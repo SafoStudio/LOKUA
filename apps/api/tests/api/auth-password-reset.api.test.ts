@@ -5,6 +5,17 @@ import { AppError } from '../../src/common/index.js';
 
 describe('Auth Password Reset API', () => {
     describe('POST /api/v1/auth/password-reset/request', () => {
+        it('limits repeated delivery attempts to the same normalized address', async () => {
+            const { app, mocks } = createTestApp();
+            for (let attempt = 0; attempt < 3; attempt++) {
+                await request(app).post('/api/v1/auth/password-reset/request')
+                    .send({ email: 'USER@example.com' }).expect(200);
+            }
+            await request(app).post('/api/v1/auth/password-reset/request')
+                .send({ email: 'user@example.com' }).expect(429);
+            expect(mocks.requestPasswordReset.execute).toHaveBeenCalledTimes(3);
+        });
+
         it('returns 200 with generic message when email exists', async () => {
             const { app, mocks } = createTestApp();
 

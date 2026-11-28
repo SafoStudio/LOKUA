@@ -57,8 +57,14 @@ export class AuthUserProviderAdapter implements AuthUserProvider {
       onboardingCompleted: user.onboardingCompleted,
       birthDate: user.birthDate,
       ...(user.deletionRequestedAt
-        ? { sessionVersion: user.deletionRequestedAt.toISOString() }
-        : {})
+        ? {
+            sessionVersion: user.sessionVersion
+              ? `${user.sessionVersion}:${user.deletionRequestedAt.toISOString()}`
+              : user.deletionRequestedAt.toISOString()
+          }
+        : user.sessionVersion
+          ? { sessionVersion: user.sessionVersion }
+          : {})
     };
   }
 }

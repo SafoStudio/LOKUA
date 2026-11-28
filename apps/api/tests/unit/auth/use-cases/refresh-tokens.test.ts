@@ -33,7 +33,8 @@ describe('RefreshTokensUseCase', () => {
     revokeById: vi.fn(),
     rotate: vi.fn().mockResolvedValue(true),
     revokeByTokenHash: vi.fn(),
-    revokeAllByUserId: vi.fn()
+    revokeAllByUserId: vi.fn(),
+    revokeFamily: vi.fn()
   };
 
   const securityEvents: SecurityEventRepository = {
@@ -160,6 +161,29 @@ describe('RefreshTokensUseCase', () => {
       message: 'Invalid refresh token'
     });
 
+    expect(refreshSessions.revokeAllByUserId).not.toHaveBeenCalled();
+  });
+
+  it('revokes only the refresh family when an already rotated token is presented', async () => {
+    vi.mocked(tokens.verifyRefreshToken).mockResolvedValueOnce({
+      userId: 'user-1',
+      jti: 'session-1'
+    });
+    vi.mocked(refreshSessions.findById).mockResolvedValueOnce({
+      id: 'session-1',
+      userId: 'user-1',
+      tokenHash: hashOf('previous-token'),
+      expiresAt: new Date(Date.now() + 60_000),
+      createdAt: new Date(),
+      revokedAt: new Date(),
+      rotatedAt: new Date(),
+      familyId: 'family-1'
+    });
+
+    await expect(useCase.execute('previous-token', context)).rejects.toMatchObject({
+      statusCode: 401
+    });
+    expect(refreshSessions.revokeFamily).toHaveBeenCalledWith('user-1', 'family-1');
     expect(refreshSessions.revokeAllByUserId).not.toHaveBeenCalled();
   });
 

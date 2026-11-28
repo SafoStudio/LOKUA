@@ -190,7 +190,10 @@ export function createTestApp(mocks = createMockDependencies()) {
     access: mocks.access
   });
 
-  const authRouter = createAuthRouter(controller, middleware);
+  const authRouter = createAuthRouter(controller, {
+    ...middleware,
+    authorizePasskeyEnrollment: (_req, _res, next) => next()
+  });
   const app = createApp({
     authRouter,
     eventsRouter: Router()

@@ -28,4 +28,11 @@ export class RefreshSessionEntity {
 
   @Column({ type: 'timestamptz', name: 'revoked_at', nullable: true })
   revokedAt!: Date | null;
+
+  @Column({ type: 'timestamptz', name: 'rotated_at', nullable: true })
+  rotatedAt!: Date | null;
+
+  @Index('idx_refresh_sessions_family_id')
+  @Column({ type: 'uuid', name: 'family_id', nullable: true })
+  familyId!: string | null;
 }

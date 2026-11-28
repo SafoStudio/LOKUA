@@ -17,6 +17,7 @@ export interface User {
   termsAcceptedAt: Date | null;
   blockedUntil: Date | null;
   deletionRequestedAt: Date | null;
+  sessionVersion?: string;
   notificationSettings: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;

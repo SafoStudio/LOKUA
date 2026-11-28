@@ -66,6 +66,7 @@ export class UserRepositoryAdapter implements UserRepository {
       termsAcceptedAt: entity.termsAcceptedAt,
       blockedUntil: entity.blockedUntil,
       deletionRequestedAt: entity.deletionRequestedAt,
+      ...(entity.sessionVersion ? { sessionVersion: entity.sessionVersion } : {}),
       notificationSettings: entity.notificationSettings,
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt

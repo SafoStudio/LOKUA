@@ -16,8 +16,13 @@ export class LoginWithGoogleUseCase {
     private readonly securityEvents: SecurityEventRepository
   ) {}
 
-  async execute(code: string, context: SecurityContext, termsAccepted = false): Promise<AuthUser> {
-    const profile = await this.google.exchangeCode(code);
+  async execute(
+    code: string,
+    context: SecurityContext,
+    termsAccepted = false,
+    verifier?: string
+  ): Promise<AuthUser> {
+    const profile = await this.google.exchangeCode(code, verifier);
 
     if (!profile.emailVerified) {
       await this.securityEvents.record({

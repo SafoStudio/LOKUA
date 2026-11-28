@@ -1,4 +1,5 @@
-export type PasskeyChallengeType = 'SIGNUP' | 'REGISTRATION' | 'AUTHENTICATION';
+export type PasskeyChallengeType =
+  'SIGNUP' | 'REGISTRATION' | 'AUTHENTICATION' | 'ENROLLMENT_EMAIL';
 
 export interface PasskeyChallenge {
   id: string;

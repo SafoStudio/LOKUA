@@ -2,7 +2,7 @@
   post:
     tags: [Account Settings]
     summary: Send a confirmation link to a new email address
-    description: The current address stays active until the new address is confirmed. The link expires in one hour.
+    description: Requires the current password or a fresh Passkey assertion from the signed-in account. Obtain a Passkey challenge from the Passkey login options endpoint. The confirmation link expires in one hour.
     security: &accountSettingsSecurity
       - CookieAuth: []
       - BearerAuth: []
@@ -12,10 +12,25 @@
         application/json:
           schema:
             type: object
-            required: [email]
+            required: [email, proof]
             additionalProperties: false
             properties:
               email: { type: string, format: email, maxLength: 255 }
+              proof:
+                oneOf:
+                  - type: object
+                    required: [method, password]
+                    additionalProperties: false
+                    properties:
+                      method: { const: password }
+                      password: { type: string, minLength: 1, maxLength: 72 }
+                  - type: object
+                    required: [method, challenge, response]
+                    additionalProperties: false
+                    properties:
+                      method: { const: passkey }
+                      challenge: { type: string, minLength: 1, maxLength: 2048 }
+                      response: { type: object, additionalProperties: true }
     responses:
       '202': { description: Confirmation email sent }
       '400': { description: Invalid email }
@@ -23,6 +38,7 @@
       '403': { description: Inactive account }
       '409': { description: Address already in use }
       '422': { description: The address must differ from the current address }
+      '429': { description: Too many email change requests }
 /api/v1/auth/change-email/confirm:
   post:
     tags: [Account Settings]

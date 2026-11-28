@@ -6,7 +6,7 @@ export interface GoogleProfile {
 }
 
 export interface GoogleOAuthProvider {
-  buildAuthUrl(state: string): string;
+  buildAuthUrl(state: string, verifier: string): string;
 
-  exchangeCode(code: string): Promise<GoogleProfile>;
+  exchangeCode(code: string, verifier?: string): Promise<GoogleProfile>;
 }

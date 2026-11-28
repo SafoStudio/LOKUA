@@ -32,11 +32,20 @@ export class RefreshTokensUseCase {
 
     const tokenHash = createHash('sha256').update(refreshToken).digest('hex');
 
-    if (session.tokenHash !== tokenHash) {
+    const hashMismatch = session.tokenHash !== tokenHash;
+    const replayedFamily = session.rotatedAt ? session.familyId : undefined;
+
+    if (hashMismatch || replayedFamily) {
       logger.warn(
-        { userId: session.userId, sessionId: session.id },
-        'Refresh token reuse detected, revoking all sessions'
+        { userId: session.userId, sessionId: session.id, hashMismatch },
+        'Refresh token reuse detected'
       );
+
+      if (replayedFamily && !hashMismatch) {
+        await this.refreshSessions.revokeFamily(session.userId, replayedFamily);
+      } else {
+        await this.refreshSessions.revokeAllByUserId(session.userId);
+      }
 
       await this.securityEvents.record({
         userId: session.userId,
@@ -46,16 +55,10 @@ export class RefreshTokensUseCase {
         metadata: { sessionId: session.id }
       });
 
-      await this.refreshSessions.revokeAllByUserId(session.userId);
-
       throw new AppError('Invalid refresh token', 401);
     }
 
-    if (session.revokedAt !== null) {
-      throw new AppError('Invalid refresh token', 401);
-    }
-
-    if (session.expiresAt.getTime() <= Date.now()) {
+    if (session.revokedAt !== null || session.expiresAt.getTime() <= Date.now()) {
       throw new AppError('Invalid refresh token', 401);
     }
 

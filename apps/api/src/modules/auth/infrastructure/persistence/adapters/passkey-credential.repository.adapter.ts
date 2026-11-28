@@ -1,4 +1,5 @@
 import type { Repository } from 'typeorm';
+import { AppError, isUniqueConstraintViolation } from '../../../../../common/index.js';
 import type { PasskeyCredentialRepository, PasskeyCredential } from '../../../application/index.js';
 import type { PasskeyCredentialEntity } from '../entities/passkey-credential.entity.js';
 
@@ -23,7 +24,14 @@ export class PasskeyCredentialRepositoryAdapter implements PasskeyCredentialRepo
 
   async create(data: Omit<PasskeyCredential, 'id'>): Promise<void> {
     const entity = this.repository.create(data);
-    await this.repository.save(entity);
+    try {
+      await this.repository.save(entity);
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new AppError('Passkey already registered', 409);
+      }
+      throw error;
+    }
   }
 
   async updateCounter(credentialId: string, counter: string): Promise<void> {

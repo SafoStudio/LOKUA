@@ -1,4 +1,4 @@
-import { AppError } from '../../../../common/index.js';
+import { AppError, logger } from '../../../../common/index.js';
 import type { AuthUser } from '../../../users/index.js';
 
 export interface EmailChangeStore {
@@ -18,7 +18,8 @@ export class ChangeEmailUseCase {
   constructor(
     private readonly store: EmailChangeStore,
     private readonly tokens: EmailChangeTokens,
-    private readonly sendConfirmation: (email: string, token: string) => Promise<void>
+    private readonly sendConfirmation: (email: string, token: string) => Promise<void>,
+    private readonly notifyPreviousAddress: (email: string) => Promise<void>
   ) {}
 
   async request(user: AuthUser, input: string): Promise<void> {
@@ -33,5 +34,10 @@ export class ChangeEmailUseCase {
   async confirm(user: AuthUser, token: string): Promise<void> {
     const email = await this.tokens.read(token, user);
     await this.store.confirm(user.id, user.email, email, this.tokens.hash(token));
+    try {
+      await this.notifyPreviousAddress(user.email);
+    } catch (err) {
+      logger.error({ err, userId: user.id }, 'Failed to notify previous email address');
+    }
   }
 }

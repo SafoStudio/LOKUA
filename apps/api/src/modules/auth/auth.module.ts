@@ -56,6 +56,10 @@ import { ChangeEmailUseCase } from './application/use-cases/change-email.use-cas
 import { JwtEmailChangeTokens } from './infrastructure/crypto/email-change-tokens.js';
 import { TypeOrmEmailChangeStore } from './infrastructure/persistence/adapters/email-change.store.js';
 import { createEmailChangeRouter } from './presentation/http/email-change.routes.js';
+import { createSharedAuthRateLimit } from './infrastructure/persistence/adapters/auth-rate-limit.js';
+import { AuthorizePasskeyEnrollmentUseCase } from './application/use-cases/authorize-passkey-enrollment.use-case.js';
+import { createReauthentication } from './presentation/http/reauthentication.js';
+import { createPasskeyEnrollmentHandlers } from './presentation/http/passkey-enrollment.middleware.js';
 import { parseTtlToMs } from './application/use-cases/parse-ttl.js';
 import { env } from '../../config/env.js';
 
@@ -171,20 +175,32 @@ export function createAuthModule({
     securityEvents
   );
 
-  const resetPassword = new ResetPasswordUseCase(
-    passwordResetTokens,
-    passwordCredentials,
-    passwordHasher,
-    refreshSessions,
-    securityEvents
-  );
+  const resetPassword: Pick<ResetPasswordUseCase, 'execute'> = {
+    execute: (input, context) =>
+      dataSource.transaction(async (manager) => {
+        const useCase = new ResetPasswordUseCase(
+          new PasswordResetTokenRepositoryAdapter(manager.getRepository(PasswordResetTokenEntity)),
+          new PasswordCredentialRepositoryAdapter(manager.getRepository(PasswordCredentialEntity)),
+          passwordHasher,
+          new RefreshSessionRepositoryAdapter(manager.getRepository(RefreshSessionEntity)),
+          new SecurityEventRepositoryAdapter(manager.getRepository(SecurityEventEntity))
+        );
+        await useCase.execute(input, context);
+      })
+  };
 
-  const changePassword = new ChangePasswordUseCase(
-    passwordCredentials,
-    passwordHasher,
-    refreshSessions,
-    securityEvents
-  );
+  const changePassword: Pick<ChangePasswordUseCase, 'execute'> = {
+    execute: (input, context) =>
+      dataSource.transaction(async (manager) => {
+        const useCase = new ChangePasswordUseCase(
+          new PasswordCredentialRepositoryAdapter(manager.getRepository(PasswordCredentialEntity)),
+          passwordHasher,
+          new RefreshSessionRepositoryAdapter(manager.getRepository(RefreshSessionEntity)),
+          new SecurityEventRepositoryAdapter(manager.getRepository(SecurityEventEntity))
+        );
+        await useCase.execute(input, context);
+      })
+  };
 
   const logout = new LogoutUseCase(refreshSessions, securityEvents);
   const logoutAll = new LogoutAllUseCase(refreshSessions, securityEvents);
@@ -258,7 +274,30 @@ export function createAuthModule({
     access
   });
 
-  const router = createAuthRouter(controller, middleware);
+  const rateLimit = createSharedAuthRateLimit(dataSource);
+  const reauthenticate = createReauthentication(login, completePasskeyLogin);
+  const enrollment = new AuthorizePasskeyEnrollmentUseCase(passkeyChallenges, (to, code) =>
+    emailService.sendNotificationEmail({
+      to,
+      title: 'Підтвердження додавання ключа доступу LOKUA',
+      message: `Код підтвердження: ${code}. Він дійсний 10 хвилин.`
+    })
+  );
+  const enrollmentHandlers = createPasskeyEnrollmentHandlers(enrollment, reauthenticate);
+  const router = createAuthRouter(
+    controller,
+    {
+      ...middleware,
+      authorizePasskeyEnrollment: enrollmentHandlers.authorize
+    },
+    rateLimit
+  );
+  router.post(
+    '/passkey/registration/email-code',
+    middleware.requireAuth,
+    rateLimit('enrollment-email', 3, 15 * 60_000, (req) => req.user?.id ?? 'unknown'),
+    enrollmentHandlers.requestCode
+  );
   const changeEmail = new ChangeEmailUseCase(
     new TypeOrmEmailChangeStore(dataSource),
     new JwtEmailChangeTokens(env.JWT_REFRESH_SECRET),
@@ -270,9 +309,24 @@ export function createAuthModule({
         title: 'Підтвердження нової email-адреси',
         message: `Підтвердьте нову email-адресу протягом години: ${url}`
       });
-    }
+    },
+    (to) =>
+      emailService.sendNotificationEmail({
+        to,
+        title: 'Вашу email-адресу змінено',
+        message:
+          'Email-адресу вашого акаунта LOKUA змінено. Якщо це були не ви, зверніться до підтримки.'
+      })
   );
-  router.use(createEmailChangeRouter(middleware.requireAuth, changeEmail));
+  router.use(
+    createEmailChangeRouter(
+      middleware.requireAuth,
+      changeEmail,
+      login,
+      completePasskeyLogin,
+      rateLimit('change-email', 5, 15 * 60_000, (req) => req.user?.id ?? 'unknown')
+    )
+  );
 
   return {
     sendNotificationEmail: emailService.sendNotificationEmail.bind(emailService),

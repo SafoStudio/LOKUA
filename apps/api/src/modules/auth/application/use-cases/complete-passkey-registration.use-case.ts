@@ -9,19 +9,6 @@ export interface CompletePasskeyRegistrationInput {
   response: unknown;
 }
 
-function isUniqueConstraintViolation(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-
-  const driverError = 'driverError' in error ? error.driverError : error;
-
-  return (
-    typeof driverError === 'object' &&
-    driverError !== null &&
-    'code' in driverError &&
-    driverError.code === '23505'
-  );
-}
-
 export class CompletePasskeyRegistrationUseCase {
   constructor(
     private readonly challenges: PasskeyChallengeRepository,
@@ -48,17 +35,9 @@ export class CompletePasskeyRegistrationUseCase {
 
     if (!credential) throw new AppError('Passkey verification failed', 400);
 
-    try {
-      await this.credentials.create({
-        userId: input.userId,
-        ...credential
-      });
-    } catch (error) {
-      if (isUniqueConstraintViolation(error)) {
-        throw new AppError('Passkey already registered', 409);
-      }
-
-      throw error;
-    }
+    await this.credentials.create({
+      userId: input.userId,
+      ...credential
+    });
   }
 }

@@ -1831,31 +1831,47 @@ describe('event management and feed with PostgreSQL', () => {
     const tokens = new JwtTokenService();
     const { requireAuth } = createAuthMiddleware({ tokenService: tokens, users: users.authUsers, access: users.access });
     const messages: { email: string; token: string }[] = [];
+    const previousAddresses: string[] = [];
     const changeEmail = new ChangeEmailUseCase(
       new TypeOrmEmailChangeStore(dataSource),
       new JwtEmailChangeTokens('test-only-email-change-secret'),
-      async (email, token) => { messages.push({ email, token }); }
+      async (email, token) => { messages.push({ email, token }); },
+      async (email) => { previousAddresses.push(email); }
     );
     const app = express();
     app.use(express.json());
-    app.use(createEmailChangeRouter(requireAuth, changeEmail));
+    app.use(createEmailChangeRouter(
+      requireAuth,
+      changeEmail,
+      {
+        async execute({ email, password }) {
+          const account = await users.authUsers.findByEmail(email);
+          if (!account || password !== 'valid-password') throw new AppError('Invalid credentials', 401);
+          return account;
+        }
+      },
+      { async verify() { throw new Error('Passkey verification was not expected'); } }
+    ));
     app.use(errorHandler);
     const api = request(app);
     const [ownerToken, otherToken] = await Promise.all(
       [user, other].map(({ id }) => tokens.signAccessToken({ userId: id }))
     );
-    const start = (email: string) =>
-      api.post('/change-email').set('Authorization', `Bearer ${ownerToken}`).send({ email });
+    const start = (email: string, password = 'valid-password') =>
+      api.post('/change-email').set('Authorization', `Bearer ${ownerToken}`)
+        .send({ email, proof: { method: 'password', password } });
     const confirm = (session: string, token: string) =>
       api.post('/change-email/confirm').set('Authorization', `Bearer ${session}`).send({ token });
     await start(other.email).expect(409);
     const email = `${randomUUID()}@example.net`;
+    await start(email, 'incorrect-password').expect(401);
     await start(email.toUpperCase()).expect(202);
     expect(messages).toEqual([{ email, token: expect.any(String) }]);
     expect((await users.authUsers.findById(user.id))?.email).toBe(user.email);
     const { token } = messages[0];
     await confirm(otherToken, token).expect(400);
     await confirm(ownerToken, token).expect(204);
+    expect(previousAddresses).toEqual([user.email]);
     await confirm(ownerToken, token).expect(400);
     expect(await users.authUsers.findById(user.id)).toMatchObject({ email, emailVerified: true });
     expect(await users.authUsers.findByEmail(user.email)).toBeNull();

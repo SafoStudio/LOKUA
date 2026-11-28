@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import { validate } from '../../../../middlewares/index.js';
 import { createRequestRateLimit } from '../../../../middlewares/request-rate-limit.js';
 import {
@@ -19,12 +19,32 @@ import type { AuthController } from './auth.controller.js';
 interface AuthMiddleware {
   requireAuth: RequestHandler;
   requireRefreshToken: RequestHandler;
+  authorizePasskeyEnrollment: RequestHandler;
 }
 
-export function createAuthRouter(controller: AuthController, middleware: AuthMiddleware) {
+export type AuthRateLimit = (
+  scope: string,
+  limit: number,
+  windowMs: number,
+  key?: (request: Request) => string
+) => RequestHandler;
+
+export function createAuthRouter(
+  controller: AuthController,
+  middleware: AuthMiddleware,
+  rateLimit: AuthRateLimit = (_scope, limit, windowMs, key) =>
+    createRequestRateLimit({ limit, windowMs, key })
+) {
   const router = Router();
-  const signupLimit = createRequestRateLimit({ limit: 10, windowMs: 60 * 60_000 });
-  const loginLimit = createRequestRateLimit({ limit: 20, windowMs: 15 * 60_000 });
+  const signupLimit = rateLimit('signup', 10, 60 * 60_000);
+  const loginLimit = rateLimit('login', 20, 15 * 60_000);
+  const mailWindowMs = 15 * 60_000;
+  const resetIpLimit = rateLimit('reset-ip', 10, mailWindowMs);
+  const resetEmailLimit = rateLimit('reset-email', 3, mailWindowMs, (req) =>
+    (req.body.email as string).trim().toLowerCase()
+  );
+  const resendLimit = rateLimit('resend', 3, mailWindowMs, (req) => req.user?.id ?? 'unknown');
+  const resendIpLimit = rateLimit('resend-ip', 10, mailWindowMs);
 
   router.post(
     '/register',
@@ -49,11 +69,19 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
 
   router.get('/verify-email', validate({ query: verifyEmailSchema }), controller.verifyEmail);
 
-  router.post('/verify-email/resend', middleware.requireAuth, controller.resendVerificationEmail);
+  router.post(
+    '/verify-email/resend',
+    middleware.requireAuth,
+    resendIpLimit,
+    resendLimit,
+    controller.resendVerificationEmail
+  );
 
   router.post(
     '/password-reset/request',
+    resetIpLimit,
     validate({ body: requestPasswordResetSchema }),
+    resetEmailLimit,
     controller.requestPasswordReset
   );
 
@@ -83,6 +111,8 @@ export function createAuthRouter(controller: AuthController, middleware: AuthMid
   router.post(
     '/passkey/registration/options',
     middleware.requireAuth,
+    rateLimit('enrollment-proof', 8, mailWindowMs, (req) => req.user?.id ?? 'unknown'),
+    middleware.authorizePasskeyEnrollment,
     controller.startPasskeyRegistration
   );
 

@@ -7,6 +7,7 @@ import { logger } from './common/index.js';
 import { env } from './config/env.js';
 import { notFound, errorHandler } from './middlewares/index.js';
 import { createDocsRouter } from './docs/index.js';
+import { requireTrustedCookieOrigin } from './modules/auth/index.js';
 
 interface AppDependencies {
   authRouter: express.Router;
@@ -93,6 +94,7 @@ export function createApp({
 
   app.use(express.json());
   app.use(cookieParser());
+  app.use(API_PREFIX, requireTrustedCookieOrigin);
 
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 

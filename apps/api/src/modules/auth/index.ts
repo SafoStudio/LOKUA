@@ -1,4 +1,5 @@
 export { createAuthModule } from './auth.module.js';
+export { requireTrustedCookieOrigin } from './presentation/http/cookie-origin.middleware.js';
 export type { AuthModule } from './auth.module.js';
 export {
   createAccountDeletionRouter,
