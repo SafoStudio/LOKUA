@@ -40,6 +40,7 @@ try {
   const stopNotificationDelivery = modules.notifications.startDeliveryWorker();
   const stopBlockExpiry = modules.moderation.startBlockExpiryWorker();
   const stopAccountDeletion = modules.startAccountDeletionWorker();
+  const stopGeocodingCacheCleanup = modules.geolocation.startCacheCleanup();
   let shuttingDown = false;
 
   const shutdown = (signal: string) => {
@@ -50,7 +51,8 @@ try {
       stopEventLifecycleWorker(),
       stopNotificationDelivery(),
       stopBlockExpiry(),
-      stopAccountDeletion()
+      stopAccountDeletion(),
+      stopGeocodingCacheCleanup()
     ]);
 
     server.close(async (closeErr) => {

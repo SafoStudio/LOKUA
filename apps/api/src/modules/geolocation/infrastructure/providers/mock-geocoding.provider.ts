@@ -26,8 +26,7 @@ export class MockGeocodingProvider implements GeocodingProvider, ReverseGeocodin
         longitude: 30.5234
       },
       provider: this.providerName,
-      providerPlaceId: 'mock-place-123',
-      rawPayload: { mock: true }
+      providerPlaceId: 'mock-place-123'
     };
   }
 
@@ -39,8 +38,7 @@ export class MockGeocodingProvider implements GeocodingProvider, ReverseGeocodin
       countryCode: 'UA',
       coordinates,
       provider: this.providerName,
-      providerPlaceId: 'mock-place-reverse-456',
-      rawPayload: { mock: true }
+      providerPlaceId: 'mock-place-reverse-456'
     };
   }
 }

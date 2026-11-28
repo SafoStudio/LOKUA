@@ -38,6 +38,9 @@ export class GeocodingCacheEntity {
   @Column({ type: 'varchar', length: 50 })
   provider!: string;
 
+  @Column({ type: 'text', name: 'provider_place_id', nullable: true })
+  providerPlaceId!: string | null;
+
   @Index('idx_geocoding_cache_expires')
   @Column({ type: 'timestamptz', name: 'expires_at' })
   expiresAt!: Date;

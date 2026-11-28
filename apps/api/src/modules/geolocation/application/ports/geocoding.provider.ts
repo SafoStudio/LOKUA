@@ -8,7 +8,6 @@ export interface GeocodingResult {
   coordinates: Coordinates;
   provider: string;
   providerPlaceId?: string;
-  rawPayload?: Record<string, unknown>;
 }
 
 export interface GeocodeOptions {

@@ -78,6 +78,13 @@ Login, signup and event participation rate limits use fixed windows in each API 
 
 #### DATABASE_URL_DIRECT _Direct URL for migrations in production (Neon). Optional locally_
 
+#### NOMINATIM_BASE_URL _Nominatim-compatible geocoding endpoint_
+
+Configure the address of a geocoder authorized to process your application's address and coordinate queries.
+When unset, forward and reverse geocoding are unavailable. Location storage and catalog searches are independent of this setting.
+The API coordinates a one-request-per-second upstream limit across replicas. See the
+[OSMF public Nominatim policy](https://operations.osmfoundation.org/policies/nominatim/) for restrictions on the public instance.
+
 #### JWT_ACCESS_SECRET / JWT_REFRESH_SECRET _Secrets (≥ 32 chars)_
 
 #### JWT_ACCESS_TTL / JWT_REFRESH_TTL _Token TTLs (15m / 7d)_

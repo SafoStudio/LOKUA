@@ -74,6 +74,9 @@ export class LocationEntity {
   @Column({ type: 'uuid', name: 'created_by', nullable: true })
   createdBy!: string | null;
 
+  @Column({ type: 'boolean', name: 'is_private', default: false })
+  isPrivate!: boolean;
+
   @ManyToOne('UserEntity', { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'created_by' })
   createdByUser?: unknown;

@@ -12,6 +12,7 @@ const envSchema = z
     CLIENT_URL: z.url(),
     DATABASE_URL: z.url(),
     DATABASE_URL_DIRECT: z.url().optional(),
+    NOMINATIM_BASE_URL: z.url({ protocol: /^https?$/ }).optional(),
 
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

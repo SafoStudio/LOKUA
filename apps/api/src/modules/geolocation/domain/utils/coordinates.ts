@@ -17,8 +17,7 @@ export function isValidCoordinates(coords: Coordinates | null | undefined): bool
 }
 
 /**
- * Computes an obfuscated / public coordinate pair for privacy protection (A.2.2).
- * Rounds to 1 decimal place (~11 km precision) to show the general area without revealing exact address.
+ * Rounds public coordinates to two decimal places, about 1.1 km per latitude degree hundredth.
  */
 export function obfuscateCoordinates(coords: Coordinates): Coordinates {
   return {

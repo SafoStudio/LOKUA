@@ -8,6 +8,7 @@ properties:
   address:
     type: string
     minLength: 3
+    maxLength: 500
   cityId:
     type: string
     format: uuid
@@ -19,10 +20,8 @@ properties:
     type: string
     minLength: 2
     maxLength: 2
-    default: UA
+    description: Defaults to the selected city's country. An explicit value must match the city.
   exactCoordinates:
-    $ref: '#/components/schemas/Coordinates'
-  publicCoordinates:
     $ref: '#/components/schemas/Coordinates'
   provider:
     type: string

@@ -217,15 +217,20 @@ export class EventRepositoryAdapter
     return participants.map((participant) => participant.user_id);
   }
 
-  hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
-    return this.repository
-      .createQueryBuilder('event')
-      .leftJoin(EventLocationSnapshotEntity, 'snapshot', 'snapshot.event_id = event.id')
-      .where('event.organizer_id <> :organizerId AND event.hide_exact_address', { organizerId })
-      .andWhere('(event.primary_location_id = :locationId OR snapshot.location_id = :locationId)', {
-        locationId
-      })
-      .getExists();
+  async hasForeignPrivateLocation(locationId: string, organizerId: string): Promise<boolean> {
+    const [result] = await this.repository.query<{ restricted: boolean }[]>(
+      `SELECT EXISTS (
+        SELECT 1 FROM locations
+        WHERE id = $1 AND is_private AND created_by IS DISTINCT FROM $2::uuid
+      ) OR EXISTS (
+        SELECT 1 FROM events event
+        LEFT JOIN event_location_snapshot snapshot ON snapshot.event_id = event.id
+        WHERE event.organizer_id <> $2 AND event.hide_exact_address
+          AND (event.primary_location_id = $1 OR snapshot.location_id = $1)
+      ) AS restricted`,
+      [locationId, organizerId]
+    );
+    return result.restricted;
   }
 
   findParticipationById(eventId: string, id: string): Promise<EventParticipation | null> {

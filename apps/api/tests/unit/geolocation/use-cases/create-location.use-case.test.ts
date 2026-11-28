@@ -12,6 +12,7 @@ import { InvalidCoordinatesError } from '../../../../src/modules/geolocation/ind
 describe('CreateLocationUseCase', () => {
   const mockLocationRepo: LocationRepository = {
     findById: vi.fn(),
+    districtBelongsToCity: vi.fn(),
     create: vi.fn().mockImplementation((input) =>
         Promise.resolve({
           id: 'mock-loc-uuid',
@@ -26,7 +27,7 @@ describe('CreateLocationUseCase', () => {
   };
 
   const mockCityProvider = {
-    findById: vi.fn().mockResolvedValue({ id: 'city-kyiv' })
+    findById: vi.fn().mockResolvedValue({ id: 'city-kyiv', isActive: true, countryCode: 'UA' })
   } as unknown as CityProvider;
 
   const mockCountryProvider = {

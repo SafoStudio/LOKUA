@@ -8,3 +8,7 @@ properties:
   city:
     type: string
     maxLength: 100
+  countryCode:
+    type: string
+    pattern: '^[A-Za-z]{2}$'
+    description: Optional ISO alpha-2 country filter.

@@ -9,6 +9,7 @@ import {
 describe('SearchLocationsInBBoxUseCase', () => {
   const mockLocationRepo: LocationRepository = {
     findById: vi.fn(),
+    districtBelongsToCity: vi.fn(),
     create: vi.fn(),
     findNearby: vi.fn(),
     findInBBox: vi.fn().mockResolvedValue([

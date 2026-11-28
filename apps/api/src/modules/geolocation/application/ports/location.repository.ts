@@ -22,6 +22,7 @@ export interface NearbyLocationResult {
 export interface LocationRepository {
   findById(id: string): Promise<Location | null>;
   create(input: CreateLocationInput): Promise<Location>;
+  districtBelongsToCity(districtId: string, cityId: string): Promise<boolean>;
   findNearby(
     coordinates: Coordinates,
     radiusMeters: number,

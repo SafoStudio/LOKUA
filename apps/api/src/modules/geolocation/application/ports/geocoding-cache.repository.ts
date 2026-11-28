@@ -10,11 +10,12 @@ export interface CreateGeocodingCacheInput {
   latitude: number;
   longitude: number;
   provider: string;
+  providerPlaceId?: string;
   ttlSeconds: number;
 }
 
 export interface GeocodingCacheRepository {
   findByQueryHash(queryHash: string): Promise<GeocodingCache | null>;
-  save(input: CreateGeocodingCacheInput): Promise<GeocodingCache>;
+  save(input: CreateGeocodingCacheInput): Promise<void>;
   deleteExpired(): Promise<number>;
 }

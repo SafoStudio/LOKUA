@@ -9,6 +9,9 @@ import { createDictionariesModule } from '../../src/modules/dictionaries/index.j
 import { CityEntity, CityRepositoryAdapter } from '../../src/modules/dictionaries/infrastructure/index.js';
 import { createGeolocationModule, obfuscateCoordinates } from '../../src/modules/geolocation/index.js';
 import type { LocationProvider } from '../../src/modules/geolocation/index.js';
+import { GeocodeAddressUseCase } from '../../src/modules/geolocation/application/index.js';
+import { GeocodingCacheEntity, GeocodingCacheRepositoryAdapter } from '../../src/modules/geolocation/infrastructure/index.js';
+import { reserveGeocodingSlot } from '../../src/modules/geolocation/infrastructure/persistence/adapters/geocoding-request-slot.js';
 import {
   AccessService,
   createProfilePhotosRouter,
@@ -490,6 +493,116 @@ describe('event management and feed with PostgreSQL', () => {
     expect(bbox.body.data).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: location.id })])
     );
+  });
+
+  it('preserves the provider identifier through concurrent geocoding cache writes', async () => {
+    const repository = dataSource.getRepository(GeocodingCacheEntity);
+    const providerName = `test-${randomUUID()}`;
+    const result = {
+      formattedAddress: 'Kyiv, Ukraine',
+      city: 'Kyiv',
+      district: null,
+      countryCode: 'UA',
+      coordinates: { latitude: 50.4501, longitude: 30.5234 },
+      provider: providerName,
+      providerPlaceId: '42'
+    };
+    let upstreamCalls = 0;
+    const useCase = new GeocodeAddressUseCase({
+      providerName,
+      async geocode() {
+        upstreamCalls++;
+        return result;
+      }
+    }, new GeocodingCacheRepositoryAdapter(repository), { cacheTtlSeconds: 60 });
+    try {
+      const query = { address: 'Kyiv', countryCode: 'UA' };
+      await expect(Promise.all([useCase.execute(query), useCase.execute(query)])).resolves.toEqual([result, result]);
+      expect(await repository.countBy({ provider: providerName })).toBe(1);
+      const callsBeforeCacheHit = upstreamCalls;
+      await expect(useCase.execute({ address: ' kyiv ', countryCode: 'ua' })).resolves.toEqual(result);
+      expect(upstreamCalls).toBe(callsBeforeCacheHit);
+    } finally {
+      await repository.delete({ provider: providerName });
+    }
+  });
+
+  it('admits only one provider request across PostgreSQL connections', async () => {
+    await dataSource.query('DELETE FROM geocoding_request_slot');
+    const allowed = await Promise.all([
+      reserveGeocodingSlot(dataSource),
+      reserveGeocodingSlot(dataSource),
+      reserveGeocodingSlot(dataSource)
+    ]);
+    expect(allowed.filter(Boolean)).toHaveLength(1);
+    await dataSource.query("UPDATE geocoding_request_slot SET next_request_at = now() - interval '1 second'");
+    await expect(reserveGeocodingSlot(dataSource)).resolves.toBe(true);
+  });
+
+  it('uses public points for searches and restricts account-owned locations', async () => {
+    const [owner, outsider] = await Promise.all([createUser(), createUser()]);
+    const api = createEventsTestApi([owner, outsider]);
+    const exactCoordinates = { latitude: 50.4548, longitude: 30.5248 };
+    const publicCoordinates = { latitude: 50.45, longitude: 30.52 };
+    const catalog = await locations.create({
+      name: 'Catalog venue',
+      address: 'Catalog address',
+      cityId: kyivId,
+      districtId: null,
+      countryCode: 'UA',
+      exactCoordinates,
+      publicCoordinates,
+      provider: 'manual',
+      providerPlaceId: null,
+      createdBy: null
+    });
+    locationIds.push(catalog.id);
+    const created = await api.post('/geo/locations').set('X-Test-User', owner.id).send({
+      name: 'Private venue',
+      address: 'Private address',
+      cityId: kyivId,
+      exactCoordinates,
+      publicCoordinates: exactCoordinates
+    }).expect(201);
+    const privateId = created.body.data.id as string;
+    locationIds.push(privateId);
+    expect(created.body.data.publicCoordinates).toEqual(publicCoordinates);
+    await api.get(`/geo/locations/${privateId}`).expect(404);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', outsider.id).expect(404);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', owner.id).expect(200);
+    await expect(manageEvent.create(outsider, eventData({ primaryLocationId: privateId })))
+      .rejects.toMatchObject({ statusCode: 422 });
+    await api.post('/geo/locations').set('X-Test-User', owner.id).send({
+      name: 'Wrong district',
+      address: 'An address',
+      cityId: kyivId,
+      districtId: randomUUID(),
+      exactCoordinates
+    }).expect(400);
+    await api.get('/geo/locations/nearby').query({ latitude: '', longitude: '30.52' }).expect(400);
+    await api.post('/geo/reverse-geocode').send({ latitude: null, longitude: 30.52 }).expect(400);
+    const nearby = await api.get('/geo/locations/nearby').query({ ...publicCoordinates, radiusMeters: 100 }).expect(200);
+    expect(nearby.body.data).toContainEqual({
+      location: {
+        id: catalog.id,
+        name: catalog.name,
+        cityId: kyivId,
+        districtId: null,
+        countryCode: 'UA',
+        coordinates: publicCoordinates,
+        isExact: false
+      },
+      distanceMeters: 0
+    });
+    expect(nearby.body.data).not.toContainEqual(expect.objectContaining({
+      location: expect.objectContaining({ id: privateId })
+    }));
+    const bbox = await api.get('/geo/locations/bbox')
+      .query({ minLat: 50.449, minLng: 30.519, maxLat: 50.451, maxLng: 30.521 }).expect(200);
+    expect(bbox.body.data).toContainEqual(expect.objectContaining({ id: catalog.id }));
+    expect(bbox.body.data).not.toContainEqual(expect.objectContaining({ id: privateId }));
+    await dataSource.query('UPDATE locations SET created_by = NULL WHERE id = $1', [privateId]);
+    await api.get(`/geo/locations/${privateId}?precision=EXACT`).set('X-Test-User', outsider.id).expect(404);
   });
 
   it('lists personal events by tab with private, stable cursor pagination', async () => {

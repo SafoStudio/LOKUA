@@ -36,20 +36,29 @@ export class CreateLocationUseCase {
     }
 
     const city = await this.cityProvider.findById(input.cityId);
-    if (!city) {
-      throw new LocationValidationError(`City with id '${input.cityId}' not found`);
+    if (!city?.isActive) {
+      throw new LocationValidationError('City is unavailable');
     }
 
-    const countryCode = input.countryCode ?? 'UA';
+    const countryCode = input.countryCode ?? city.countryCode;
+    if (countryCode !== city.countryCode) {
+      throw new LocationValidationError('Country does not match the city');
+    }
     const country = await this.countryProvider.findByCode(countryCode);
     if (!country) {
       throw new LocationValidationError(`Country with code '${countryCode}' not found`);
     }
+    if (
+      input.districtId &&
+      !(await this.locationRepository.districtBelongsToCity(input.districtId, city.id))
+    ) {
+      throw new LocationValidationError('District does not belong to the city');
+    }
 
     if (input.createdBy) {
       const user = await this.userProvider.findById(input.createdBy);
-      if (!user) {
-        throw new LocationValidationError(`User with id '${input.createdBy}' not found`);
+      if (user?.status !== 'ACTIVE') {
+        throw new LocationValidationError('Location owner is unavailable');
       }
     }
 

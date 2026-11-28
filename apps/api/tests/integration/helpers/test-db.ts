@@ -49,6 +49,7 @@ import { OnboardingStateEntity } from '../../../src/modules/onboarding/infrastru
 import { InitialSchema1794056977895 } from '../../../src/db/migrations/1794056977895-InitialSchema.js';
 import { HardenAuthSessions1795784659656 } from '../../../src/db/migrations/1795784659656-HardenAuthSessions.js';
 import { QueueDeletedAccountMedia1795784659657 } from '../../../src/db/migrations/1795784659657-QueueDeletedAccountMedia.js';
+import { ProtectLocationPrivacyAndCache1795784659658 } from '../../../src/db/migrations/1795784659658-ProtectLocationPrivacyAndCache.js';
 import { FullSchema1794817225368 } from '../../../src/db/migrations/1794817225368-FullSchema.js';
 import { SeedDictionaries1794817300000 } from '../../../src/db/migrations/1794817300000-SeedDictionaries.js';
 import { AddOnboardingSchema1794923437553 } from '../../../src/db/migrations/1794923437553-AddOnboardingSchema.js';
@@ -134,7 +135,8 @@ export function createTestDataSource(url: string = TEST_DATABASE_URL): DataSourc
       SeedKyivDistricts1795040000000,
       TrackParticipationEntryMode1795784659655,
       HardenAuthSessions1795784659656,
-      QueueDeletedAccountMedia1795784659657
+      QueueDeletedAccountMedia1795784659657,
+      ProtectLocationPrivacyAndCache1795784659658
     ]
   });
 }

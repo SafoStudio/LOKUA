@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { validate } from '../../../../middlewares/index.js';
+import { createRequestRateLimit } from '../../../../middlewares/request-rate-limit.js';
 import type { GeolocationController } from './geolocation.controller.js';
 import {
   createLocationSchema,
@@ -17,6 +18,7 @@ export function createGeolocationRouter(
   requireAuth: RequestHandler
 ): Router {
   const router = Router();
+  const geocodeLimit = createRequestRateLimit({ limit: 30, windowMs: 60_000 });
 
   router.post(
     '/locations',
@@ -36,9 +38,19 @@ export function createGeolocationRouter(
     controller.getById
   );
 
-  router.post('/geocode', validate({ body: geocodeAddressSchema }), controller.geocode);
+  router.post(
+    '/geocode',
+    geocodeLimit,
+    validate({ body: geocodeAddressSchema }),
+    controller.geocode
+  );
 
-  router.post('/reverse-geocode', validate({ body: reverseGeocodeSchema }), controller.reverse);
+  router.post(
+    '/reverse-geocode',
+    geocodeLimit,
+    validate({ body: reverseGeocodeSchema }),
+    controller.reverse
+  );
 
   return router;
 }
