@@ -6,7 +6,6 @@ import {
 } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockUnitOfWork
@@ -32,7 +31,6 @@ describe('CompleteOnboardingUseCase', () => {
         useCase = new CompleteOnboardingUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
             audit
         );

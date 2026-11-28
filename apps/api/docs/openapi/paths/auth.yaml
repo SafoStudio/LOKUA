@@ -476,7 +476,7 @@
     tags:
       - Auth / Passkey
     summary: 'Passkey Signup: Complete registration'
-    description: Consumes the one-time challenge (DELETE ... RETURNING), verifies the browser response, creates User and PasskeyCredential in a single transaction, and issues auth cookies.
+    description: Consumes the one-time challenge, verifies the browser response, creates the account and Passkey credential in one transaction, and issues auth cookies. Sends an email verification link after signup.
     requestBody:
       required: true
       content:

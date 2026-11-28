@@ -1,4 +1,4 @@
-import type { UserProvider, UserOnboardingProvider } from '../../../users/index.js';
+import type { UserOnboardingProvider } from '../../../users/index.js';
 import type { CityProvider } from '../../../dictionaries/index.js';
 import { AppError, assertString } from '../../../../common/index.js';
 import type { UnitOfWork } from '../../../../common/index.js';
@@ -11,12 +11,12 @@ import {
   OnboardingStepOutOfOrderError
 } from '../../domain/index.js';
 import { ensureOnboardingState } from './ensure-onboarding-state.js';
+import { advanceStep } from '../../domain/advance-step.js';
 
 export class SetCityUseCase {
   constructor(
     private readonly unitOfWork: UnitOfWork,
     private readonly stateRepository: OnboardingStateRepository,
-    private readonly users: UserProvider,
     private readonly onboardingUsers: UserOnboardingProvider,
     private readonly cities: CityProvider,
     private readonly audit: AuditLogger
@@ -33,6 +33,7 @@ export class SetCityUseCase {
     if (!city.isActive) throw new AppError('City is not active', 422);
 
     return this.unitOfWork.run(async (tx) => {
+      await this.onboardingUsers.lockActiveAccount(context.user.id, tx);
       const state = await ensureOnboardingState(this.stateRepository, context.user.id, tx);
 
       if (!state.completedSteps.includes('PROFILE')) {
@@ -41,16 +42,11 @@ export class SetCityUseCase {
 
       await this.onboardingUsers.applyCity(context.user.id, cityId, tx);
 
-      const nextCompleted = state.completedSteps.includes('CITY')
-        ? state.completedSteps
-        : [...state.completedSteps, 'CITY' as const];
-
       const updated = await this.stateRepository.updateStep(
         state.id,
         {
           cityId,
-          currentStep: 'INTERESTS',
-          completedSteps: nextCompleted
+          ...advanceStep(state, 'CITY')
         },
         tx
       );

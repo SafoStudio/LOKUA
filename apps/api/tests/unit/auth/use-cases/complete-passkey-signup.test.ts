@@ -53,13 +53,15 @@ describe('CompletePasskeySignupUseCase', () => {
   );
 
   const context = { ip: '127.0.0.1', userAgent: 'vitest' };
+  const verification = { execute: vi.fn() };
 
   const useCase = new CompletePasskeySignupUseCase(
       challenges,
       passkey,
       signupTransaction,
       issueAuthTokens,
-      securityEvents
+      securityEvents,
+      verification
   );
 
   const mockChallenge = {
@@ -106,6 +108,7 @@ describe('CompletePasskeySignupUseCase', () => {
     expect(result.user).toEqual(createdUser);
     expect(result.accessToken).toBe('access-token');
     expect(result.refreshToken).toBe('refresh-token');
+    expect(verification.execute).toHaveBeenCalledWith(createdUser.id);
 
     expect(challenges.consume).toHaveBeenCalledWith({
       challenge: 'ch-val-123',

@@ -117,6 +117,7 @@ describe('Auth Tokens & /me API', () => {
 
       expect(res.status).toBe(200);
       expect(mocks.getMyProfile.execute).toHaveBeenCalledWith('usr-me-1');
+      expect(res.body.user.emailVerified).toBe(true);
     });
 
     it('returns 200 with user when authenticated via Bearer header', async () => {

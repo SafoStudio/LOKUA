@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
+const normalizedId = z.uuid().transform((id) => id.toLowerCase());
+
 export const dateOfBirthSchema = z.object({
-  birthDate: z.coerce.date()
+  birthDate: z.iso.date().transform((value) => new Date(`${value}T00:00:00.000Z`))
 });
 
 export const profileSchema = z.object({
@@ -10,12 +12,12 @@ export const profileSchema = z.object({
 });
 
 export const citySchema = z.object({
-  cityId: z.uuid()
+  cityId: normalizedId
 });
 
 export const interestsSchema = z.object({
   interestIds: z
-    .array(z.uuid())
+    .array(normalizedId)
     .min(3, 'At least 3 interests required')
     .max(20, 'Maximum 20 interests allowed')
 });

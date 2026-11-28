@@ -57,7 +57,6 @@ export function createModules(dataSource: DataSource) {
 
   const onboardingModule = createOnboardingModule({
     dataSource,
-    users: usersModule.users,
     onboardingUsers: usersModule.onboarding,
     cities: dictionariesModule.cities,
     interests: dictionariesModule.interests,

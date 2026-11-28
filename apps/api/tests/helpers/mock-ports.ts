@@ -26,6 +26,7 @@ export function createMockUserProvider(): UserProvider {
 
 export function createMockUserOnboardingProvider(): UserOnboardingProvider {
     return {
+    lockActiveAccount: vi.fn(),
         applyDateOfBirth: vi.fn(),
         applyProfile: vi.fn(),
         applyCity: vi.fn(),

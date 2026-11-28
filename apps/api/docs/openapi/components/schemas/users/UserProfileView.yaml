@@ -2,6 +2,7 @@ type: object
 required:
   - id
   - email
+  - emailVerified
   - name
   - interestIds
   - onboardingCompleted
@@ -13,6 +14,8 @@ properties:
   email:
     type: string
     format: email
+  emailVerified:
+    type: boolean
   name:
     type: string
   avatarUrl:

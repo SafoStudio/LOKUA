@@ -183,7 +183,7 @@ export function createAuthController({
     async me(req: Request, res: Response): Promise<void> {
       const profile = await getMyProfile.execute(requireUserId(req));
 
-      res.status(200).json({ user: toUserProfileView(profile) });
+      res.status(200).json({ user: toUserProfileView(profile, req.user?.emailVerified === true) });
     },
 
     async verifyEmail(req: Request, res: Response): Promise<void> {

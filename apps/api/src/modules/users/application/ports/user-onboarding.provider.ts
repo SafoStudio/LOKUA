@@ -1,6 +1,7 @@
 import type { TransactionContext } from '../../../../common/index.js';
 
 export interface UserOnboardingProvider {
+  lockActiveAccount(userId: string, tx: TransactionContext): Promise<void>;
   applyDateOfBirth(userId: string, birthDate: Date, tx?: TransactionContext): Promise<void>;
   applyProfile(
     userId: string,

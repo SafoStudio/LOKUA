@@ -18,12 +18,15 @@ interface OnboardingRouterDependencies {
 
 export function createOnboardingRouter({ requireAuth, controller }: OnboardingRouterDependencies) {
   const router = Router();
+  router.use((_req, res, next) => {
+    res.set('Cache-Control', 'private, no-store');
+    next();
+  }, requireAuth);
 
-  router.get('/state', requireAuth, controller.getState);
+  router.get('/state', controller.getState);
 
   router.post(
     '/date-of-birth',
-    requireAuth,
     requireOnboardingInProgress,
     validate({ body: dateOfBirthSchema }),
     controller.applyDateOfBirth
@@ -31,7 +34,6 @@ export function createOnboardingRouter({ requireAuth, controller }: OnboardingRo
 
   router.post(
     '/profile',
-    requireAuth,
     requireOnboardingInProgress,
     validate({ body: profileSchema }),
     controller.applyProfile
@@ -39,7 +41,6 @@ export function createOnboardingRouter({ requireAuth, controller }: OnboardingRo
 
   router.post(
     '/city',
-    requireAuth,
     requireOnboardingInProgress,
     validate({ body: citySchema }),
     controller.applyCity
@@ -47,7 +48,6 @@ export function createOnboardingRouter({ requireAuth, controller }: OnboardingRo
 
   router.post(
     '/interests',
-    requireAuth,
     requireOnboardingInProgress,
     validate({ body: interestsSchema }),
     controller.applyInterests
@@ -55,13 +55,12 @@ export function createOnboardingRouter({ requireAuth, controller }: OnboardingRo
 
   router.post(
     '/optional',
-    requireAuth,
     requireOnboardingInProgress,
     validate({ body: optionalProfileSchema }),
     controller.applyOptionalProfile
   );
 
-  router.post('/complete', requireAuth, controller.complete);
+  router.post('/complete', controller.complete);
 
   return router;
 }

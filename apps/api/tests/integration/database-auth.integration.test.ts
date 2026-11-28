@@ -7,6 +7,7 @@ import {
   PasswordCredentialEntity,
   PasswordCredentialRepositoryAdapter,
   PasswordResetTokenEntity,
+  EmailVerificationTokenEntity,
   GoogleCredentialEntity,
   GoogleCredentialRepositoryAdapter,
   PasskeyCredentialEntity,
@@ -26,6 +27,8 @@ import { createSharedAuthRateLimit } from '../../src/modules/auth/infrastructure
 import { createAuthModule } from '../../src/modules/auth/index.js';
 import { createApp as createApiApp } from '../../src/app.js';
 import { JwtTokenService } from '../../src/modules/auth/infrastructure/index.js';
+import { createOnboardingModule } from '../../src/modules/onboarding/index.js';
+import { createDictionariesModule } from '../../src/modules/dictionaries/index.js';
 
 describe('Database & Transactions Integration Tests', () => {
   let dataSource: DataSource;
@@ -64,6 +67,59 @@ describe('Database & Transactions Integration Tests', () => {
   });
 
   describe('When PostgreSQL test database is reachable', () => {
+    it('keeps onboarding progress when email confirmation is pending and serializes birth date writes', async (ctx) => {
+      if (!dbAvailable) ctx.skip();
+
+      const users = createUsersModule({ dataSource });
+      const { cities, interests } = createDictionariesModule({ dataSource });
+      const user = await users.authUsers.create({ email: 'onboarding@example.com', name: 'Onboarding' });
+      const picture = 'https://media.example.com/profile.webp';
+      const auth = createAuthModule({ dataSource, users: users.authUsers, access: users.access, profiles: users.profiles });
+      const onboarding = createOnboardingModule({
+        dataSource,
+        onboardingUsers: users.onboarding,
+        cities,
+        interests,
+        audit: { async log() {} },
+        requireAuth: auth.requireAuth,
+        images: { assertOwnedUrl(url) { expect(url).toBe(picture); } }
+      });
+      const api = request(createApiApp({
+        authRouter: auth.router,
+        onboardingRouter: onboarding.router,
+        eventsRouter: express.Router()
+      }));
+      const token = await new JwtTokenService().signAccessToken({ userId: user.id });
+      const post = (path: string, body: object = {}) =>
+        api.post(`/api/v1/onboarding/${path}`).set('Authorization', `Bearer ${token}`).send(body);
+      await post('date-of-birth', { birthDate: null }).expect(400);
+      const attempts = await Promise.all([
+        post('date-of-birth', { birthDate: '1995-06-15' }),
+        post('date-of-birth', { birthDate: '1996-07-16' })
+      ]);
+      expect(attempts.map(({ status }) => status).sort()).toEqual([200, 409]);
+      const [{ id: cityId }] = await dataSource.query<{ id: string }[]>(
+        'SELECT id FROM cities WHERE is_active ORDER BY id LIMIT 1'
+      );
+      const interestIds = (await interests.listActive()).slice(0, 3).map(({ id }) => id);
+      await post('profile', { name: 'Example', mainPhotoUrl: picture }).expect(200);
+      await post('city', { cityId }).expect(200);
+      await post('interests', { interestIds }).expect(200);
+      const edited = await post('profile', { name: 'Updated', mainPhotoUrl: picture }).expect(200);
+      expect(edited.body.data.currentStep).toBe('OPTIONAL');
+      await post('complete').expect(403);
+      expect((await users.authUsers.findById(user.id))?.onboardingCompleted).toBe(false);
+      const verification = randomUUID();
+      await dataSource.getRepository(EmailVerificationTokenEntity).insert({
+        userId: user.id,
+        tokenHash: createHash('sha256').update(verification).digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000)
+      });
+      await api.get('/api/v1/auth/verify-email').query({ token: verification }).expect(200);
+      await post('complete').expect(200);
+      expect((await users.authUsers.findById(user.id))?.onboardingCompleted).toBe(true);
+    });
+
     it('keeps the reset token on failed password update and invalidates access on success', async (ctx) => {
       if (!dbAvailable) ctx.skip();
 

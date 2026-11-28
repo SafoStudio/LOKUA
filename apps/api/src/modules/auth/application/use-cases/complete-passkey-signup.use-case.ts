@@ -5,6 +5,8 @@ import type { PasskeySignupTransaction } from '../ports/passkey-signup-transacti
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
 import type { SecurityContext } from '../security-context.js';
 import type { IssueAuthTokensUseCase, AuthResult } from './issue-auth-tokens.use-case.js';
+import { sendSignupVerification } from './send-verification-email.use-case.js';
+import type { SendVerificationEmailUseCase } from './send-verification-email.use-case.js';
 
 export interface CompletePasskeySignupInput {
   challenge: string;
@@ -18,7 +20,8 @@ export class CompletePasskeySignupUseCase {
     private readonly passkey: PasskeyVerificationService,
     private readonly signupTransaction: PasskeySignupTransaction,
     private readonly issueAuthTokens: IssueAuthTokensUseCase,
-    private readonly securityEvents: SecurityEventRepository
+    private readonly securityEvents: SecurityEventRepository,
+    private readonly sendVerificationEmail: Pick<SendVerificationEmailUseCase, 'execute'>
   ) {}
 
   async execute(input: CompletePasskeySignupInput, context: SecurityContext): Promise<AuthResult> {
@@ -49,6 +52,8 @@ export class CompletePasskeySignupUseCase {
       credential,
       termsAcceptedAt: new Date()
     });
+
+    await sendSignupVerification(this.sendVerificationEmail, user.id);
 
     await this.securityEvents.record({
       userId: user.id,

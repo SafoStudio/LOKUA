@@ -3,7 +3,6 @@ import { SetInterestsUseCase } from '../../../../src/modules/onboarding/applicat
 import { OnboardingStepOutOfOrderError } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockInterestProvider,
@@ -32,7 +31,6 @@ describe('SetInterestsUseCase', () => {
         useCase = new SetInterestsUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
             interests,
             createMockAuditLogger()

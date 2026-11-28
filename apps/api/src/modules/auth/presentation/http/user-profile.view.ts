@@ -3,6 +3,7 @@ import type { UserProfile } from '../../../users/index.js';
 export interface UserProfileView {
   id: string;
   email: string;
+  emailVerified: boolean;
   name: string;
   avatarUrl: string | null;
   cityId: string | null;
@@ -11,10 +12,11 @@ export interface UserProfileView {
   createdAt: string;
 }
 
-export function toUserProfileView(profile: UserProfile): UserProfileView {
+export function toUserProfileView(profile: UserProfile, emailVerified: boolean): UserProfileView {
   return {
     id: profile.id,
     email: profile.email,
+    emailVerified,
     name: profile.name,
     avatarUrl: profile.avatarUrl,
     cityId: profile.cityId,

@@ -3,7 +3,6 @@ import { SetOptionalProfileUseCase } from '../../../../src/modules/onboarding/ap
 import { OnboardingStepOutOfOrderError } from '../../../../src/modules/onboarding/domain/index.js';
 import {
     createMockStateRepository,
-    createMockUserProvider,
     createMockUserOnboardingProvider,
     createMockAuditLogger,
     createMockUnitOfWork
@@ -27,7 +26,6 @@ describe('SetOptionalProfileUseCase', () => {
         useCase = new SetOptionalProfileUseCase(
             unitOfWork,
             stateRepository,
-            createMockUserProvider(),
             onboardingUsers,
             createMockAuditLogger()
         );

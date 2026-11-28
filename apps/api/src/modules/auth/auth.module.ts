@@ -218,7 +218,8 @@ export function createAuthModule({
     passkeyProvider,
     passkeySignupTransaction,
     issueTokens,
-    securityEvents
+    securityEvents,
+    sendVerificationEmail
   );
 
   const startPasskeyRegistration = new StartPasskeyRegistrationUseCase(

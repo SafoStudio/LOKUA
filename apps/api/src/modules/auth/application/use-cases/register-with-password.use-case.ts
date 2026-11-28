@@ -5,7 +5,8 @@ import type { RegistrationTransaction } from '../ports/registration-transaction.
 import type { SecurityEventRepository } from '../ports/security-event.repository.js';
 import type { SecurityContext } from '../security-context.js';
 import type { SendVerificationEmailUseCase } from './send-verification-email.use-case.js';
-import { AppError, logger } from '../../../../common/index.js';
+import { AppError } from '../../../../common/index.js';
+import { sendSignupVerification } from './send-verification-email.use-case.js';
 import { validatePasswordLength } from '../validation/password.validation.js';
 
 export interface RegisterWithPasswordInput {
@@ -43,11 +44,7 @@ export class RegisterWithPasswordUseCase {
       termsAcceptedAt: new Date()
     });
 
-    try {
-      await this.sendVerificationEmail.execute(user.id);
-    } catch (err) {
-      logger.error({ err, userId: user.id }, 'Failed to send verification email');
-    }
+    await sendSignupVerification(this.sendVerificationEmail, user.id);
 
     await this.securityEvents.record({
       userId: user.id,
